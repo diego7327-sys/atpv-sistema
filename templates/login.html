@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ATPV-E | Entrar</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root{--bg:#0d0f14;--surf:#161920;--surf2:#1e2229;--bord:#2a2f3a;--acc:#00d4aa;--txt:#e8eaf0;--mut:#6b7280;--red:#ff4757;--font:'IBM Plex Sans',sans-serif;--mono:'IBM Plex Mono',monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--txt);min-height:100vh;display:flex;align-items:center;justify-content:center}
+.card{background:var(--surf);border:1px solid var(--bord);border-radius:16px;padding:40px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.logo{display:flex;align-items:center;gap:12px;margin-bottom:32px;justify-content:center}
+.logo-ico{width:44px;height:44px;background:var(--acc);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#000;font-family:var(--mono)}
+.logo-txt{font-size:18px;font-weight:600}
+.logo-sub{font-size:11px;color:var(--mut);font-family:var(--mono)}
+.fg{display:flex;flex-direction:column;gap:5px;margin-bottom:16px}
+.fg label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--mut)}
+.fg input{background:var(--surf2);border:1px solid var(--bord);border-radius:8px;padding:11px 14px;font-size:14px;color:var(--txt);font-family:var(--font);transition:border-color .15s}
+.fg input:focus{outline:none;border-color:var(--acc)}
+.btn{width:100%;padding:13px;background:var(--acc);color:#000;border:none;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font);margin-top:8px;transition:opacity .15s}
+.btn:hover{opacity:.85}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.erro{background:rgba(255,71,87,.1);color:var(--red);border:1px solid rgba(255,71,87,.3);border-radius:8px;padding:10px 14px;font-size:13px;margin-top:12px;display:none}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <div class="logo-ico">D</div>
+    <div>
+      <div class="logo-txt">Diego Despachante</div>
+      <div class="logo-sub">Sistema ATPV-E · Cód. 2670</div>
+    </div>
+  </div>
+  <div class="fg">
+    <label>Login</label>
+    <input id="login" type="text" placeholder="Seu login" autocomplete="username" onkeydown="if(event.key==='Enter')entrar()">
+  </div>
+  <div class="fg">
+    <label>Senha</label>
+    <input id="senha" type="password" placeholder="Sua senha" autocomplete="current-password" onkeydown="if(event.key==='Enter')entrar()">
+  </div>
+  <button class="btn" id="btn" onclick="entrar()">Entrar</button>
+  <div class="erro" id="erro"></div>
+</div>
+<script>
+function entrar(){
+  var login=document.getElementById('login').value.trim();
+  var senha=document.getElementById('senha').value;
+  if(!login||!senha){ mostrarErro('Preencha login e senha.'); return; }
+  var btn=document.getElementById('btn');
+  btn.disabled=true; btn.textContent='Entrando...';
+  fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({login:login,senha:senha})})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(d.erro){ mostrarErro(d.erro); btn.disabled=false; btn.textContent='Entrar'; return; }
+    window.location.href='/';
+  }).catch(function(){ mostrarErro('Erro de conexão.'); btn.disabled=false; btn.textContent='Entrar'; });
+}
+function mostrarErro(msg){ var el=document.getElementById('erro'); el.textContent=msg; el.style.display='block'; }
+document.getElementById('login').focus();
+</script>
+</body>
+</html>
