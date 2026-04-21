@@ -198,7 +198,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
       </div>
       <div class="g3">
         <div class="fg"><label>Município / UF</label><input id="v_cidade" oninput="atualizar()"></div>
-        <div class="fg"><label>CEP</label><input id="v_cep" oninput="atualizar()"></div>
+        <div class="fg"><label>CEP <span id="v_cep_spin" style="display:none;color:var(--acc);font-size:10px">buscando...</span></label><input id="v_cep" oninput="maskCep(this,'v');atualizar()" placeholder="00000-000"></div>
         <div class="fg"><label>Celular</label><input id="v_cel" oninput="atualizar()"></div>
       </div>
       <div class="g1">
@@ -239,7 +239,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
         <div class="fg"><label>Cidade / UF</label><input id="c_cidade" oninput="atualizar()"></div>
       </div>
       <div class="g2">
-        <div class="fg"><label>CEP</label><input id="c_cep" oninput="atualizar()"></div>
+        <div class="fg"><label>CEP <span id="c_cep_spin" style="display:none;color:var(--acc);font-size:10px">buscando...</span></label><input id="c_cep" oninput="maskCep(this,'c');atualizar()" placeholder="00000-000"></div>
         <div class="fg"><label>E-mail</label><input id="c_email" oninput="atualizar()"></div>
       </div>
     </div>
@@ -546,6 +546,44 @@ function showAlert(msg,tipo){
 
 // ─── USER BADGE (hostname simples) ────────────────────────────
 document.getElementById('user-badge').textContent=window.location.hostname||'local';
+
+// ─── MASCARA E BUSCA CEP ──────────────────────────────────────
+var _cepTimer = {};
+function maskCep(el, prefixo) {
+  var v = el.value.replace(/\D/g,'');
+  if(v.length > 5) el.value = v.slice(0,5) + '-' + v.slice(5,8);
+  else el.value = v;
+  // Busca automática quando tiver 8 dígitos
+  if(v.length === 8) {
+    clearTimeout(_cepTimer[prefixo]);
+    _cepTimer[prefixo] = setTimeout(function(){ buscarCep(v, prefixo); }, 400);
+  }
+}
+
+function buscarCep(cep, prefixo) {
+  var spin = document.getElementById(prefixo+'_cep_spin');
+  if(spin) spin.style.display = 'inline';
+  fetch('https://viacep.com.br/ws/'+cep+'/json/')
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    if(spin) spin.style.display = 'none';
+    if(data.erro) { showAlert('CEP não encontrado.','warn'); return; }
+    // Preenche endereço
+    var endEl  = document.getElementById(prefixo+'_end');
+    var bairEl = document.getElementById(prefixo+'_bairro');
+    var cidEl  = document.getElementById(prefixo+'_cidade');
+    var logr = data.logradouro || '';
+    if(endEl  && !endEl.value  && logr)  { endEl.value  = logr; endEl.classList.add('ia'); }
+    if(bairEl && !bairEl.value && data.bairro)  { bairEl.value = data.bairro; bairEl.classList.add('ia'); }
+    if(cidEl  && !cidEl.value  && data.localidade) {
+      cidEl.value = data.localidade + (data.uf ? '/' + data.uf : '');
+      cidEl.classList.add('ia');
+    }
+    atualizarContadores();
+    showAlert('CEP encontrado: ' + (data.logradouro||'') + ', ' + (data.bairro||'') + ' — ' + (data.localidade||'') + '/' + (data.uf||''), 'ok');
+  })
+  .catch(function(){ if(spin) spin.style.display='none'; });
+}
 
 // ─── INIT ─────────────────────────────────────────────────────
 carregarHist();
