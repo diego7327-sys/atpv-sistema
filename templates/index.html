@@ -121,7 +121,10 @@ tr:hover td{background:var(--surf2)}
 .cfg-note{font-size:12px;color:var(--mut);line-height:1.6;margin-bottom:14px}
 .link-det{display:inline-flex;align-items:center;gap:6px;color:var(--acc2);font-size:13px;text-decoration:none;border:1px solid rgba(0,153,255,.3);padding:8px 14px;border-radius:8px}
 .link-det:hover{background:rgba(0,153,255,.07)}
-.fill-count{display:inline-block;background:rgba(0,212,170,.15);color:var(--acc);border-radius:5px;font-size:11px;padding:2px 8px;font-family:var(--mono);margin-left:8px;vertical-align:middle}
+.tag-pago{background:rgba(0,212,170,.15);color:var(--acc);display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+.tag-pendente{background:rgba(255,71,87,.15);color:var(--red);display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+.btn-fin{background:none;border:1px solid var(--bord);color:var(--mut);border-radius:5px;padding:2px 7px;font-size:11px;cursor:pointer;font-family:var(--font)}
+.btn-fin:hover{border-color:var(--acc);color:var(--acc)}
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--bord);border-radius:3px}
@@ -172,6 +175,7 @@ tr:hover td{background:var(--surf2)}
     <button class="ftab" onclick="ftab('veiculo')">Veículo</button>
     <button class="ftab" onclick="ftab('comprador')">Comprador</button>
     <button class="ftab" onclick="ftab('preview')">Pré-visualização</button>
+    <button class="ftab" onclick="ftab('relatorios')" id="tab-rel">📊 Relatórios</button>
     <button class="ftab" onclick="ftab('config')">Configurações</button>
   </div>
   <div id="alert-box" class="alert"></div>
@@ -275,6 +279,114 @@ tr:hover td{background:var(--surf2)}
     <div class="fb">
       <div class="fb-title">Documento — pré-visualização</div>
       <div class="prev-doc" id="prev-box">Preencha os dados para visualizar...</div>
+    </div>
+  </div>
+
+  <!-- RELATÓRIOS -->
+  <div id="fc-relatorios" class="ftc fields">
+    <div class="fb">
+      <div class="fb-title">📊 Relatórios e Financeiro</div>
+
+      <!-- FILTROS -->
+      <div style="background:var(--surf2);border:1px solid var(--bord);border-radius:10px;padding:16px;margin-bottom:20px">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);margin-bottom:12px">Filtrar período</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+          <div class="fg" style="margin:0;min-width:130px">
+            <label>De</label>
+            <input id="rel-de" type="date" oninput="carregarRelatorio()">
+          </div>
+          <div class="fg" style="margin:0;min-width:130px">
+            <label>Até</label>
+            <input id="rel-ate" type="date" oninput="carregarRelatorio()">
+          </div>
+          <div class="fg" style="margin:0;min-width:140px" id="fg-rel-func" style="display:none">
+            <label>Funcionário</label>
+            <select id="rel-func" onchange="carregarRelatorio()">
+              <option value="">Todos</option>
+            </select>
+          </div>
+          <div class="fg" style="margin:0;min-width:160px" id="fg-rel-emp">
+            <label>Empresa</label>
+            <select id="rel-emp" onchange="carregarRelatorio()">
+              <option value="">Todas</option>
+            </select>
+          </div>
+          <button class="btn-sec" style="padding:8px 14px;font-size:12px" onclick="limparFiltros()">Limpar filtros</button>
+          <button class="btn-sec" style="padding:8px 14px;font-size:12px" onclick="filtroRapido('hoje')">Hoje</button>
+          <button class="btn-sec" style="padding:8px 14px;font-size:12px" onclick="filtroRapido('mes')">Este mês</button>
+          <button class="btn-sec" style="padding:8px 14px;font-size:12px" onclick="filtroRapido('ano')">Este ano</button>
+        </div>
+      </div>
+
+      <!-- CARDS RESUMO -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px" id="rel-cards">
+        <div style="background:var(--surf2);border-radius:10px;padding:16px;text-align:center">
+          <div style="font-size:11px;color:var(--mut);margin-bottom:6px">TOTAL DE PROCESSOS</div>
+          <div style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--txt)" id="rc-total">—</div>
+        </div>
+        <div style="background:rgba(0,212,170,.08);border:1px solid rgba(0,212,170,.2);border-radius:10px;padding:16px;text-align:center">
+          <div style="font-size:11px;color:var(--mut);margin-bottom:6px">RECEBIDOS</div>
+          <div style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--acc)" id="rc-rec">—</div>
+          <div style="font-size:12px;color:var(--acc);margin-top:4px" id="rc-val-rec">R$ —</div>
+        </div>
+        <div style="background:rgba(255,71,87,.08);border:1px solid rgba(255,71,87,.2);border-radius:10px;padding:16px;text-align:center">
+          <div style="font-size:11px;color:var(--mut);margin-bottom:6px">PENDENTES</div>
+          <div style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--red)" id="rc-pend">—</div>
+          <div style="font-size:12px;color:var(--red);margin-top:4px" id="rc-val-pend">R$ —</div>
+        </div>
+      </div>
+
+      <!-- ABAS DE RELATÓRIO -->
+      <div style="display:flex;gap:4px;border-bottom:1px solid var(--bord);margin-bottom:16px">
+        <button class="ftab active" onclick="relTab('atendimentos')" id="rtab-atendimentos" style="padding:8px 14px;font-size:12px">Atendimentos</button>
+        <button class="ftab" onclick="relTab('func')" id="rtab-func" style="padding:8px 14px;font-size:12px">Por Funcionário</button>
+        <button class="ftab" onclick="relTab('emp')" id="rtab-emp" style="padding:8px 14px;font-size:12px">Por Empresa</button>
+        <button class="ftab" onclick="relTab('mes')" id="rtab-mes" style="padding:8px 14px;font-size:12px">Por Mês</button>
+      </div>
+
+      <!-- TABELA ATENDIMENTOS -->
+      <div id="rpanel-atendimentos">
+        <div style="overflow-x:auto">
+          <table id="tbl-atend">
+            <thead><tr>
+              <th>Data</th><th>Placa</th><th>Modelo</th><th>Vendedor</th>
+              <th>Funcionário</th><th>Empresa</th><th>Valor</th><th>Status</th><th></th>
+            </tr></thead>
+            <tbody id="tbody-atend"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TABELA POR FUNCIONÁRIO -->
+      <div id="rpanel-func" style="display:none">
+        <div style="overflow-x:auto">
+          <table id="tbl-func">
+            <thead><tr><th>Funcionário</th><th>Total</th><th>Recebidos</th><th>Pendentes</th><th>Valor Total</th><th>Valor Recebido</th></tr></thead>
+            <tbody id="tbody-func"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TABELA POR EMPRESA -->
+      <div id="rpanel-emp" style="display:none">
+        <div style="overflow-x:auto">
+          <table id="tbl-emp">
+            <thead><tr><th>Empresa</th><th>Total</th><th>Recebidos</th><th>Pendentes</th><th>Valor Total</th><th>Valor Recebido</th><th></th></tr></thead>
+            <tbody id="tbody-emp"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TABELA POR MÊS -->
+      <div id="rpanel-mes" style="display:none">
+        <div style="overflow-x:auto">
+          <table id="tbl-mes">
+            <thead><tr><th>Mês/Ano</th><th>Total</th><th>Recebidos</th><th>Pendentes</th><th>Valor Total</th></tr></thead>
+            <tbody id="tbody-mes"></tbody>
+          </table>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -399,11 +511,12 @@ function blank(v,n){ return v&&v.trim()?v:'_'.repeat(n||22); }
 function ftab(t){
   tabAtual=t;
   document.querySelectorAll('.ftab').forEach(function(el,i){
-    el.classList.toggle('active',['vendedor','veiculo','comprador','preview','config'][i]===t);
+    el.classList.toggle('active',['vendedor','veiculo','comprador','preview','relatorios','config'][i]===t);
   });
   document.querySelectorAll('.ftc').forEach(function(el){ el.classList.remove('active'); });
   document.getElementById('fc-'+t).classList.add('active');
   if(t==='preview') gerarPreview();
+  if(t==='relatorios') carregarRelatorio();
 }
 
 // ═══ EXTRAÇÃO ════════════════════════════════════════════════
@@ -770,13 +883,238 @@ function renderHist(lista){
   if(!lista||!lista.length){el.innerHTML='<div class="hist-empty">Nenhum atendimento salvo</div>';return;}
   el.innerHTML=lista.map(function(h,i){
     var idx=todosHist.indexOf(h);
+    var status = h.status_pgto||'pendente';
+    var tagCls = status==='pago'?'tag-pago':'tag-pendente';
+    var tagTxt = status==='pago'?'Pago':'Pendente';
     return '<div class="hist-item">'+
       '<button class="hist-del" onclick="delHist('+idx+',event)">✕</button>'+
       '<div onclick="carregarItem('+idx+')">'+
       '<div class="hist-nome">'+h.nome+'</div>'+
       '<div class="hist-meta">'+h.modelo+' | '+h.placa+' | '+h.data+'</div>'+
-      '</div></div>';
+      '</div>'+
+      '<div style="margin-top:5px;display:flex;align-items:center;gap:6px">'+
+      '<span class="'+tagCls+'">'+tagTxt+'</span>'+
+      (h.valor_cobrado?'<span style="font-size:11px;color:var(--mut);font-family:var(--mono)">'+h.valor_cobrado+'</span>':'')+
+      '<button class="btn-fin" onclick="abrirFin('+idx+',event)">R$ Editar</button>'+
+      '</div>'+
+      '</div>';
   }).join('');
+}
+
+// Modal financeiro inline
+function abrirFin(idx, e){
+  e.stopPropagation();
+  var h = todosHist[idx];
+  var val = prompt('Valor cobrado (ex: 50.00):', h.valor_cobrado||'');
+  if(val===null) return;
+  var status = confirm('Já foi pago?\nOK = Pago | Cancelar = Pendente') ? 'pago' : 'pendente';
+  fetch('/api/historico/'+idx+'/financeiro',{
+    method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({valor_cobrado: val, status_pgto: status})
+  }).then(function(){ carregarHist(); showAlert('✓ Financeiro atualizado!','ok'); });
+}
+
+// ═══ RELATÓRIOS ══════════════════════════════════════════════
+var relDados = {};
+var relTabAtual = 'atendimentos';
+
+function relTab(t){
+  relTabAtual = t;
+  ['atendimentos','func','emp','mes'].forEach(function(k){
+    document.getElementById('rtab-'+k).classList.toggle('active',k===t);
+    document.getElementById('rpanel-'+k).style.display = k===t?'block':'none';
+  });
+}
+
+function filtroRapido(tipo){
+  var hoje = new Date();
+  var de = document.getElementById('rel-de');
+  var ate = document.getElementById('rel-ate');
+  function fmt(d){ return d.toISOString().split('T')[0]; }
+  if(tipo==='hoje'){
+    de.value = fmt(hoje); ate.value = fmt(hoje);
+  } else if(tipo==='mes'){
+    de.value = fmt(new Date(hoje.getFullYear(),hoje.getMonth(),1));
+    ate.value = fmt(new Date(hoje.getFullYear(),hoje.getMonth()+1,0));
+  } else if(tipo==='ano'){
+    de.value = fmt(new Date(hoje.getFullYear(),0,1));
+    ate.value = fmt(new Date(hoje.getFullYear(),11,31));
+  }
+  carregarRelatorio();
+}
+
+function limparFiltros(){
+  document.getElementById('rel-de').value='';
+  document.getElementById('rel-ate').value='';
+  document.getElementById('rel-func').value='';
+  document.getElementById('rel-emp').value='';
+  carregarRelatorio();
+}
+
+function carregarRelatorio(){
+  var de  = document.getElementById('rel-de').value;
+  var ate = document.getElementById('rel-ate').value;
+  var func= document.getElementById('rel-func').value;
+  var emp = document.getElementById('rel-emp').value;
+
+  // Converte datas para DD/MM/AAAA
+  function fmtBr(s){ if(!s) return ''; var p=s.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
+
+  var params = new URLSearchParams();
+  if(de)  params.append('de',  fmtBr(de));
+  if(ate) params.append('ate', fmtBr(ate));
+  if(func)params.append('func',func);
+  if(emp) params.append('emp', emp);
+
+  fetch('/api/relatorios?'+params.toString())
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    relDados = d;
+    renderRelatorio(d);
+  });
+}
+
+function fmtVal(v){ return 'R$ '+(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2}); }
+
+function renderRelatorio(d){
+  // Cards
+  document.getElementById('rc-total').textContent  = d.total;
+  document.getElementById('rc-rec').textContent    = d.recebidos;
+  document.getElementById('rc-pend').textContent   = d.pendentes;
+  document.getElementById('rc-val-rec').textContent  = fmtVal(d.val_recebido);
+  document.getElementById('rc-val-pend').textContent = fmtVal(d.val_pendente);
+
+  // Tabela atendimentos
+  var tb = document.getElementById('tbody-atend');
+  if(!d.atendimentos||!d.atendimentos.length){
+    tb.innerHTML='<tr><td colspan="9" style="text-align:center;color:var(--mut);padding:20px">Nenhum atendimento no período</td></tr>';
+  } else {
+    tb.innerHTML = d.atendimentos.map(function(a){
+      var tagCls = a.status==='pago'?'tag-pago':'tag-pendente';
+      return '<tr>'+
+        '<td style="font-size:11px;white-space:nowrap">'+a.data+'</td>'+
+        '<td style="font-family:var(--mono);font-weight:600">'+a.placa+'</td>'+
+        '<td style="font-size:12px">'+a.modelo+'</td>'+
+        '<td style="font-size:12px">'+a.vendedor+'</td>'+
+        '<td style="font-size:12px">'+a.func+'</td>'+
+        '<td style="font-size:12px">'+a.empresa+'</td>'+
+        '<td style="font-family:var(--mono);font-size:12px">'+(a.valor||'—')+'</td>'+
+        '<td><span class="'+tagCls+'">'+a.status+'</span></td>'+
+        '<td><button class="btn-fin" onclick="abrirFin('+a.idx+',event)">Editar</button></td>'+
+        '</tr>';
+    }).join('');
+  }
+
+  // Por funcionário
+  var tf = document.getElementById('tbody-func');
+  tf.innerHTML = (d.por_func||[]).map(function(f){
+    return '<tr>'+
+      '<td style="font-weight:500">'+f.nome+'</td>'+
+      '<td style="text-align:center;font-family:var(--mono)">'+f.total+'</td>'+
+      '<td style="text-align:center;color:var(--acc);font-family:var(--mono)">'+f.recebidos+'</td>'+
+      '<td style="text-align:center;color:var(--red);font-family:var(--mono)">'+(f.total-f.recebidos)+'</td>'+
+      '<td style="font-family:var(--mono)">'+fmtVal(f.val_total)+'</td>'+
+      '<td style="font-family:var(--mono);color:var(--acc)">'+fmtVal(f.val_recebido)+'</td>'+
+      '</tr>';
+  }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--mut);padding:16px">Sem dados</td></tr>';
+
+  // Por empresa
+  var te = document.getElementById('tbody-emp');
+  te.innerHTML = (d.por_emp||[]).map(function(e){
+    return '<tr>'+
+      '<td style="font-weight:500">'+e.nome+'</td>'+
+      '<td style="text-align:center;font-family:var(--mono)">'+e.total+'</td>'+
+      '<td style="text-align:center;color:var(--acc);font-family:var(--mono)">'+e.recebidos+'</td>'+
+      '<td style="text-align:center;color:var(--red);font-family:var(--mono)">'+(e.total-e.recebidos)+'</td>'+
+      '<td style="font-family:var(--mono)">'+fmtVal(e.val_total)+'</td>'+
+      '<td style="font-family:var(--mono);color:var(--acc)">'+fmtVal(e.val_recebido)+'</td>'+
+      '<td><button class="btn-fin" onclick="gerarPDFEmpresa(\''+e.nome+'\')" style="color:var(--acc2);border-color:rgba(0,153,255,.3)">📄 PDF</button></td>'+
+      '</tr>';
+  }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--mut);padding:16px">Sem dados</td></tr>';
+
+  // Por mês
+  var tm = document.getElementById('tbody-mes');
+  tm.innerHTML = (d.por_mes||[]).map(function(m){
+    return '<tr>'+
+      '<td style="font-weight:500;font-family:var(--mono)">'+m.mes+'</td>'+
+      '<td style="text-align:center;font-family:var(--mono)">'+m.total+'</td>'+
+      '<td style="text-align:center;color:var(--acc);font-family:var(--mono)">'+m.recebidos+'</td>'+
+      '<td style="text-align:center;color:var(--red);font-family:var(--mono)">'+(m.total-m.recebidos)+'</td>'+
+      '<td style="font-family:var(--mono)">'+fmtVal(m.val_total)+'</td>'+
+      '</tr>';
+  }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--mut);padding:16px">Sem dados</td></tr>';
+}
+
+function gerarPDFEmpresa(nomeEmp){
+  var empData = (relDados.por_emp||[]).find(function(e){ return e.nome===nomeEmp; });
+  if(!empData){ showAlert('Empresa não encontrada.','err'); return; }
+  var {jsPDF}=window.jspdf;
+  var doc=new jsPDF({unit:'mm',format:'a4'});
+  var W=210,ML=20,TW=170,y=20;
+
+  // Cabeçalho
+  doc.setFont('helvetica','bold');doc.setFontSize(14);doc.setTextColor(26,26,46);
+  doc.text('RELATÓRIO DE ATENDIMENTOS',W/2,y,{align:'center'});y+=7;
+  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(80,80,80);
+  doc.text('Empresa: '+nomeEmp,W/2,y,{align:'center'});y+=5;
+  var de=document.getElementById('rel-de').value;
+  var ate=document.getElementById('rel-ate').value;
+  if(de||ate) doc.text('Período: '+(de||'início')+' a '+(ate||'hoje'),W/2,y,{align:'center'});
+  y+=8;
+
+  // Resumo
+  doc.setFillColor(26,26,46);doc.roundedRect(ML,y,TW,8,1,1,'F');
+  doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(255,255,255);
+  doc.text('Total: '+empData.total+' | Recebidos: '+empData.recebidos+' | Pendentes: '+(empData.total-empData.recebidos)+' | Valor: '+fmtVal(empData.val_total),W/2,y+5.2,{align:'center'});
+  y+=14;
+
+  // Tabela
+  doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(120,120,120);
+  doc.text('PLACA',ML,y);doc.text('MODELO',ML+22,y);doc.text('CHASSI',ML+72,y);doc.text('VENDEDOR',ML+110,y);doc.text('DATA',ML+148,y);doc.text('STATUS',ML+163,y);
+  y+=2;doc.setDrawColor(200,200,200);doc.line(ML,y,ML+TW,y);y+=5;
+
+  doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(30,30,30);
+  (empData.atendimentos||[]).forEach(function(a){
+    if(y>270){ doc.addPage(); y=20; }
+    doc.text((a.placa||'—').slice(0,10),ML,y);
+    doc.text((a.modelo||'—').slice(0,22),ML+22,y);
+    doc.text((a.chassi||'—').slice(0,18),ML+72,y);
+    doc.text((a.vendedor||'—').slice(0,18),ML+110,y);
+    doc.text((a.data||'—').slice(0,10),ML+148,y);
+    var s=a.status==='pago'?'PAGO':'PENDENTE';
+    doc.setTextColor(a.status==='pago'?0:220, a.status==='pago'?160:50, a.status==='pago'?100:50);
+    doc.text(s,ML+163,y);
+    doc.setTextColor(30,30,30);
+    y+=5;doc.setDrawColor(240,240,240);doc.line(ML,y-1,ML+TW,y-1);
+  });
+
+  // Rodapé
+  y=285;doc.setFont('helvetica','oblique');doc.setFontSize(7);doc.setTextColor(150,150,150);
+  doc.text('DIEGO DESPACHANTE — Código DETRAN 2670 — Gerado em '+new Date().toLocaleString('pt-BR'),W/2,y,{align:'center'});
+
+  doc.save('Relatorio_'+nomeEmp.replace(/\s+/g,'_')+'_'+Date.now()+'.pdf');
+  showAlert('✓ PDF gerado!','ok');
+}
+
+function carregarFiltrosRelatorio(){
+  // Carrega funcionários no select
+  if(MEU_PERFIL==='admin'){
+    fetch('/api/usuarios').then(function(r){return r.json();}).then(function(users){
+      var sel=document.getElementById('rel-func');
+      sel.innerHTML='<option value="">Todos</option>'+
+        users.filter(function(u){return u.ativo;}).map(function(u){
+          return '<option value="'+u.id+'">'+u.nome+'</option>';
+        }).join('');
+      document.getElementById('fg-rel-func').style.display='block';
+    });
+  }
+  // Carrega empresas no select
+  fetch('/api/empresas').then(function(r){return r.json();}).then(function(emps){
+    var sel=document.getElementById('rel-emp');
+    sel.innerHTML='<option value="">Todas</option>'+
+      emps.map(function(e){ return '<option value="'+e.id+'">'+e.nome+'</option>'; }).join('');
+  });
 }
 function filtrarHist(q){
   if(!q){renderHist(todosHist);return;}
@@ -889,6 +1227,7 @@ function carregarMe(){
     if(d.perfil==='admin'){
       document.getElementById('btn-admin').style.display='inline-block';
     }
+    carregarFiltrosRelatorio();
   });
 }
 
