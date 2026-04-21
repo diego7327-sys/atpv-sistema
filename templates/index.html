@@ -338,6 +338,7 @@ var CAMPOS=['v_nome','v_cpf','v_rg','v_rg_org','v_ecivil','v_nasc','v_end','v_ba
             'c_nome','c_cpf','c_rg','c_nasc','c_valor','c_end','c_cidade','c_cep','c_email'];
 var HOJE=0;
 var todosHist=[];
+var tabAtual='vendedor';
 
 function g(id){return(document.getElementById(id)||{}).value||'';}
 function set(id,val){var el=document.getElementById(id);if(el&&val&&val.trim()){el.value=val.trim();el.classList.add('ia');}}
@@ -345,6 +346,7 @@ function blank(v,n){return v&&v.trim()?v:'_'.repeat(n||22);}
 
 // ─── TABS ─────────────────────────────────────────────────────
 function ftab(t){
+  tabAtual=t;
   document.querySelectorAll('.ftab').forEach(function(el,i){
     el.classList.toggle('active',['vendedor','veiculo','comprador','preview','config'][i]===t);
   });
