@@ -816,15 +816,29 @@ function renderDropPessoa(lista, pref, dropId) {
   var drop = document.getElementById(dropId);
   if(!drop) return;
   if(!lista.length) { fecharDrop(dropId); return; }
-  _acListas['pessoa_'+pref] = lista; // guarda globalmente
-  drop.innerHTML = lista.map(function(p, i){
-    return '<div class="ac-item" onmousedown="event.preventDefault();selecionarPessoa('+i+',\''+pref+'\')">' +
+  _acListas['pessoa_'+pref] = lista;
+  var html = '';
+  lista.forEach(function(p, i){
+    html += '<div class="ac-item" id="acpi_'+pref+'_'+i+'">' +
       '<div class="ac-nome">' + (p.nome||'') + '</div>' +
       '<div class="ac-meta">' + (p.cpf||'') + (p.cel?' · '+p.cel:'') + '</div>' +
       '</div>';
-  }).join('') +
-  '<div class="ac-item ac-salvar-item" onmousedown="event.preventDefault();salvarPessoaAtual(\''+pref+'\')">+ Salvar ' + (pref==='v'?'vendedor':'comprador') + ' no cadastro</div>';
+  });
+  html += '<div class="ac-item ac-salvar-item" id="acps_'+pref+'">+ Salvar '+(pref==='v'?'vendedor':'comprador')+' no cadastro</div>';
+  drop.innerHTML = html;
   drop.classList.add('open');
+  // Adiciona eventos depois de criar os elementos
+  lista.forEach(function(p, i){
+    var el = document.getElementById('acpi_'+pref+'_'+i);
+    if(el){
+      el.onmousedown = function(e){ e.preventDefault(); e.stopPropagation(); selecionarPessoa(i, pref); return false; };
+      el.ontouchstart = function(e){ e.preventDefault(); selecionarPessoa(i, pref); return false; };
+    }
+  });
+  var salvarEl = document.getElementById('acps_'+pref);
+  if(salvarEl){
+    salvarEl.onmousedown = function(e){ e.preventDefault(); e.stopPropagation(); salvarPessoaAtual(pref); return false; };
+  }
 }
 
 function selecionarPessoa(idx, pref) {
@@ -907,15 +921,28 @@ function renderDropVeiculo(lista) {
   var drop = document.getElementById('ac-ve_placa');
   if(!drop) return;
   if(!lista.length) { fecharDrop('ac-ve_placa'); return; }
-  _acListas['veiculo'] = lista; // guarda globalmente
-  drop.innerHTML = lista.map(function(v, i){
-    return '<div class="ac-item" onmousedown="event.preventDefault();selecionarVeiculo('+i+')">' +
+  _acListas['veiculo'] = lista;
+  var html = '';
+  lista.forEach(function(v, i){
+    html += '<div class="ac-item" id="acvi_'+i+'">' +
       '<div class="ac-nome">' + v.placa + ' — ' + (v.modelo||'') + '</div>' +
       '<div class="ac-meta">' + (v.ano||'') + (v.chassi?' · '+v.chassi:'') + '</div>' +
       '</div>';
-  }).join('') +
-  '<div class="ac-item ac-salvar-item" onmousedown="event.preventDefault();salvarVeiculoAtual()">+ Salvar veículo no cadastro</div>';
+  });
+  html += '<div class="ac-item ac-salvar-item" id="acvs">+ Salvar veículo no cadastro</div>';
+  drop.innerHTML = html;
   drop.classList.add('open');
+  lista.forEach(function(v, i){
+    var el = document.getElementById('acvi_'+i);
+    if(el){
+      el.onmousedown = function(e){ e.preventDefault(); e.stopPropagation(); selecionarVeiculo(i); return false; };
+      el.ontouchstart = function(e){ e.preventDefault(); selecionarVeiculo(i); return false; };
+    }
+  });
+  var salvarEl = document.getElementById('acvs');
+  if(salvarEl){
+    salvarEl.onmousedown = function(e){ e.preventDefault(); e.stopPropagation(); salvarVeiculoAtual(); return false; };
+  }
 }
 
 function selecionarVeiculo(idx) {
