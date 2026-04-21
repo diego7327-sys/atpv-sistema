@@ -44,6 +44,9 @@ def extrair_campos(texto):
         r"CPF[/\s]*CNPJ[:\s]*([\d]{2,3}\.[\d]{3}\.[\d]{3}[/\-][\d]{4}[\-\d]{0,6})",
         r"CPF[:\s]*([\d]{3}\.[\d]{3}\.[\d]{3}-[\d]{2})",
         r"CNPJ[:\s]*([\d]{2}\.[\d]{3}\.[\d]{3}/[\d]{4}-[\d]{2})",
+        # sem label, pega CPF solto no texto
+        r"\b(\d{3}\.\d{3}\.\d{3}-\d{2})\b",
+        r"\b(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})\b",
     ])
     r["v_rg"] = match([r"RG[:\s]*([\d]{5,12})", r"Identidade[:\s]*([\d]{5,12})"])
 
@@ -71,10 +74,11 @@ def extrair_campos(texto):
         r"Logradouro[:\s]*([A-Z][^\n]{4,60}?)(?:\s*Bairro|\s*CEP|\s*N[ou]|\n)",
         r"Endere[cC]o[:\s]*([A-Z][^\n]{5,60}?)(?:\s*N[ou]|\s*Bairro|\s*CEP|\n)",
     ])
-    nro_m = re.search(r"N[uú]mero[:\s]*([A-Z0-9/]+)", t, re.IGNORECASE) or \
-            re.search(r"N[o°][:\s]*([A-Z0-9/]+)", t, re.IGNORECASE) or \
-            re.search(r"N[º][:\s]*([A-Z0-9/]+)", t, re.IGNORECASE)
+    nro_m = re.search(r"N[uú]mero[:\s]*(\d+[A-Z]?)", t, re.IGNORECASE) or \
+            re.search(r"\bN[o°º][:\s]*(\d+[A-Z]?)", t, re.IGNORECASE)
     nro = nro_m.group(1).strip() if nro_m else ""
+    # Ignora número zero ou sem sentido
+    if nro in ["0","00","000"]: nro = "SN"
     complemento = match([r"Complemento[:\s]*([^\n]{3,50}?)(?:\s*N[ouú]|\s*Munic|\s*CEP|\n)"])
     end_parts = []
     if logradouro: end_parts.append(logradouro.strip().rstrip(","))
