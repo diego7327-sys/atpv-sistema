@@ -29,11 +29,15 @@ def extrair_campos(texto):
         return ""
 
     r["v_nome"] = match([
+        # Nome na mesma linha após label
         r"Nome(?:\s+do\s+Proprietario)?[:\s]+([A-Z][A-Z\s]{3,60}?)(?:\s*CPF|\s*CNPJ|\n)",
         r"Proprietario[:\s]+([A-Z][A-Z\s]{3,60}?)(?:\s*CPF|\n)",
         r"Nome\s+Solicitante[:\s]+([A-Z][A-Z\s]{3,60}?)(?:\s*Tipo|\n)",
         r"Aberto por[:\s]+([A-Z][A-Z\s]{3,60}?)(?:\s*Tipo|\n)",
         r"Nome:[:\s]+([A-Z][A-Z\s]{3,60}?)(?:\s*CPF|\s*CNPJ|\n)",
+        # Nome na linha SEGUINTE ao label (formato DETRAN com tabulação)
+        r"Nome[^\n:]*:\s*[\t ]*\n[\t ]*([A-Z][A-Z\s]{3,60}?)[\t ]*\n",
+        r"Proprietario\s*\n[\t ]*([A-Z][A-Z\s]{3,60}?)[\t ]*\n",
     ])
     # Remove valores genéricos que não são nomes
     palavras_invalidas = ['EMPRESARIAL','SITUACAO','ESPECIAL','REGULAR','SUSPENSA','CANCELADA',
