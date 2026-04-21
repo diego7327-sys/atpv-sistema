@@ -821,46 +821,32 @@ function renderDropPessoa(lista, pref, dropId) {
   lista.forEach(function(p, i){
     html += '<div class="ac-item" id="acpi_'+pref+'_'+i+'">' +
       '<div class="ac-nome">' + (p.nome||'') + '</div>' +
-      '<div class="ac-meta">' + (p.cpf||'') + (p.cel?' · '+p.cel:'') + '</div>' +
+      '<div class="ac-meta">' + (p.cpf||'') + '</div>' +
       '</div>';
   });
   html += '<div class="ac-item ac-salvar-item" id="acps_'+pref+'">+ Salvar '+(pref==='v'?'vendedor':'comprador')+' no cadastro</div>';
   drop.innerHTML = html;
   drop.classList.add('open');
-  // Usa setTimeout para garantir que os elementos existam no DOM
-  setTimeout(function(){
-    lista.forEach(function(p, i){
-      var el = document.getElementById('acpi_'+pref+'_'+i);
-      if(el){
-        // Cria closure para capturar i e pref corretamente
-        (function(idx, pr){
-          el.addEventListener('mousedown', function(e){
-            e.preventDefault();
-            e.stopPropagation();
-            selecionarPessoa(idx, pr);
-          }, true);
-          el.addEventListener('touchend', function(e){
-            e.preventDefault();
-            selecionarPessoa(idx, pr);
-          }, true);
-          // Fallback com click após pequeno delay
-          el.addEventListener('click', function(e){
-            e.stopPropagation();
-            selecionarPessoa(idx, pr);
-          });
-        })(i, pref);
-      }
-    });
-    var salvarEl = document.getElementById('acps_'+pref);
-    if(salvarEl){
-      salvarEl.addEventListener('mousedown', function(e){
-        e.preventDefault(); e.stopPropagation(); salvarPessoaAtual(pref);
-      }, true);
-      salvarEl.addEventListener('click', function(e){
-        e.stopPropagation(); salvarPessoaAtual(pref);
-      });
+  lista.forEach(function(p, i){
+    var el = document.getElementById('acpi_'+pref+'_'+i);
+    if(el){
+      (function(idx, pr){
+        el.addEventListener('mousedown', function(e){
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          setTimeout(function(){ selecionarPessoa(idx, pr); }, 10);
+        });
+      })(i, pref);
     }
-  }, 0);
+  });
+  var salvarEl = document.getElementById('acps_'+pref);
+  if(salvarEl){
+    salvarEl.addEventListener('mousedown', function(e){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setTimeout(function(){ salvarPessoaAtual(pref); }, 10);
+    });
+  }
 }
 
 function selecionarPessoa(idx, pref) {
@@ -954,23 +940,26 @@ function renderDropVeiculo(lista) {
   html += '<div class="ac-item ac-salvar-item" id="acvs">+ Salvar veículo no cadastro</div>';
   drop.innerHTML = html;
   drop.classList.add('open');
-  setTimeout(function(){
-    lista.forEach(function(v, i){
-      var el = document.getElementById('acvi_'+i);
-      if(el){
-        (function(idx){
-          el.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); selecionarVeiculo(idx); }, true);
-          el.addEventListener('touchend',  function(e){ e.preventDefault(); selecionarVeiculo(idx); }, true);
-          el.addEventListener('click',     function(e){ e.stopPropagation(); selecionarVeiculo(idx); });
-        })(i);
-      }
-    });
-    var salvarEl = document.getElementById('acvs');
-    if(salvarEl){
-      salvarEl.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); salvarVeiculoAtual(); }, true);
-      salvarEl.addEventListener('click',     function(e){ e.stopPropagation(); salvarVeiculoAtual(); });
+  lista.forEach(function(v, i){
+    var el = document.getElementById('acvi_'+i);
+    if(el){
+      (function(idx){
+        el.addEventListener('mousedown', function(e){
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          setTimeout(function(){ selecionarVeiculo(idx); }, 10);
+        });
+      })(i);
     }
-  }, 0);
+  });
+  var salvarEl = document.getElementById('acvs');
+  if(salvarEl){
+    salvarEl.addEventListener('mousedown', function(e){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setTimeout(function(){ salvarVeiculoAtual(); }, 10);
+    });
+  }
 }
 
 function selecionarVeiculo(idx) {
@@ -1007,14 +996,20 @@ function fecharDrop(id) {
   if(el) { el.classList.remove('open'); el.innerHTML=''; }
 }
 
-// Fecha dropdowns ao clicar fora — mas NÃO quando clicar dentro do dropdown
-document.addEventListener('click', function(e){
-  var dentroDropdown = e.target.closest('.ac-drop');
-  var dentroFg = e.target.closest('.fg');
-  if(!dentroDropdown && !dentroFg){
-    document.querySelectorAll('.ac-drop').forEach(function(d){ d.classList.remove('open'); });
-  }
-}, true);
+// Fecha dropdown quando o input perde foco (blur)
+// Usa timeout para dar tempo do mousedown no item ser processado primeiro
+document.querySelectorAll && document.addEventListener('DOMContentLoaded', function(){
+  ['v_nome','v_cpf','c_nome','c_cpf','ve_placa'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el){
+      el.addEventListener('blur', function(){
+        setTimeout(function(){
+          fecharDrop('ac-'+id);
+        }, 200);
+      });
+    }
+  });
+});
 
 // ─── SALVAR AUTOMÁTICO NO CADASTRO AO SALVAR HISTÓRICO ────────
 function salvarCadastrosAutomatico() {
