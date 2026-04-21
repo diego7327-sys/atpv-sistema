@@ -284,8 +284,9 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
         <div class="fg"><label>Endereço completo</label><input id="c_end" oninput="atualizar()"></div>
         <div class="fg"><label>Cidade / UF</label><input id="c_cidade" oninput="atualizar()"></div>
       </div>
-      <div class="g2">
+      <div class="g3">
         <div class="fg"><label>CEP <span id="c_cep_spin" style="display:none;color:var(--acc);font-size:10px">buscando...</span></label><input id="c_cep" oninput="maskCep(this,'c');atualizar()" placeholder="00000-000"></div>
+        <div class="fg"><label>Valor da venda (R$) ★</label><input id="c_valor" oninput="atualizar()" placeholder="R$ 0,00" style="border-color:rgba(0,212,170,.4)"></div>
         <div class="fg"><label>E-mail</label><input id="c_email" oninput="atualizar()"></div>
       </div>
     </div>
