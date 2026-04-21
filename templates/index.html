@@ -14,8 +14,6 @@
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:var(--font);background:var(--bg);color:var(--txt);min-height:100vh;display:flex;flex-direction:column}
-
-/* ─── HEADER ─── */
 header{display:flex;align-items:center;justify-content:space-between;padding:12px 24px;border-bottom:1px solid var(--bord);background:var(--surf);position:sticky;top:0;z-index:100}
 .logo{display:flex;align-items:center;gap:10px}
 .logo-ico{width:32px;height:32px;background:var(--acc);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#000;font-family:var(--mono)}
@@ -26,144 +24,104 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 .hstat-v{font-size:17px;font-weight:600;font-family:var(--mono);color:var(--acc)}
 .hstat-l{font-size:9px;color:var(--mut);text-transform:uppercase;letter-spacing:.08em}
 .user-badge{font-size:11px;background:var(--surf2);border:1px solid var(--bord);border-radius:6px;padding:4px 10px;color:var(--mut);font-family:var(--mono)}
-
-/* ─── LAYOUT ─── */
-.app{display:grid;grid-template-columns:360px 1fr;flex:1}
-
-/* ─── ESQUERDA ─── */
+.app{display:grid;grid-template-columns:320px 1fr;flex:1}
 .left{border-right:1px solid var(--bord);display:flex;flex-direction:column;background:var(--surf);overflow-y:auto;max-height:calc(100vh - 57px);position:sticky;top:57px}
-.psec{padding:18px;border-bottom:1px solid var(--bord)}
+.psec{padding:16px;border-bottom:1px solid var(--bord)}
 .psec:last-child{border-bottom:none;flex:1}
-.sec-l{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.12em;color:var(--mut);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.sec-l{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.12em;color:var(--mut);margin-bottom:10px;display:flex;align-items:center;gap:8px}
 .sec-l::after{content:'';flex:1;height:1px;background:var(--bord)}
-
 .paste-label{font-size:11px;color:var(--mut);line-height:1.5;margin-bottom:8px}
-.paste-area{width:100%;min-height:150px;background:var(--surf2);border:1px solid var(--bord);border-radius:9px;padding:11px;font-size:12px;color:var(--txt);font-family:var(--mono);resize:vertical;line-height:1.7;transition:border-color .15s}
+.paste-wrap{position:relative}
+.paste-area{width:100%;min-height:130px;background:var(--surf2);border:1px solid var(--bord);border-radius:9px;padding:10px;padding-top:28px;font-size:12px;color:var(--txt);font-family:var(--mono);resize:vertical;line-height:1.7;transition:border-color .15s}
 .paste-area:focus{outline:none;border-color:var(--acc)}
 .paste-area::placeholder{color:var(--mut)}
-.btn-ext{width:100%;padding:11px;background:var(--acc);color:#000;border:none;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font);transition:opacity .15s;margin-top:10px}
+.btn-limpar-txt{position:absolute;top:6px;right:8px;background:rgba(255,71,87,.15);border:1px solid rgba(255,71,87,.3);color:var(--red);border-radius:5px;padding:2px 8px;font-size:10px;cursor:pointer;font-family:var(--font)}
+.btn-ext{width:100%;padding:11px;background:var(--acc);color:#000;border:none;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font);margin-top:10px}
 .btn-ext:hover{opacity:.85}
-.btn-ext:disabled{opacity:.4;cursor:not-allowed}
-
-.load-wrap{display:none;margin-top:10px}
-.load-msg{font-size:11px;color:var(--mut);font-family:var(--mono);margin-bottom:5px}
+.load-wrap{display:none;margin-top:8px}
+.load-msg{font-size:11px;color:var(--mut);font-family:var(--mono);margin-bottom:4px}
 .load-track{height:3px;background:var(--bord);border-radius:2px;overflow:hidden}
 .load-fill{height:100%;background:var(--acc);border-radius:2px;width:0;transition:width .3s}
-
-/* HISTÓRICO */
-.hist-search{width:100%;background:var(--surf2);border:1px solid var(--bord);border-radius:7px;padding:7px 10px;font-size:12px;color:var(--txt);font-family:var(--font);margin-bottom:10px}
+.hist-search{width:100%;background:var(--surf2);border:1px solid var(--bord);border-radius:7px;padding:7px 10px;font-size:12px;color:var(--txt);font-family:var(--font);margin-bottom:8px}
 .hist-search:focus{outline:none;border-color:var(--acc)}
-.hist-list{display:flex;flex-direction:column;gap:3px;max-height:280px;overflow-y:auto}
+.hist-list{display:flex;flex-direction:column;gap:2px;max-height:260px;overflow-y:auto}
 .hist-item{padding:8px 10px;border-radius:7px;cursor:pointer;transition:background .1s;border:1px solid transparent}
 .hist-item:hover{background:var(--surf2);border-color:var(--bord)}
 .hist-nome{font-size:13px;font-weight:500}
 .hist-meta{font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:2px}
-.hist-del{float:right;background:none;border:none;color:var(--mut);cursor:pointer;font-size:13px;padding:0 2px;line-height:1}
+.hist-del{float:right;background:none;border:none;color:var(--mut);cursor:pointer;font-size:12px;padding:0 2px}
 .hist-del:hover{color:var(--red)}
-.hist-empty{font-size:12px;color:var(--mut);text-align:center;padding:20px 0}
-
-/* ─── DIREITA ─── */
+.hist-empty{font-size:12px;color:var(--mut);text-align:center;padding:16px 0}
 .right{display:flex;flex-direction:column}
-.ftabs{display:flex;gap:0;padding:0 24px;border-bottom:1px solid var(--bord);background:var(--surf);overflow-x:auto}
-.ftab{padding:14px 16px;font-size:12px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;color:var(--mut);background:none;border-top:none;border-left:none;border-right:none;font-family:var(--font);transition:all .15s;white-space:nowrap}
+.ftabs{display:flex;padding:0 24px;border-bottom:1px solid var(--bord);background:var(--surf);overflow-x:auto}
+.ftab{padding:13px 16px;font-size:12px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;color:var(--mut);background:none;border-top:none;border-left:none;border-right:none;font-family:var(--font);transition:all .15s;white-space:nowrap}
 .ftab.active{color:var(--acc);border-bottom-color:var(--acc)}
 .ftc{display:none}.ftc.active{display:block}
-.fields{padding:22px 24px}
-
-.alert{margin:0 24px 12px;padding:9px 14px;border-radius:8px;font-size:13px;display:none}
+.fields{padding:20px 24px}
+.alert{margin:0 24px 10px;padding:9px 14px;border-radius:8px;font-size:13px;display:none}
 .alert.ok{background:rgba(0,212,170,.1);color:var(--acc);border:1px solid rgba(0,212,170,.3)}
 .alert.err{background:rgba(255,71,87,.1);color:var(--red);border:1px solid rgba(255,71,87,.3)}
 .alert.warn{background:rgba(255,165,2,.1);color:var(--warn);border:1px solid rgba(255,165,2,.3)}
-
-.fb{margin-bottom:22px}
+.fb{margin-bottom:20px}
 .fb-title{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--acc);font-family:var(--mono);margin-bottom:12px;padding-bottom:7px;border-bottom:1px solid var(--bord)}
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
 .g1{display:grid;grid-template-columns:1fr;gap:10px}
-.fg{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.fg{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;position:relative}
 .fg label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--mut)}
 .fg input,.fg select{background:var(--surf);border:1px solid var(--bord);border-radius:7px;padding:8px 11px;font-size:13px;color:var(--txt);font-family:var(--font);transition:border-color .15s;width:100%}
 .fg input:focus,.fg select:focus{outline:none;border-color:var(--acc)}
 .fg select option{background:var(--surf2)}
-.fg input.ia{border-color:var(--acc);background:rgba(0,212,170,.05)}
-
+.fg input.ia{border-color:var(--acc);background:rgba(0,212,170,.04)}
+/* AUTOCOMPLETE */
+.ac-drop{display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;z-index:9999;background:var(--surf2);border:1px solid var(--acc);border-radius:0 0 8px 8px;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.ac-drop.open{display:block}
+.ac-item{padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--bord)}
+.ac-item:last-child{border-bottom:none}
+.ac-item:hover{background:rgba(0,212,170,.12)}
+.ac-nome{font-size:13px;font-weight:500;color:var(--txt)}
+.ac-meta{font-size:11px;color:var(--mut);font-family:var(--mono);margin-top:2px}
+.ac-salvar{padding:8px 12px;cursor:pointer;border-top:1px solid var(--bord);text-align:center;font-size:11px;color:var(--acc);background:none}
+.ac-salvar:hover{background:rgba(0,212,170,.08)}
+.btn-cpf-consulta{float:right;background:none;border:1px solid rgba(0,153,255,.4);color:var(--acc2);border-radius:5px;padding:1px 7px;font-size:10px;cursor:pointer;font-family:var(--font);margin-left:6px}
+.btn-cpf-consulta:hover{background:rgba(0,153,255,.12)}
 .prev-doc{background:var(--surf);border:1px solid var(--bord);border-radius:9px;padding:18px;font-family:var(--mono);font-size:11px;line-height:1.9;white-space:pre-wrap;color:#b0b8c8;max-height:420px;overflow-y:auto}
-
 .action-bar{display:flex;gap:8px;flex-wrap:wrap;padding:14px 24px;border-top:1px solid var(--bord);background:var(--surf);position:sticky;bottom:0}
 .btn-main{padding:10px 20px;background:var(--acc);color:#000;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font);transition:opacity .15s}
 .btn-main:hover{opacity:.85}
-.btn-sec{padding:10px 18px;background:none;border:1px solid var(--bord);color:var(--txt);border-radius:8px;font-size:13px;cursor:pointer;font-family:var(--font);transition:background .15s}
+.btn-sec{padding:10px 18px;background:none;border:1px solid var(--bord);color:var(--txt);border-radius:8px;font-size:13px;cursor:pointer;font-family:var(--font)}
 .btn-sec:hover{background:var(--surf2)}
 .btn-danger{padding:10px 18px;background:none;border:1px solid rgba(255,71,87,.35);color:var(--red);border-radius:8px;font-size:13px;cursor:pointer;font-family:var(--font)}
-
 .cfg-note{font-size:12px;color:var(--mut);line-height:1.6;margin-bottom:14px}
-.link-det{display:inline-flex;align-items:center;gap:6px;color:var(--acc2);font-size:13px;text-decoration:none;border:1px solid rgba(0,153,255,.3);padding:8px 14px;border-radius:8px;transition:background .15s}
+.link-det{display:inline-flex;align-items:center;gap:6px;color:var(--acc2);font-size:13px;text-decoration:none;border:1px solid rgba(0,153,255,.3);padding:8px 14px;border-radius:8px}
 .link-det:hover{background:rgba(0,153,255,.07)}
-
-/* TAG CAMPOS PREENCHIDOS */
 .fill-count{display:inline-block;background:rgba(0,212,170,.15);color:var(--acc);border-radius:5px;font-size:11px;padding:2px 8px;font-family:var(--mono);margin-left:8px;vertical-align:middle}
-
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--bord);border-radius:3px}
-
-/* AUTOCOMPLETE */
-.ac-drop{display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:var(--surf2);border:1px solid var(--acc);border-radius:0 0 8px 8px;max-height:200px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.4)}
-.ac-drop.open{display:block}
-.ac-item{padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--bord);transition:background .1s}
-.ac-item:last-child{border-bottom:none}
-.ac-item:hover,.ac-item.sel{background:rgba(0,212,170,.1)}
-.ac-nome{font-size:13px;font-weight:500;color:var(--txt)}
-.ac-meta{font-size:11px;color:var(--mut);font-family:var(--mono);margin-top:2px}
-.ac-salvar{width:100%;padding:7px;background:none;border:none;border-top:1px solid var(--bord);color:var(--acc);font-size:11px;cursor:pointer;font-family:var(--font);text-align:center}
-.ac-salvar-item{padding:9px 12px;cursor:pointer;border-top:1px solid var(--bord);text-align:center;font-size:11px;color:var(--acc);transition:background .1s}
-.ac-salvar-item:hover{background:rgba(0,212,170,.08)}
-
-.btn-cpf-consulta{
-  float:right;background:none;border:1px solid rgba(0,153,255,.4);
-  color:var(--acc2);border-radius:5px;padding:1px 7px;font-size:10px;
-  cursor:pointer;font-family:var(--font);transition:all .15s;margin-left:6px;
-}
-.btn-cpf-consulta:hover{background:rgba(0,153,255,.12);border-color:var(--acc2)}
-
-@media(max-width:900px){
-  .app{grid-template-columns:1fr}
-  .left{max-height:none;position:static;border-right:none;border-bottom:1px solid var(--bord)}
-  .g2,.g3{grid-template-columns:1fr}
-}
+@media(max-width:900px){.app{grid-template-columns:1fr}.left{max-height:none;position:static;border-right:none;border-bottom:1px solid var(--bord)}.g2,.g3{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
-
 <header>
   <div class="logo">
     <div class="logo-ico">D</div>
-    <div>
-      <div class="logo-txt">Diego Despachante</div>
-      <div class="logo-sub">Sistema ATPV-E · Cód. 2670</div>
-    </div>
+    <div><div class="logo-txt">Diego Despachante</div><div class="logo-sub">Sistema ATPV-E · Cód. 2670</div></div>
   </div>
   <div class="hstats">
     <div class="hstat"><div class="hstat-v" id="st-hoje">0</div><div class="hstat-l">Hoje</div></div>
-    <div class="hstat"><div class="hstat-v" id="st-total">—</div><div class="hstat-l">Histórico</div></div>
+    <div class="hstat"><div class="hstat-v" id="st-total">0</div><div class="hstat-l">Histórico</div></div>
   </div>
-  <div class="user-badge" id="user-badge">carregando...</div>
+  <div class="user-badge" id="user-badge">—</div>
 </header>
-
 <div class="app">
-
-<!-- ═══ ESQUERDA ═══ -->
 <div class="left">
-
   <div class="psec">
     <div class="sec-l">Colar dados do documento</div>
-    <p class="paste-label">
-      Copie o texto do PDF do DETRAN, WhatsApp ou qualquer documento e cole abaixo. O sistema extrai os campos automaticamente.
-    </p>
-    <div style="position:relative">
-      <textarea class="paste-area" id="paste-txt"
-        placeholder="Cole aqui o texto copiado...&#10;&#10;Exemplos aceitos:&#10;• PDF do sistema DETRAN-GO&#10;• Consulta de atendimento veicular&#10;• CRV / CRLV copiado&#10;• Qualquer texto com placa, chassi, nome, CPF..."></textarea>
-      <button onclick="limparTexto()" title="Limpar texto" style="position:absolute;top:6px;right:8px;background:rgba(255,71,87,.15);border:1px solid rgba(255,71,87,.3);color:#ff4757;border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;font-family:var(--font)">✕ Limpar</button>
+    <p class="paste-label">Copie o texto do PDF do DETRAN ou qualquer documento e cole abaixo:</p>
+    <div class="paste-wrap">
+      <textarea class="paste-area" id="paste-txt" placeholder="Cole aqui...&#10;• PDF sistema DETRAN-GO&#10;• CRV / CRLV&#10;• Qualquer texto com placa, chassi, nome, CPF..."></textarea>
+      <button class="btn-limpar-txt" onclick="document.getElementById('paste-txt').value='';document.getElementById('paste-txt').focus()">✕ Limpar</button>
     </div>
     <button class="btn-ext" onclick="extrair()">✦ Extrair e preencher campos</button>
     <div class="load-wrap" id="load-wrap">
@@ -171,20 +129,13 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
       <div class="load-track"><div class="load-fill" id="load-fill"></div></div>
     </div>
   </div>
-
-  <div class="psec">
+  <div class="psec" style="flex:1">
     <div class="sec-l">Histórico compartilhado</div>
     <input class="hist-search" placeholder="Buscar por nome ou placa..." oninput="filtrarHist(this.value)">
-    <div class="hist-list" id="hist-list">
-      <div class="hist-empty">Carregando...</div>
-    </div>
+    <div class="hist-list" id="hist-list"><div class="hist-empty">Carregando...</div></div>
   </div>
-
 </div>
-
-<!-- ═══ DIREITA ═══ -->
 <div class="right">
-
   <div class="ftabs">
     <button class="ftab active" onclick="ftab('vendedor')">Vendedor</button>
     <button class="ftab" onclick="ftab('veiculo')">Veículo</button>
@@ -192,7 +143,6 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
     <button class="ftab" onclick="ftab('preview')">Pré-visualização</button>
     <button class="ftab" onclick="ftab('config')">Configurações</button>
   </div>
-
   <div id="alert-box" class="alert"></div>
 
   <!-- VENDEDOR -->
@@ -200,16 +150,14 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
     <div class="fb">
       <div class="fb-title">Proprietário / Vendedor (outorgante) <span class="fill-count" id="cnt-vendedor">0 campos</span></div>
       <div class="g2">
-        <div class="fg" style="position:relative">
+        <div class="fg">
           <label>Nome completo</label>
-          <input id="v_nome" oninput="atualizar();buscaPessoa(this,'v')" autocomplete="off" placeholder="Digite para buscar...">
+          <input id="v_nome" oninput="atualizar();acBuscar('v_nome','pessoa','v')" autocomplete="off" placeholder="Digite para buscar...">
           <div class="ac-drop" id="ac-v_nome"></div>
         </div>
-        <div class="fg" style="position:relative">
-          <label>CPF / CNPJ
-            <button class="btn-cpf-consulta" onclick="consultarCPF('v')" title="Consultar na Receita Federal">🔍 Consultar Receita</button>
-          </label>
-          <input id="v_cpf" oninput="atualizar();buscaPessoaCpf(this,'v');verificarCNPJ(this,'v')" autocomplete="off" placeholder="CPF ou CNPJ">
+        <div class="fg">
+          <label>CPF / CNPJ <button class="btn-cpf-consulta" onclick="consultarCPF('v')">🔍 Receita</button></label>
+          <input id="v_cpf" oninput="atualizar();acBuscar('v_cpf','pessoa','v');checarCNPJ(this,'v')" autocomplete="off" placeholder="CPF ou CNPJ">
           <div class="ac-drop" id="ac-v_cpf"></div>
         </div>
       </div>
@@ -249,9 +197,9 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
         <div class="fg"><label>Ano fabricação / Modelo</label><input id="ve_ano" oninput="atualizar()"></div>
       </div>
       <div class="g2">
-        <div class="fg" style="position:relative">
+        <div class="fg">
           <label>Placa</label>
-          <input id="ve_placa" oninput="this.value=this.value.toUpperCase();atualizar();buscaVeiculo(this)" autocomplete="off" placeholder="Digite para buscar...">
+          <input id="ve_placa" oninput="this.value=this.value.toUpperCase();atualizar();acBuscar('ve_placa','veiculo','')" autocomplete="off" placeholder="Digite para buscar...">
           <div class="ac-drop" id="ac-ve_placa"></div>
         </div>
         <div class="fg"><label>Chassi</label><input id="ve_chassi" oninput="this.value=this.value.toUpperCase();atualizar()"></div>
@@ -264,16 +212,14 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
     <div class="fb">
       <div class="fb-title">Dados do comprador <span class="fill-count" id="cnt-comprador">0 campos</span></div>
       <div class="g2">
-        <div class="fg" style="position:relative">
+        <div class="fg">
           <label>Nome completo</label>
-          <input id="c_nome" oninput="atualizar();buscaPessoa(this,'c')" autocomplete="off" placeholder="Digite para buscar...">
+          <input id="c_nome" oninput="atualizar();acBuscar('c_nome','pessoa','c')" autocomplete="off" placeholder="Digite para buscar...">
           <div class="ac-drop" id="ac-c_nome"></div>
         </div>
-        <div class="fg" style="position:relative">
-          <label>CPF / CNPJ
-            <button class="btn-cpf-consulta" onclick="consultarCPF('c')" title="Consultar na Receita Federal">🔍 Consultar Receita</button>
-          </label>
-          <input id="c_cpf" oninput="atualizar();buscaPessoaCpf(this,'c');verificarCNPJ(this,'c')" autocomplete="off" placeholder="CPF ou CNPJ">
+        <div class="fg">
+          <label>CPF / CNPJ <button class="btn-cpf-consulta" onclick="consultarCPF('c')">🔍 Receita</button></label>
+          <input id="c_cpf" oninput="atualizar();acBuscar('c_cpf','pessoa','c');checarCNPJ(this,'c')" autocomplete="off" placeholder="CPF ou CNPJ">
           <div class="ac-drop" id="ac-c_cpf"></div>
         </div>
       </div>
@@ -281,13 +227,13 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
         <div class="fg"><label>RG</label><input id="c_rg" oninput="atualizar()"></div>
         <div class="fg"><label>Data de nascimento</label><input id="c_nasc" placeholder="DD/MM/AAAA" oninput="atualizar()"></div>
       </div>
+      <div class="g3">
+        <div class="fg"><label>Valor da venda (R$) ★</label><input id="c_valor" placeholder="R$ 0,00" oninput="atualizar()" style="border-color:rgba(0,212,170,.4)"></div>
+        <div class="fg"><label>Cidade / UF</label><input id="c_cidade" oninput="atualizar()"></div>
+        <div class="fg"><label>CEP <span id="c_cep_spin" style="display:none;color:var(--acc);font-size:10px">buscando...</span></label><input id="c_cep" oninput="maskCep(this,'c');atualizar()" placeholder="00000-000"></div>
+      </div>
       <div class="g2">
         <div class="fg"><label>Endereço completo</label><input id="c_end" oninput="atualizar()"></div>
-        <div class="fg"><label>Cidade / UF</label><input id="c_cidade" oninput="atualizar()"></div>
-      </div>
-      <div class="g3">
-        <div class="fg"><label>CEP <span id="c_cep_spin" style="display:none;color:var(--acc);font-size:10px">buscando...</span></label><input id="c_cep" oninput="maskCep(this,'c');atualizar()" placeholder="00000-000"></div>
-        <div class="fg"><label>Valor da venda (R$) ★</label><input id="c_valor" oninput="atualizar()" placeholder="R$ 0,00" style="border-color:rgba(0,212,170,.4)"></div>
         <div class="fg"><label>E-mail</label><input id="c_email" oninput="atualizar()"></div>
       </div>
     </div>
@@ -305,14 +251,12 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
   <div id="fc-config" class="ftc fields">
     <div class="fb">
       <div class="fb-title">Dados fixos do escritório</div>
-      <p class="cfg-note">Estes dados são inseridos automaticamente em todas as procurações.</p>
+      <p class="cfg-note">Inseridos automaticamente em todas as procurações.</p>
       <div class="g2">
         <div class="fg"><label>Nome do escritório</label><input id="cfg_nome" value="DIEGO DESPACHANTE"></div>
         <div class="fg"><label>Código DETRAN</label><input id="cfg_cod" value="2670"></div>
       </div>
-      <div class="g1">
-        <div class="fg"><label>Endereço completo</label><input id="cfg_end" value="AVENIDA BRASIL N.464 VILA JUSSARA ANAPOLIS-GO"></div>
-      </div>
+      <div class="g1"><div class="fg"><label>Endereço completo</label><input id="cfg_end" value="AVENIDA BRASIL N.464 VILA JUSSARA ANAPOLIS-GO"></div></div>
       <div class="g2">
         <div class="fg"><label>CEP</label><input id="cfg_cep" value="75123-115"></div>
         <div class="fg"><label>Cidade (para data)</label><input id="cfg_cidade" value="ANÁPOLIS/GO"></div>
@@ -327,132 +271,328 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 
   <div class="action-bar">
     <button class="btn-main" onclick="gerarPDF()">⬇ Baixar Procuração PDF</button>
-    <button class="btn-sec" onclick="salvar()">Salvar no histórico</button>
-    <button class="btn-sec" onclick="proximo()">Próximo atendimento</button>
-    <button class="btn-danger" onclick="limpar()">Limpar</button>
+    <button class="btn-sec" onclick="salvar()">Salvar histórico</button>
+    <button class="btn-sec" onclick="limparTudo()">Próximo atendimento</button>
+    <button class="btn-danger" onclick="limparAba()">Limpar aba</button>
   </div>
-
 </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
-// ─── CAMPOS ───────────────────────────────────────────────────
-var CAMPOS=['v_nome','v_cpf','v_rg','v_rg_org','v_ecivil','v_nasc','v_end','v_bairro','v_cidade','v_cep','v_cel','v_email',
-            've_modelo','ve_ano','ve_placa','ve_chassi',
-            'c_nome','c_cpf','c_rg','c_nasc','c_valor','c_end','c_cidade','c_cep','c_email'];
-var HOJE=0;
-var todosHist=[];
-var tabAtual='vendedor';
+// ═══ ESTADO GLOBAL ═══════════════════════════════════════════
+var HOJE=0, tabAtual='vendedor', todosHist=[];
+var AC = {}; // cache de listas autocomplete: AC['pessoa_v'], AC['pessoa_c'], AC['veiculo']
+var _timers = {};
 
-function g(id){return(document.getElementById(id)||{}).value||'';}
-function set(id,val){var el=document.getElementById(id);if(el&&val&&val.trim()){el.value=val.trim();el.classList.add('ia');}}
-function blank(v,n){return v&&v.trim()?v:'_'.repeat(n||22);}
+var CAMPOS_V = ['v_nome','v_cpf','v_rg','v_rg_org','v_ecivil','v_nasc','v_end','v_bairro','v_cidade','v_cep','v_cel','v_email'];
+var CAMPOS_VE= ['ve_modelo','ve_ano','ve_placa','ve_chassi'];
+var CAMPOS_C = ['c_nome','c_cpf','c_rg','c_nasc','c_valor','c_end','c_cidade','c_cep','c_email'];
+var CAMPOS_TODOS = CAMPOS_V.concat(CAMPOS_VE).concat(CAMPOS_C);
 
-// ─── TABS ─────────────────────────────────────────────────────
+function g(id){ return (document.getElementById(id)||{}).value||''; }
+function setVal(id,val){ var el=document.getElementById(id); if(el&&val&&val.trim()){ el.value=val.trim(); el.classList.add('ia'); } }
+function blank(v,n){ return v&&v.trim()?v:'_'.repeat(n||22); }
+
+// ═══ TABS ════════════════════════════════════════════════════
 function ftab(t){
   tabAtual=t;
   document.querySelectorAll('.ftab').forEach(function(el,i){
     el.classList.toggle('active',['vendedor','veiculo','comprador','preview','config'][i]===t);
   });
-  document.querySelectorAll('.ftc').forEach(function(el){el.classList.remove('active');});
+  document.querySelectorAll('.ftc').forEach(function(el){ el.classList.remove('active'); });
   document.getElementById('fc-'+t).classList.add('active');
-  if(t==='preview')gerarPreview();
+  if(t==='preview') gerarPreview();
 }
 
-// ─── EXTRAÇÃO ─────────────────────────────────────────────────
+// ═══ EXTRAÇÃO ════════════════════════════════════════════════
 function extrair(){
   var txt=document.getElementById('paste-txt').value;
-  if(!txt.trim()){alert('Cole algum texto antes de extrair.');return;}
+  if(!txt.trim()){ alert('Cole algum texto antes de extrair.'); return; }
   var btn=document.querySelector('.btn-ext');
   btn.disabled=true;
-  animLoad(['Lendo documento...','Identificando campos...','Preenchendo formulário...']);
-
-  fetch('/api/extrair',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({texto:txt, aba:tabAtual})
-  })
-  .then(function(r){return r.json();})
+  animLoad(['Lendo documento...','Identificando campos...','Preenchendo...']);
+  fetch('/api/extrair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({texto:txt})})
+  .then(function(r){ return r.json(); })
   .then(function(data){
-    pararLoad();btn.disabled=false;
-    if(data.erro){showAlert(data.erro,'err');return;}
-    var campos=data.campos,filled=data.total;
-
-    // Se estamos na aba comprador, remapeia campos v_ para c_
+    pararLoad(); btn.disabled=false;
+    if(data.erro){ showAlert(data.erro,'err'); return; }
+    var campos=data.campos, filled=data.total;
+    // Se estiver na aba comprador, remapeia v_ -> c_
     if(tabAtual==='comprador'){
+      var mapa={'v_nome':'c_nome','v_cpf':'c_cpf','v_rg':'c_rg','v_end':'c_end',
+                'v_cidade':'c_cidade','v_cep':'c_cep','v_email':'c_email','v_nasc':'c_nasc'};
       var remapeado={};
       Object.keys(campos).forEach(function(k){
-        if(k.startsWith('v_') && !k.startsWith('ve_')){
-          var ck = 'c_'+k.slice(2);
-          // só remapeia se o campo do comprador existir
-          if(['c_nome','c_cpf','c_rg','c_nasc','c_end','c_cidade','c_cep','c_email'].indexOf(ck)>=0){
-            remapeado[ck]=campos[k];
-          } else {
-            remapeado[k]=campos[k];
-          }
-        } else {
-          remapeado[k]=campos[k];
-        }
+        remapeado[mapa[k]||k] = campos[k];
       });
-      campos=remapeado;
+      campos = remapeado;
     }
-
-    Object.keys(campos).forEach(function(k){set(k,campos[k]);});
+    Object.keys(campos).forEach(function(k){ setVal(k, campos[k]); });
     atualizarContadores();
     gerarPreview();
-    showAlert('✓ '+filled+' campos extraídos! Confira e complete se necessário.','ok');
-    // Navega para aba mais relevante
+    showAlert('✓ '+filled+' campos extraídos!','ok');
     if(campos.ve_placa||campos.ve_chassi) ftab('veiculo');
     else if(tabAtual==='comprador') ftab('comprador');
-    else if(campos.v_nome||campos.v_cpf) ftab('vendedor');
+    else ftab('vendedor');
   })
-  .catch(function(){pararLoad();btn.disabled=false;showAlert('Erro de conexão com o servidor.','err');});
+  .catch(function(){ pararLoad(); btn.disabled=false; showAlert('Erro de conexão.','err'); });
 }
 
-// ─── LOADING ──────────────────────────────────────────────────
-var _iv=null;
+// ═══ LOADING ═════════════════════════════════════════════════
+var _loadIv=null;
 function animLoad(msgs){
   var lw=document.getElementById('load-wrap'),lm=document.getElementById('load-msg'),lf=document.getElementById('load-fill');
-  lw.style.display='block';var i=0,pct=0;
-  _iv=setInterval(function(){if(i<msgs.length){lm.textContent=msgs[i];i++;}pct=Math.min(pct+Math.random()*20+8,88);lf.style.width=Math.round(pct)+'%';},600);
+  lw.style.display='block'; var i=0,pct=0;
+  _loadIv=setInterval(function(){ if(i<msgs.length){lm.textContent=msgs[i];i++;} pct=Math.min(pct+Math.random()*20+8,88); lf.style.width=Math.round(pct)+'%'; },600);
 }
 function pararLoad(){
-  clearInterval(_iv);
-  var lf=document.getElementById('load-fill');lf.style.width='100%';
-  setTimeout(function(){document.getElementById('load-wrap').style.display='none';lf.style.width='0';},300);
+  clearInterval(_loadIv);
+  var lf=document.getElementById('load-fill'); lf.style.width='100%';
+  setTimeout(function(){ document.getElementById('load-wrap').style.display='none'; lf.style.width='0'; },300);
 }
 
-// ─── CONTADORES ───────────────────────────────────────────────
+// ═══ AUTOCOMPLETE — SISTEMA ÚNICO E LIMPO ════════════════════
+function acBuscar(inputId, tipo, pref){
+  var el=document.getElementById(inputId);
+  if(!el) return;
+  var q = tipo==='veiculo' ? el.value.trim() : (tipo==='pessoaCpf' ? el.value.replace(/\D/g,'') : el.value.trim());
+  var minLen = tipo==='pessoaCpf' ? 3 : 1;
+  var dropId = 'ac-'+inputId;
+  if(q.length < minLen){ acFechar(dropId); return; }
+  clearTimeout(_timers[inputId]);
+  _timers[inputId] = setTimeout(function(){
+    var url = tipo==='veiculo'
+      ? '/api/veiculos?q='+encodeURIComponent(q)
+      : '/api/pessoas?q='+encodeURIComponent(q);
+    fetch(url).then(function(r){ return r.json(); })
+    .then(function(lista){
+      if(tipo==='veiculo') acRenderVeiculo(lista, dropId);
+      else acRenderPessoa(lista, pref, dropId);
+    });
+  }, 200);
+}
+
+function acRenderPessoa(lista, pref, dropId){
+  var drop=document.getElementById(dropId);
+  if(!drop) return;
+  if(!lista.length){ acFechar(dropId); return; }
+  AC['pessoa_'+pref] = lista;
+  drop.innerHTML='';
+  lista.forEach(function(p,i){
+    var div=document.createElement('div');
+    div.className='ac-item';
+    div.innerHTML='<div class="ac-nome">'+(p.nome||'')+'</div><div class="ac-meta">'+(p.cpf||'')+'</div>';
+    div.setAttribute('data-i', i);
+    div.setAttribute('data-pref', pref);
+    drop.appendChild(div);
+  });
+  var salvar=document.createElement('div');
+  salvar.className='ac-salvar';
+  salvar.textContent='+ Salvar '+(pref==='v'?'vendedor':'comprador')+' no cadastro';
+  salvar.setAttribute('data-salvar','1');
+  salvar.setAttribute('data-pref', pref);
+  drop.appendChild(salvar);
+  drop.classList.add('open');
+}
+
+function acRenderVeiculo(lista, dropId){
+  var drop=document.getElementById(dropId);
+  if(!drop) return;
+  if(!lista.length){ acFechar(dropId); return; }
+  AC['veiculo'] = lista;
+  drop.innerHTML='';
+  lista.forEach(function(v,i){
+    var div=document.createElement('div');
+    div.className='ac-item';
+    div.innerHTML='<div class="ac-nome">'+v.placa+' — '+(v.modelo||'')+'</div><div class="ac-meta">'+(v.ano||'')+(v.chassi?' · '+v.chassi:'')+'</div>';
+    div.setAttribute('data-i', i);
+    drop.appendChild(div);
+  });
+  var salvar=document.createElement('div');
+  salvar.className='ac-salvar';
+  salvar.textContent='+ Salvar veículo no cadastro';
+  salvar.setAttribute('data-salvar','1');
+  drop.appendChild(salvar);
+  drop.classList.add('open');
+}
+
+// DELEGAÇÃO DE EVENTOS — um único listener para todos os dropdowns
+document.addEventListener('mousedown', function(e){
+  var item = e.target.closest('.ac-item, .ac-salvar');
+  if(!item) return;
+  var drop = item.closest('.ac-drop');
+  if(!drop) return;
+  e.preventDefault();
+  e.stopPropagation();
+  var pref = item.getAttribute('data-pref');
+  var isSalvar = item.getAttribute('data-salvar')==='1';
+  var idx = parseInt(item.getAttribute('data-i'));
+  if(drop.id==='ac-ve_placa'){
+    if(isSalvar) salvarVeiculo();
+    else acPreencherVeiculo(idx);
+  } else {
+    if(isSalvar) salvarPessoa(pref);
+    else acPreencherPessoa(idx, pref);
+  }
+});
+
+function acPreencherPessoa(idx, pref){
+  var lista = AC['pessoa_'+pref];
+  if(!lista||!lista[idx]) return;
+  var p=lista[idx];
+  var map={nome:'_nome',cpf:'_cpf',rg:'_rg',rg_org:'_rg_org',nasc:'_nasc',
+           ecivil:'_ecivil',end:'_end',bairro:'_bairro',cidade:'_cidade',cep:'_cep',cel:'_cel',email:'_email'};
+  Object.keys(map).forEach(function(k){ setVal(pref+map[k], p[k]||''); });
+  acFecharTodos();
+  atualizarContadores(); gerarPreview();
+  showAlert('✓ Cadastro carregado: '+p.nome,'ok');
+}
+
+function acPreencherVeiculo(idx){
+  var lista = AC['veiculo'];
+  if(!lista||!lista[idx]) return;
+  var v=lista[idx];
+  setVal('ve_placa',v.placa||''); setVal('ve_chassi',v.chassi||'');
+  setVal('ve_modelo',v.modelo||''); setVal('ve_ano',v.ano||'');
+  acFecharTodos();
+  atualizarContadores(); gerarPreview();
+  showAlert('✓ Veículo carregado: '+v.placa+' — '+(v.modelo||''),'ok');
+}
+
+function salvarPessoa(pref){
+  var dados={nome:g(pref+'_nome'),cpf:g(pref+'_cpf'),rg:g(pref+'_rg'),rg_org:g(pref+'_rg_org'),
+             nasc:g(pref+'_nasc'),ecivil:g(pref+'_ecivil'),end:g(pref+'_end'),bairro:g(pref+'_bairro'),
+             cidade:g(pref+'_cidade'),cep:g(pref+'_cep'),cel:g(pref+'_cel'),email:g(pref+'_email')};
+  if(!dados.nome&&!dados.cpf){ showAlert('Preencha nome ou CPF.','warn'); return; }
+  fetch('/api/pessoas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dados)})
+  .then(function(){ showAlert('✓ Cadastro salvo!','ok'); });
+  acFecharTodos();
+}
+
+function salvarVeiculo(){
+  var dados={placa:g('ve_placa'),chassi:g('ve_chassi'),modelo:g('ve_modelo'),ano:g('ve_ano')};
+  if(!dados.placa){ showAlert('Preencha a placa.','warn'); return; }
+  fetch('/api/veiculos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dados)})
+  .then(function(){ showAlert('✓ Veículo salvo!','ok'); });
+  acFecharTodos();
+}
+
+function acFechar(id){ var el=document.getElementById(id); if(el) el.classList.remove('open'); }
+function acFecharTodos(){ document.querySelectorAll('.ac-drop').forEach(function(d){ d.classList.remove('open'); }); }
+
+// Fecha ao clicar fora
+document.addEventListener('click', function(e){
+  if(!e.target.closest('.ac-drop')&&!e.target.closest('.fg')) acFecharTodos();
+});
+
+// Fecha ao perder foco (blur) com delay para mousedown ter tempo
+['v_nome','v_cpf','c_nome','c_cpf','ve_placa'].forEach(function(id){
+  var el=document.getElementById(id);
+  if(el) el.addEventListener('blur', function(){ setTimeout(function(){ acFechar('ac-'+id); },300); });
+});
+
+// Enter na placa
+document.getElementById('ve_placa').addEventListener('keydown',function(e){
+  if(e.key!=='Enter') return;
+  e.preventDefault();
+  var q=this.value.trim(); if(!q) return;
+  fetch('/api/veiculos?q='+encodeURIComponent(q)).then(function(r){return r.json();})
+  .then(function(lista){
+    if(lista.length===1){ AC['veiculo']=lista; acPreencherVeiculo(0); }
+    else acRenderVeiculo(lista,'ac-ve_placa');
+  });
+});
+
+// ═══ CNPJ AUTO ═══════════════════════════════════════════════
+var _cnpjT={};
+function checarCNPJ(el,pref){
+  var d=el.value.replace(/\D/g,'');
+  if(d.length!==14) return;
+  clearTimeout(_cnpjT[pref]);
+  _cnpjT[pref]=setTimeout(function(){ buscarCNPJ(d,pref); },600);
+}
+function buscarCNPJ(cnpj,pref){
+  showAlert('Buscando CNPJ...','ok');
+  fetch('https://brasilapi.com.br/api/cnpj/v1/'+cnpj)
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if(!d||d.message){ showAlert('CNPJ não encontrado.','warn'); return; }
+    var razao=d.razao_social||d.nome||'';
+    var logr=d.logradouro||''; var num=d.numero||''; var compl=d.complemento||'';
+    var end=logr+(num&&num!='SN'&&num!='00'?', Nº '+num:'')+(compl?', '+compl:'');
+    setVal(pref+'_nome',razao); setVal(pref+'_end',end);
+    setVal(pref+'_bairro',d.bairro||'');
+    setVal(pref+'_cidade',(d.municipio||'')+(d.uf?' / '+d.uf:''));
+    var cep=(d.cep||'').replace(/\D/g,'');
+    if(cep.length===8) setVal(pref+'_cep',cep.slice(0,5)+'-'+cep.slice(5));
+    atualizarContadores(); gerarPreview();
+    showAlert('✓ Empresa: '+razao,'ok');
+  }).catch(function(){ showAlert('Erro ao buscar CNPJ.','warn'); });
+}
+
+// ═══ CEP ═════════════════════════════════════════════════════
+var _cepT={};
+function maskCep(el,pref){
+  var v=el.value.replace(/\D/g,'');
+  el.value=v.length>5?v.slice(0,5)+'-'+v.slice(5,8):v;
+  if(v.length===8){ clearTimeout(_cepT[pref]); _cepT[pref]=setTimeout(function(){ buscarCep(v,pref); },400); }
+}
+function buscarCep(cep,pref){
+  var spin=document.getElementById(pref+'_cep_spin'); if(spin) spin.style.display='inline';
+  fetch('https://viacep.com.br/ws/'+cep+'/json/').then(function(r){ return r.json(); })
+  .then(function(d){
+    if(spin) spin.style.display='none';
+    if(d.erro){ showAlert('CEP não encontrado.','warn'); return; }
+    var endEl=document.getElementById(pref+'_end');
+    var baiEl=document.getElementById(pref+'_bairro');
+    var cidEl=document.getElementById(pref+'_cidade');
+    if(endEl&&!endEl.value&&d.logradouro){ endEl.value=d.logradouro; endEl.classList.add('ia'); }
+    if(baiEl&&!baiEl.value&&d.bairro){ baiEl.value=d.bairro; baiEl.classList.add('ia'); }
+    if(cidEl&&!cidEl.value&&d.localidade){ cidEl.value=d.localidade+(d.uf?'/'+d.uf:''); cidEl.classList.add('ia'); }
+    atualizarContadores();
+    showAlert('✓ CEP: '+d.logradouro+', '+d.bairro+' — '+d.localidade,'ok');
+  }).catch(function(){ if(spin) spin.style.display='none'; });
+}
+
+// ═══ CONSULTA CPF RECEITA ════════════════════════════════════
+function consultarCPF(pref){
+  var cpf=g(pref+'_cpf'); if(!cpf){ showAlert('Preencha o CPF.','warn'); return; }
+  var nasc=g(pref+'_nasc'); var nome=g(pref+'_nome');
+  var txt='CPF: '+cpf+(nasc?'\nData de nascimento: '+nasc:'')+(nome?'\nNome: '+nome:'');
+  if(navigator.clipboard) navigator.clipboard.writeText(txt).then(function(){ showAlert('✓ CPF copiado!','ok'); });
+  setTimeout(function(){ window.open('https://servicos.receita.fazenda.gov.br/servicos/cpf/consultasituacao/consultapublica.asp','_blank'); },300);
+}
+
+// ═══ CONTADORES ══════════════════════════════════════════════
 function atualizarContadores(){
-  var vend=['v_nome','v_cpf','v_rg','v_end','v_bairro','v_cidade','v_cep','v_cel'].filter(function(k){return g(k);}).length;
-  var veic=['ve_modelo','ve_ano','ve_placa','ve_chassi'].filter(function(k){return g(k);}).length;
-  var comp=['c_nome','c_cpf','c_rg','c_valor'].filter(function(k){return g(k);}).length;
-  document.getElementById('cnt-vendedor').textContent=vend+' campos';
-  document.getElementById('cnt-veiculo').textContent=veic+' campos';
-  document.getElementById('cnt-comprador').textContent=comp+' campos';
+  var v=CAMPOS_V.filter(function(k){return g(k);}).length;
+  var ve=CAMPOS_VE.filter(function(k){return g(k);}).length;
+  var c=CAMPOS_C.filter(function(k){return g(k);}).length;
+  document.getElementById('cnt-vendedor').textContent=v+' campos';
+  document.getElementById('cnt-veiculo').textContent=ve+' campos';
+  document.getElementById('cnt-comprador').textContent=c+' campos';
 }
-function atualizar(){atualizarContadores();}
+function atualizar(){ atualizarContadores(); }
 
-// ─── PRÉ-VISUALIZAÇÃO ─────────────────────────────────────────
+// ═══ PRÉ-VISUALIZAÇÃO ════════════════════════════════════════
 function gerarPreview(){
-  var cfg=getCfg();
-  var d=new Date();
+  var cfg=getCfg(); var d=new Date();
   var ms=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
   var dt=d.getDate().toString().padStart(2,'0')+'/'+ms[d.getMonth()]+'/'+d.getFullYear();
   var txt=
 'PROCURAÇÃO — INTENÇÃO DE VENDA E EMISSÃO ATPV-E\n'+
 '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'+
 'PROPRIETÁRIO / VENDEDOR\n\n'+
-'Nome:       '+blank(g('v_nome'),35)+'\n'+
-'CPF/CNPJ:   '+blank(g('v_cpf'),20)+'   RG: '+blank(g('v_rg'),10)+' '+blank(g('v_rg_org'),8)+'\n'+
-'Est.Civil:  '+blank(g('v_ecivil'),15)+'\n'+
-'Endereço:   '+blank(g('v_end'),35)+'\n'+
-'Bairro:     '+blank(g('v_bairro'),22)+'   CEP: '+blank(g('v_cep'),10)+'\n'+
-'Município:  '+blank(g('v_cidade'),22)+'   Cel: '+blank(g('v_cel'),14)+'\n'+
-'E-mail:     '+blank(g('v_email'),32)+'\n\n'+
+'Nome:      '+blank(g('v_nome'),35)+'\n'+
+'CPF/CNPJ:  '+blank(g('v_cpf'),20)+'   RG: '+blank(g('v_rg'),10)+' '+blank(g('v_rg_org'),8)+'\n'+
+'Est.Civil: '+blank(g('v_ecivil'),15)+'\n'+
+'Endereço:  '+blank(g('v_end'),35)+'\n'+
+'Bairro:    '+blank(g('v_bairro'),22)+'   CEP: '+blank(g('v_cep'),10)+'\n'+
+'Município: '+blank(g('v_cidade'),22)+'   Cel: '+blank(g('v_cel'),14)+'\n'+
+'E-mail:    '+blank(g('v_email'),32)+'\n\n'+
 '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'+
-'Nomeia como procurador: '+cfg.nome+' (cód. '+cfg.cod+')\n'+
+'Nomeia: '+cfg.nome+' (cód. '+cfg.cod+')\n'+
 'Sede: '+cfg.end+' — CEP '+cfg.cep+'\n'+
 'Para: INCLUSÃO DE INTENÇÃO DE VENDA / CANCELAMENTO ATPV / EMISSÃO ATPV-E\n\n'+
 'VEÍCULO\n\n'+
@@ -460,11 +600,11 @@ function gerarPreview(){
 'Placa:        '+blank(g('ve_placa'),10)+'   Chassi: '+blank(g('ve_chassi'),20)+'\n\n'+
 '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'+
 'COMPRADOR\n\n'+
-'Nome:       '+blank(g('c_nome'),35)+'\n'+
-'CPF/CNPJ:   '+blank(g('c_cpf'),20)+'   RG: '+blank(g('c_rg'),12)+'\n'+
-'Endereço:   '+blank(g('c_end'),35)+'   '+blank(g('c_cidade'),15)+'\n'+
-'CEP:        '+blank(g('c_cep'),10)+'   E-mail: '+blank(g('c_email'),25)+'\n'+
-'Valor:      '+blank(g('c_valor'),15)+'\n\n'+
+'Nome:      '+blank(g('c_nome'),35)+'\n'+
+'CPF/CNPJ:  '+blank(g('c_cpf'),20)+'   RG: '+blank(g('c_rg'),12)+'\n'+
+'Endereço:  '+blank(g('c_end'),35)+'   '+blank(g('c_cidade'),15)+'\n'+
+'CEP:       '+blank(g('c_cep'),10)+'   E-mail: '+blank(g('c_email'),25)+'\n'+
+'Valor:     '+blank(g('c_valor'),15)+'\n\n'+
 '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'+
 cfg.cidade+', '+dt+'\n\n\n'+
 '_________________________________________________\n'+
@@ -472,79 +612,53 @@ cfg.cidade+', '+dt+'\n\n\n'+
   document.getElementById('prev-box').textContent=txt;
 }
 
-// ─── GERAR PDF ────────────────────────────────────────────────
+// ═══ GERAR PDF ═══════════════════════════════════════════════
 function gerarPDF(){
-  var cfg=getCfg();
-  var d=new Date();
+  var cfg=getCfg(); var d=new Date();
   var ms=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
   var dt=d.getDate().toString().padStart(2,'0')+'/'+ms[d.getMonth()]+'/'+d.getFullYear();
   var {jsPDF}=window.jspdf;
   var doc=new jsPDF({unit:'mm',format:'a4'});
-  var W=210,ML=20,TW=170;var y=20;
-
-  function lnEsc(){doc.setDrawColor(26,26,46);doc.setLineWidth(0.8);doc.line(ML,y,ML+TW,y);doc.setLineWidth(0.3);y+=5;}
-  function lnCin(){doc.setDrawColor(190,190,190);doc.setLineWidth(0.3);doc.line(ML,y,ML+TW,y);y+=4;}
+  var W=210,ML=20,TW=170,y=20;
+  function lnE(){doc.setDrawColor(26,26,46);doc.setLineWidth(0.8);doc.line(ML,y,ML+TW,y);doc.setLineWidth(0.3);y+=5;}
+  function lnC(){doc.setDrawColor(190,190,190);doc.setLineWidth(0.3);doc.line(ML,y,ML+TW,y);y+=4;}
   function bar(t){doc.setFillColor(26,26,46);doc.roundedRect(ML,y,TW,6.5,1.5,1.5,'F');doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(255,255,255);doc.text(t,W/2,y+4.4,{align:'center'});doc.setTextColor(30,30,30);y+=10;}
-  function cam(lb,val,x,cy,w){
-    doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(120,120,120);doc.text(lb,x,cy);
-    doc.setFontSize(9.5);doc.setTextColor(25,25,25);
-    var v=(val&&val.trim())?val:'_'.repeat(Math.max(4,Math.floor(w/2.2)));
-    doc.text(v,x,cy+4.5,{maxWidth:w});return cy+9;
-  }
-  function par(txt,x,cy,w,sz){
-    doc.setFont('helvetica','normal');doc.setFontSize(sz||8.5);doc.setTextColor(40,40,40);
-    var lines=doc.splitTextToSize(txt,w);doc.text(lines,x,cy);return cy+lines.length*4.2+2;
-  }
-
-  doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(26,26,46);
-  doc.text('PROCURAÇÃO',W/2,y,{align:'center'});y+=6;
-  doc.setFontSize(9);doc.setTextColor(80,80,80);
-  doc.text('INTENÇÃO DE VENDA E EMISSÃO ATPV-E',W/2,y,{align:'center'});y+=7;
-  lnEsc();
-
+  function cam(lb,val,x,cy,w){doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(120,120,120);doc.text(lb,x,cy);doc.setFontSize(9.5);doc.setTextColor(25,25,25);doc.text((val&&val.trim())?val:'_'.repeat(Math.max(4,Math.floor(w/2.2))),x,cy+4.5,{maxWidth:w});return cy+9;}
+  function par(txt,x,cy,w,sz){doc.setFont('helvetica','normal');doc.setFontSize(sz||8.5);doc.setTextColor(40,40,40);var lines=doc.splitTextToSize(txt,w);doc.text(lines,x,cy);return cy+lines.length*4.2+2;}
+  doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(26,26,46);doc.text('PROCURAÇÃO',W/2,y,{align:'center'});y+=6;
+  doc.setFontSize(9);doc.setTextColor(80,80,80);doc.text('INTENÇÃO DE VENDA E EMISSÃO ATPV-E',W/2,y,{align:'center'});y+=7;lnE();
   bar('DADOS DO PROPRIETÁRIO / VENDEDOR (OUTORGANTE)');
   cam('Nome completo',g('v_nome'),ML,y,108);cam('CPF / CNPJ',g('v_cpf'),ML+112,y,58);y+=11;
   cam('RG',g('v_rg'),ML,y,38);cam('Órgão exp.',g('v_rg_org'),ML+42,y,35);cam('Estado civil',g('v_ecivil'),ML+81,y,89);y+=11;
-  cam('Endereço (Rua/Av., nº)',g('v_end'),ML,y,108);cam('Bairro',g('v_bairro'),ML+112,y,58);y+=11;
+  cam('Endereço',g('v_end'),ML,y,108);cam('Bairro',g('v_bairro'),ML+112,y,58);y+=11;
   cam('Município / UF',g('v_cidade'),ML,y,58);cam('CEP',g('v_cep'),ML+62,y,34);cam('Celular',g('v_cel'),ML+100,y,70);y+=11;
-  cam('E-mail',g('v_email'),ML,y,TW);y+=12;lnCin();
-
-  var mandato='Nomeia(m) e constitui(em) seu(s) bastante(s) procurador(es), o Escritório de DESPACHANTE '+cfg.nome+', código '+cfg.cod+', com sede à '+cfg.end+' — CEP: '+cfg.cep+', para como se presente fosse, representá-lo(a) junto ao DETRAN/GO, para solicitação dos serviços de INCLUSÃO DE INTENÇÃO DE VENDA ou CANCELAMENTO ATPV e/ou EMISSÃO DA ATPV-E do veículo abaixo discriminado, podendo para tanto requerer e assinar o que for necessário, efetuar pagamentos, receber e dar quitações, praticar quaisquer atos necessários para o fiel cumprimento deste Mandato, o que desde já fica dado por firme e valioso.';
-  y=par(mandato,ML,y,TW,8.5);y+=4;
-
+  cam('E-mail',g('v_email'),ML,y,TW);y+=12;lnC();
+  y=par('Nomeia como procurador: '+cfg.nome+', código '+cfg.cod+', sito à '+cfg.end+' — CEP: '+cfg.cep+', para representá-lo junto ao DETRAN/GO para INCLUSÃO DE INTENÇÃO DE VENDA ou CANCELAMENTO ATPV e/ou EMISSÃO DA ATPV-E do veículo abaixo, podendo para tanto praticar quaisquer atos necessários para o fiel cumprimento deste Mandato, o que desde já fica dado por firme e valioso.',ML,y,TW,8.5);y+=4;
   bar('DADOS DO VEÍCULO');
   cam('Marca / Modelo',g('ve_modelo'),ML,y,108);cam('Ano fabricação / Modelo',g('ve_ano'),ML+112,y,58);y+=11;
   cam('Placa',g('ve_placa'),ML,y,52);cam('Chassi',g('ve_chassi'),ML+56,y,TW-56);y+=14;
-
   bar('DADOS DO COMPRADOR');
   y=par('Declaro que os dados abaixo são verdadeiros, assumindo inteira responsabilidade, isentando o despachante de qualquer infortúnio.',ML,y,TW,8);y+=3;
   cam('Nome completo do comprador',g('c_nome'),ML,y,108);cam('CPF / CNPJ',g('c_cpf'),ML+112,y,58);y+=11;
   cam('RG',g('c_rg'),ML,y,52);cam('Valor da venda',g('c_valor'),ML+56,y,114);y+=11;
   cam('Endereço completo',g('c_end'),ML,y,108);cam('Cidade / UF',g('c_cidade'),ML+112,y,58);y+=11;
   cam('CEP',g('c_cep'),ML,y,52);cam('E-mail',g('c_email'),ML+56,y,114);y+=14;
-
-  lnCin();y+=4;
-  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(50,50,50);
-  doc.text(cfg.cidade+', '+dt,ML,y);y+=18;
+  lnC();y+=4;
+  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(50,50,50);doc.text(cfg.cidade+', '+dt,ML,y);y+=18;
   doc.setDrawColor(120,120,120);doc.line(W/2+8,y,ML+TW,y);
-  doc.setFontSize(7.5);doc.setTextColor(100,100,100);
-  doc.text('Assinatura do Outorgante (Proprietário Vendedor)',W/2+8,y+4);
-
+  doc.setFontSize(7.5);doc.setTextColor(100,100,100);doc.text('Assinatura do Outorgante (Proprietário Vendedor)',W/2+8,y+4);
   y=285;doc.setDrawColor(190,190,190);doc.line(ML,y,ML+TW,y);y+=4;
   doc.setFont('helvetica','oblique');doc.setFontSize(7);doc.setTextColor(150,150,150);
   doc.text(cfg.nome+' — Código DETRAN '+cfg.cod+' — '+cfg.end+' — CEP '+cfg.cep,W/2,y,{align:'center'});
-
   var placa=g('ve_placa')||'veiculo';
   doc.save('ATPV_'+placa.replace(/[^A-Z0-9]/gi,'_')+'_'+Date.now()+'.pdf');
   HOJE++;document.getElementById('st-hoje').textContent=HOJE;
-  showAlert('PDF gerado e baixado!','ok');
+  showAlert('✓ PDF gerado e baixado!','ok');
 }
 
-// ─── HISTÓRICO ────────────────────────────────────────────────
+// ═══ HISTÓRICO ═══════════════════════════════════════════════
 function carregarHist(){
-  fetch('/api/historico')
-  .then(function(r){return r.json();})
-  .then(function(data){
+  fetch('/api/historico').then(function(r){return r.json();}).then(function(data){
     todosHist=data;
     document.getElementById('st-total').textContent=data.length;
     renderHist(data);
@@ -556,7 +670,7 @@ function renderHist(lista){
   el.innerHTML=lista.map(function(h,i){
     var idx=todosHist.indexOf(h);
     return '<div class="hist-item">'+
-      '<button class="hist-del" onclick="delHist('+idx+',event)" title="Remover">✕</button>'+
+      '<button class="hist-del" onclick="delHist('+idx+',event)">✕</button>'+
       '<div onclick="carregarItem('+idx+')">'+
       '<div class="hist-nome">'+h.nome+'</div>'+
       '<div class="hist-meta">'+h.modelo+' | '+h.placa+' | '+h.data+'</div>'+
@@ -567,626 +681,79 @@ function filtrarHist(q){
   if(!q){renderHist(todosHist);return;}
   var f=q.toLowerCase();
   renderHist(todosHist.filter(function(h){
-    return (h.nome||'').toLowerCase().includes(f)||(h.placa||'').toLowerCase().includes(f)||(h.modelo||'').toLowerCase().includes(f);
+    return (h.nome||'').toLowerCase().includes(f)||(h.placa||'').toLowerCase().includes(f);
   }));
 }
 function carregarItem(i){
   var h=todosHist[i];
-  CAMPOS.forEach(function(k){var el=document.getElementById(k);if(el)el.value=h.snap&&h.snap[k]?h.snap[k]:'';});
+  CAMPOS_TODOS.forEach(function(k){var el=document.getElementById(k);if(el)el.value=h.snap&&h.snap[k]?h.snap[k]:'';});
   atualizarContadores();gerarPreview();ftab('vendedor');
   showAlert('Atendimento carregado!','ok');
 }
 function delHist(i,e){
   e.stopPropagation();
-  if(!confirm('Remover este atendimento?'))return;
+  if(!confirm('Remover?'))return;
   fetch('/api/historico/'+i,{method:'DELETE'}).then(function(){carregarHist();});
 }
-
 function salvar(){
   var nome=g('v_nome'),placa=g('ve_placa');
-  if(!nome&&!placa){showAlert('Preencha ao menos nome ou placa antes de salvar.','warn');return;}
-  // Evita duplicata: checa se já existe mesmo nome+placa nos últimos 2 registros
-  var igualRecente = todosHist.slice(0,2).some(function(h){
-    return h.nome===nome && h.placa===placa;
-  });
-  if(igualRecente){showAlert('Este atendimento já está salvo no histórico.','warn');return;}
-  var snap={};CAMPOS.forEach(function(k){snap[k]=g(k);});
-  fetch('/api/historico',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
+  if(!nome&&!placa){showAlert('Preencha nome ou placa.','warn');return;}
+  var igual=todosHist.slice(0,2).some(function(h){return h.nome===nome&&h.placa===placa;});
+  if(igual){showAlert('Já está salvo no histórico.','warn');return;}
+  var snap={};CAMPOS_TODOS.forEach(function(k){snap[k]=g(k);});
+  fetch('/api/historico',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({nome:nome||'—',placa:placa||'—',modelo:g('ve_modelo'),snap:snap})
   }).then(function(){
-    carregarHist();
-    showAlert('Atendimento salvo no histórico compartilhado!','ok');
-    salvarCadastrosAutomatico(); // salva pessoas e veículo no cadastro automaticamente
+    carregarHist();showAlert('✓ Atendimento salvo!','ok');
+    salvarCadastros();
   });
 }
+function salvarCadastros(){
+  var vN=g('v_nome'),vC=g('v_cpf');
+  if(vN||vC) fetch('/api/pessoas',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({nome:vN,cpf:vC,rg:g('v_rg'),rg_org:g('v_rg_org'),nasc:g('v_nasc'),
+    ecivil:g('v_ecivil'),end:g('v_end'),bairro:g('v_bairro'),cidade:g('v_cidade'),cep:g('v_cep'),cel:g('v_cel'),email:g('v_email')})});
+  var cN=g('c_nome'),cC=g('c_cpf');
+  if(cN||cC) fetch('/api/pessoas',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({nome:cN,cpf:cC,rg:g('c_rg'),nasc:g('c_nasc'),
+    end:g('c_end'),cidade:g('c_cidade'),cep:g('c_cep'),email:g('c_email')})});
+  var vP=g('ve_placa');
+  if(vP) fetch('/api/veiculos',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({placa:vP,chassi:g('ve_chassi'),modelo:g('ve_modelo'),ano:g('ve_ano')})});
+}
 
-function proximo(){limparTudo();showAlert('Pronto para novo atendimento!','ok');}
-
-function limpar(){
-  // Limpa apenas os campos da aba atual
-  var mapa = {
-    'vendedor': ['v_nome','v_cpf','v_rg','v_rg_org','v_ecivil','v_nasc','v_end','v_bairro','v_cidade','v_cep','v_cel','v_email'],
-    'veiculo':  ['ve_modelo','ve_ano','ve_placa','ve_chassi'],
-    'comprador':['c_nome','c_cpf','c_rg','c_nasc','c_valor','c_end','c_cidade','c_cep','c_email']
-  };
-  var campos = mapa[tabAtual] || [];
-  campos.forEach(function(k){
-    var el=document.getElementById(k);
-    if(el){el.value='';el.classList.remove('ia');}
-  });
+// ═══ LIMPAR ══════════════════════════════════════════════════
+function limparAba(){
+  var mapa={vendedor:CAMPOS_V,veiculo:CAMPOS_VE,comprador:CAMPOS_C};
+  (mapa[tabAtual]||[]).forEach(function(k){var el=document.getElementById(k);if(el){el.value='';el.classList.remove('ia');}});
   document.getElementById('paste-txt').value='';
   atualizarContadores();
-  showAlert('Campos de "'+tabAtual+'" limpos!','ok');
+  showAlert('Campos da aba "'+tabAtual+'" limpos!','ok');
 }
-
-function limparTexto(){
-  document.getElementById('paste-txt').value='';
-  document.getElementById('paste-txt').focus();
-}
-
 function limparTudo(){
-  // Limpa absolutamente tudo — usado no "Próximo atendimento"
-  CAMPOS.forEach(function(k){var el=document.getElementById(k);if(el){el.value='';el.classList.remove('ia');}});
+  CAMPOS_TODOS.forEach(function(k){var el=document.getElementById(k);if(el){el.value='';el.classList.remove('ia');}});
   document.getElementById('paste-txt').value='';
   atualizarContadores();gerarPreview();
+  showAlert('Pronto para novo atendimento!','ok');
 }
 
-// ─── CONFIG ───────────────────────────────────────────────────
-function getCfg(){return{
-  nome:g('cfg_nome')||'DIEGO DESPACHANTE',
-  cod:g('cfg_cod')||'2670',
+// ═══ CONFIG ══════════════════════════════════════════════════
+function getCfg(){return{nome:g('cfg_nome')||'DIEGO DESPACHANTE',cod:g('cfg_cod')||'2670',
   end:g('cfg_end')||'AVENIDA BRASIL N.464 VILA JUSSARA ANAPOLIS-GO',
-  cep:g('cfg_cep')||'75123-115',
-  cidade:g('cfg_cidade')||'ANÁPOLIS/GO'
-};}
+  cep:g('cfg_cep')||'75123-115',cidade:g('cfg_cidade')||'ANÁPOLIS/GO'};}
 
-// ─── ALERTA ───────────────────────────────────────────────────
+// ═══ ALERTA ══════════════════════════════════════════════════
 function showAlert(msg,tipo){
   var el=document.getElementById('alert-box');
   el.textContent=msg;el.className='alert '+tipo;el.style.display='block';
   clearTimeout(el._t);el._t=setTimeout(function(){el.style.display='none';},5000);
 }
 
-// ─── USER BADGE (hostname simples) ────────────────────────────
+// ═══ INIT ════════════════════════════════════════════════════
 document.getElementById('user-badge').textContent=window.location.hostname||'local';
-
-// ─── BUSCA CNPJ AUTOMÁTICA ────────────────────────────────────
-var _cnpjTimer = {};
-function verificarCNPJ(el, pref) {
-  var digitos = el.value.replace(/\D/g,'');
-  // CNPJ tem 14 dígitos
-  if(digitos.length !== 14) return;
-  clearTimeout(_cnpjTimer[pref]);
-  _cnpjTimer[pref] = setTimeout(function(){ buscarCNPJ(digitos, pref); }, 600);
-}
-
-function buscarCNPJ(cnpj, pref) {
-  showAlert('Buscando dados do CNPJ...', 'ok');
-
-  fetch('https://brasilapi.com.br/api/cnpj/v1/' + cnpj)
-  .then(function(r){ return r.json(); })
-  .then(function(d){
-    if(d.message || d.erro || !d.razao_social) {
-      // Tenta API alternativa
-      return fetch('https://receitaws.com.br/v1/cnpj/' + cnpj)
-        .then(function(r2){ return r2.json(); });
-    }
-    return d;
-  })
-  .then(function(d){
-    if(!d || d.status === 'ERROR') {
-      showAlert('CNPJ não encontrado ou inválido.','warn'); return;
-    }
-
-    var razao   = d.razao_social || d.nome || '';
-    var fantasia = d.nome_fantasia || d.fantasia || '';
-    var logr    = d.logradouro || '';
-    var numero  = d.numero || '';
-    var compl   = d.complemento || '';
-    var bairro  = d.bairro || '';
-    var municipio = d.municipio || '';
-    var uf      = d.uf || '';
-    var cidade  = municipio + (uf ? ' / ' + uf : '');
-    var cep     = (d.cep||'').replace(/\D/g,'');
-
-    // Campos corretos dependendo do prefixo (v = vendedor, c = comprador)
-    function setC(sufixo, val){
-      if(!val) return;
-      var id = pref + '_' + sufixo;
-      var el = document.getElementById(id);
-      if(el){ el.value = val.trim(); el.classList.add('ia'); }
-    }
-
-    setC('nome',   razao);
-    setC('end',    logr + (numero && numero!='SN' && numero!='00' ? ', Nº '+numero : '') + (compl?', '+compl:''));
-    setC('bairro', bairro);
-    setC('cidade', cidade);
-    if(cep.length===8) setC('cep', cep.slice(0,5)+'-'+cep.slice(5));
-
-    atualizarContadores(); atualizar();
-    showAlert('✓ Empresa encontrada: ' + razao + (fantasia?' ('+fantasia+')':''), 'ok');
-  })
-  .catch(function(){
-    showAlert('Não foi possível buscar o CNPJ. Verifique a conexão.','warn');
-  });
-}
-
-// ─── CONSULTA CPF RECEITA FEDERAL ────────────────────────────
-function consultarCPF(pref) {
-  var cpf  = g(pref+'_cpf').replace(/\D/g,'');
-  var nasc = g(pref+'_nasc'); // DD/MM/AAAA
-  var nome = g(pref+'_nome');
-
-  if(!cpf) { showAlert('Preencha o CPF antes de consultar.','warn'); return; }
-
-  // Monta texto para copiar
-  var textoParaCopiar = 'CPF: ' + g(pref+'_cpf');
-  if(nasc) textoParaCopiar += '\nData de nascimento: ' + nasc;
-  if(nome) textoParaCopiar += '\nNome: ' + nome;
-
-  // Copia para área de transferência
-  if(navigator.clipboard) {
-    navigator.clipboard.writeText(textoParaCopiar).then(function(){
-      showAlert('✓ CPF e data de nascimento copiados! Cole nos campos da Receita.','ok');
-    });
-  } else {
-    var ta = document.createElement('textarea');
-    ta.value = textoParaCopiar;
-    document.body.appendChild(ta);
-    ta.select(); document.execCommand('copy');
-    document.body.removeChild(ta);
-    showAlert('✓ CPF copiado! Cole nos campos da Receita.','ok');
-  }
-
-  // Abre a página da Receita em nova aba
-  setTimeout(function(){
-    window.open('https://servicos.receita.fazenda.gov.br/servicos/cpf/consultasituacao/consultapublica.asp','_blank');
-  }, 300);
-}
-
-// ─── MASCARA E BUSCA CEP ──────────────────────────────────────
-var _cepTimer = {};
-function maskCep(el, prefixo) {
-  var v = el.value.replace(/\D/g,'');
-  if(v.length > 5) el.value = v.slice(0,5) + '-' + v.slice(5,8);
-  else el.value = v;
-  // Busca automática quando tiver 8 dígitos
-  if(v.length === 8) {
-    clearTimeout(_cepTimer[prefixo]);
-    _cepTimer[prefixo] = setTimeout(function(){ buscarCep(v, prefixo); }, 400);
-  }
-}
-
-function buscarCep(cep, prefixo) {
-  var spin = document.getElementById(prefixo+'_cep_spin');
-  if(spin) spin.style.display = 'inline';
-  fetch('https://viacep.com.br/ws/'+cep+'/json/')
-  .then(function(r){ return r.json(); })
-  .then(function(data){
-    if(spin) spin.style.display = 'none';
-    if(data.erro) { showAlert('CEP não encontrado.','warn'); return; }
-    // Preenche endereço
-    var endEl  = document.getElementById(prefixo+'_end');
-    var bairEl = document.getElementById(prefixo+'_bairro');
-    var cidEl  = document.getElementById(prefixo+'_cidade');
-    var logr = data.logradouro || '';
-    if(endEl  && !endEl.value  && logr)  { endEl.value  = logr; endEl.classList.add('ia'); }
-    if(bairEl && !bairEl.value && data.bairro)  { bairEl.value = data.bairro; bairEl.classList.add('ia'); }
-    if(cidEl  && !cidEl.value  && data.localidade) {
-      cidEl.value = data.localidade + (data.uf ? '/' + data.uf : '');
-      cidEl.classList.add('ia');
-    }
-    atualizarContadores();
-    showAlert('CEP encontrado: ' + (data.logradouro||'') + ', ' + (data.bairro||'') + ' — ' + (data.localidade||'') + '/' + (data.uf||''), 'ok');
-  })
-  .catch(function(){ if(spin) spin.style.display='none'; });
-}
-
-// ─── AUTOCOMPLETE PESSOAS ─────────────────────────────────────
-var _acTimer = {};
-var _acListas = {}; // guarda listas globalmente por prefixo
-
-function buscaPessoa(el, pref) {
-  var q = el.value.trim();
-  var dropId = 'ac-' + pref + '_nome';
-  if(q.length < 1) { fecharDrop(dropId); return; }
-  clearTimeout(_acTimer[dropId]);
-  _acTimer[dropId] = setTimeout(function(){
-    fetch('/api/pessoas?q=' + encodeURIComponent(q))
-    .then(function(r){return r.json();})
-    .then(function(lista){ renderDropPessoa(lista, pref, dropId); });
-  }, 250);
-}
-
-function buscaPessoaCpf(el, pref) {
-  var q = el.value.replace(/\D/g,'');
-  var dropId = 'ac-' + pref + '_cpf';
-  if(q.length < 3) { fecharDrop(dropId); return; }
-  clearTimeout(_acTimer[dropId]);
-  _acTimer[dropId] = setTimeout(function(){
-    fetch('/api/pessoas?q=' + encodeURIComponent(q))
-    .then(function(r){return r.json();})
-    .then(function(lista){ renderDropPessoa(lista, pref, dropId); });
-  }, 250);
-}
-
-function renderDropPessoa(lista, pref, dropId) {
-  var drop = document.getElementById(dropId);
-  if(!drop) return;
-  if(!lista.length) { fecharDrop(dropId); return; }
-  _acListas['pessoa_'+pref] = lista;
-  var html = '';
-  lista.forEach(function(p, i){
-    html += '<div class="ac-item" id="acpi_'+pref+'_'+i+'">' +
-      '<div class="ac-nome">' + (p.nome||'') + '</div>' +
-      '<div class="ac-meta">' + (p.cpf||'') + '</div>' +
-      '</div>';
-  });
-  html += '<div class="ac-item ac-salvar-item" id="acps_'+pref+'">+ Salvar '+(pref==='v'?'vendedor':'comprador')+' no cadastro</div>';
-  drop.innerHTML = html;
-  drop.classList.add('open');
-  lista.forEach(function(p, i){
-    var el = document.getElementById('acpi_'+pref+'_'+i);
-    if(el){
-      (function(idx, pr){
-        el.addEventListener('mousedown', function(e){
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          setTimeout(function(){ selecionarPessoa(idx, pr); }, 10);
-        });
-      })(i, pref);
-    }
-  });
-  var salvarEl = document.getElementById('acps_'+pref);
-  if(salvarEl){
-    salvarEl.addEventListener('mousedown', function(e){
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      setTimeout(function(){ salvarPessoaAtual(pref); }, 10);
-    });
-  }
-}
-
-function selecionarPessoa(idx, pref) {
-  var lista = _acListas['pessoa_'+pref];
-  if(!lista || !lista[idx]) { showAlert('Erro ao carregar cadastro.','err'); return; }
-  var p = lista[idx];
-  var campos = {
-    nome:'_nome', cpf:'_cpf', rg:'_rg', rg_org:'_rg_org', nasc:'_nasc',
-    ecivil:'_ecivil', end:'_end', bairro:'_bairro',
-    cidade:'_cidade', cep:'_cep', cel:'_cel', email:'_email'
-  };
-  Object.keys(campos).forEach(function(k){
-    var el = document.getElementById(pref+campos[k]);
-    if(el && p[k]) { el.value = p[k]; el.classList.add('ia'); }
-  });
-  fecharDrop('ac-'+pref+'_nome');
-  fecharDrop('ac-'+pref+'_cpf');
-  atualizarContadores(); atualizar();
-  showAlert('✓ Cadastro carregado: ' + p.nome, 'ok');
-}
-
-// mantém compatibilidade com chamadas antigas
-function preencherPessoa(idx, pref) { selecionarPessoa(idx, pref); }
-
-function salvarPessoaAtual(pref) {
-  var dados = {
-    nome:   g(pref+'_nome'),   cpf:    g(pref+'_cpf'),
-    rg:     g(pref+'_rg'),     rg_org: g(pref+'_rg_org'),
-    nasc:   g(pref+'_nasc'),   ecivil: g(pref+'_ecivil'),
-    end:    g(pref+'_end'),    bairro: g(pref+'_bairro'),
-    cidade: g(pref+'_cidade'), cep:    g(pref+'_cep'),
-    cel:    g(pref+'_cel'),    email:  g(pref+'_email')
-  };
-  if(!dados.nome && !dados.cpf) { showAlert('Preencha nome ou CPF antes de salvar.','warn'); return; }
-  fetch('/api/pessoas', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(dados)
-  }).then(function(){ showAlert('✓ Cadastro salvo!','ok'); });
-  fecharDrop('ac-'+pref+'_nome');
-  fecharDrop('ac-'+pref+'_cpf');
-}
-
-// ─── AUTOCOMPLETE VEÍCULOS ────────────────────────────────────
-function buscaVeiculo(el) {
-  var q = el.value.trim();
-  if(q.length < 1) { fecharDrop('ac-ve_placa'); return; }
-  clearTimeout(_acTimer['ve']);
-  _acTimer['ve'] = setTimeout(function(){
-    fetch('/api/veiculos?q=' + encodeURIComponent(q))
-    .then(function(r){return r.json();})
-    .then(function(lista){ renderDropVeiculo(lista); });
-  }, 250);
-}
-
-// Enter na placa faz busca imediata
-document.addEventListener('DOMContentLoaded', function(){
-  var placaEl = document.getElementById('ve_placa');
-  if(placaEl) {
-    placaEl.addEventListener('keydown', function(e){
-      if(e.key === 'Enter') {
-        e.preventDefault();
-        var q = this.value.trim();
-        if(!q) return;
-        fetch('/api/veiculos?q=' + encodeURIComponent(q))
-        .then(function(r){return r.json();})
-        .then(function(lista){
-          if(lista.length === 1) {
-            _acListas['veiculo'] = lista;
-            selecionarVeiculo(0);
-          } else {
-            renderDropVeiculo(lista);
-          }
-        });
-      }
-    });
-  }
-});
-
-function renderDropVeiculo(lista) {
-  var drop = document.getElementById('ac-ve_placa');
-  if(!drop) return;
-  if(!lista.length) { fecharDrop('ac-ve_placa'); return; }
-  _acListas['veiculo'] = lista;
-  var html = '';
-  lista.forEach(function(v, i){
-    html += '<div class="ac-item" id="acvi_'+i+'">' +
-      '<div class="ac-nome">' + v.placa + ' — ' + (v.modelo||'') + '</div>' +
-      '<div class="ac-meta">' + (v.ano||'') + (v.chassi?' · '+v.chassi:'') + '</div>' +
-      '</div>';
-  });
-  html += '<div class="ac-item ac-salvar-item" id="acvs">+ Salvar veículo no cadastro</div>';
-  drop.innerHTML = html;
-  drop.classList.add('open');
-  lista.forEach(function(v, i){
-    var el = document.getElementById('acvi_'+i);
-    if(el){
-      (function(idx){
-        el.addEventListener('mousedown', function(e){
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          setTimeout(function(){ selecionarVeiculo(idx); }, 10);
-        });
-      })(i);
-    }
-  });
-  var salvarEl = document.getElementById('acvs');
-  if(salvarEl){
-    salvarEl.addEventListener('mousedown', function(e){
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      setTimeout(function(){ salvarVeiculoAtual(); }, 10);
-    });
-  }
-}
-
-function selecionarVeiculo(idx) {
-  var lista = _acListas['veiculo'];
-  if(!lista || !lista[idx]) { showAlert('Erro ao carregar veículo.','err'); return; }
-  var v = lista[idx];
-  ['placa','chassi','modelo','ano'].forEach(function(k){
-    var el = document.getElementById('ve_'+k);
-    if(el && v[k]) { el.value = v[k]; el.classList.add('ia'); }
-  });
-  fecharDrop('ac-ve_placa');
-  atualizarContadores(); atualizar();
-  showAlert('✓ Veículo carregado: ' + v.placa + ' — ' + (v.modelo||''), 'ok');
-}
-
-// mantém compatibilidade
-function preencherVeiculo(idx) { selecionarVeiculo(idx); }
-
-function salvarVeiculoAtual() {
-  var dados = {
-    placa:  g('ve_placa'),  chassi: g('ve_chassi'),
-    modelo: g('ve_modelo'), ano:    g('ve_ano')
-  };
-  if(!dados.placa) { showAlert('Preencha a placa antes de salvar.','warn'); return; }
-  fetch('/api/veiculos', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(dados)
-  }).then(function(){ showAlert('✓ Veículo salvo!','ok'); });
-  fecharDrop('ac-ve_placa');
-}
-
-function fecharDrop(id) {
-  var el = document.getElementById(id);
-  if(el) { el.classList.remove('open'); el.innerHTML=''; }
-}
-
-// Fecha dropdown quando o input perde foco (blur)
-// Usa timeout para dar tempo do mousedown no item ser processado primeiro
-document.querySelectorAll && document.addEventListener('DOMContentLoaded', function(){
-  ['v_nome','v_cpf','c_nome','c_cpf','ve_placa'].forEach(function(id){
-    var el = document.getElementById(id);
-    if(el){
-      el.addEventListener('blur', function(){
-        setTimeout(function(){
-          fecharDrop('ac-'+id);
-        }, 200);
-      });
-    }
-  });
-});
-
-// ─── SALVAR AUTOMÁTICO NO CADASTRO AO SALVAR HISTÓRICO ────────
-function salvarCadastrosAutomatico() {
-  // Salva vendedor automaticamente
-  var vNome = g('v_nome'), vCpf = g('v_cpf');
-  if(vNome || vCpf) {
-    fetch('/api/pessoas', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        nome: vNome, cpf: vCpf, rg: g('v_rg'), rg_org: g('v_rg_org'),
-        nasc: g('v_nasc'), ecivil: g('v_ecivil'), end: g('v_end'),
-        bairro: g('v_bairro'), cidade: g('v_cidade'), cep: g('v_cep'),
-        cel: g('v_cel'), email: g('v_email')
-      })
-    });
-  }
-  // Salva comprador automaticamente
-  var cNome = g('c_nome'), cCpf = g('c_cpf');
-  if(cNome || cCpf) {
-    fetch('/api/pessoas', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        nome: cNome, cpf: cCpf, rg: g('c_rg'),
-        end: g('c_end'), cidade: g('c_cidade'), cep: g('c_cep'), email: g('c_email')
-      })
-    });
-  }
-  // Salva veículo automaticamente
-  var vPlaca = g('ve_placa');
-  if(vPlaca) {
-    fetch('/api/veiculos', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        placa: vPlaca, chassi: g('ve_chassi'),
-        modelo: g('ve_modelo'), ano: g('ve_ano')
-      })
-    });
-  }
-}
-
-function buscaPessoa(el, pref) {
-  var q = el.value.trim();
-  var dropId = 'ac-' + pref + '_nome';
-  if(q.length < 2) { fecharDrop(dropId); return; }
-  clearTimeout(_acTimer[dropId]);
-  _acTimer[dropId] = setTimeout(function(){
-    fetch('/api/pessoas?q=' + encodeURIComponent(q))
-    .then(function(r){return r.json();})
-    .then(function(lista){ renderDropPessoa(lista, pref, dropId, el); });
-  }, 300);
-}
-
-function buscaPessoaCpf(el, pref) {
-  var q = el.value.replace(/\D/g,'');
-  var dropId = 'ac-' + pref + '_cpf';
-  if(q.length < 4) { fecharDrop(dropId); return; }
-  clearTimeout(_acTimer[dropId]);
-  _acTimer[dropId] = setTimeout(function(){
-    fetch('/api/pessoas?q=' + encodeURIComponent(q))
-    .then(function(r){return r.json();})
-    .then(function(lista){ renderDropPessoa(lista, pref, dropId, el); });
-  }, 300);
-}
-
-function renderDropPessoa(lista, pref, dropId, el) {
-  var drop = document.getElementById(dropId);
-  if(!lista.length) { fecharDrop(dropId); return; }
-  drop.innerHTML = lista.map(function(p, i){
-    return '<div class="ac-item" onclick="preencherPessoa('+i+',\''+pref+'\','+JSON.stringify(JSON.stringify(lista))+')">' +
-      '<div class="ac-nome">' + p.nome + '</div>' +
-      '<div class="ac-meta">' + (p.cpf||'') + (p.cel?' · '+p.cel:'') + '</div>' +
-      '</div>';
-  }).join('') +
-  '<button class="ac-salvar" onclick="salvarPessoaAtual(\''+pref+'\')">+ Salvar ' + (pref==='v'?'vendedor':'comprador') + ' no cadastro</button>';
-  drop.classList.add('open');
-}
-
-function preencherPessoa(idx, pref, listaStr) {
-  var lista = JSON.parse(listaStr);
-  var p = lista[idx];
-  var map = {nome: pref+'_nome', cpf: pref+'_cpf', rg: pref+'_rg', rg_org: pref+'_rg_org',
-             ecivil: pref+'_ecivil', end: pref+'_end', bairro: pref+'_bairro',
-             cidade: pref+'_cidade', cep: pref+'_cep', cel: pref+'_cel', email: pref+'_email'};
-  Object.keys(map).forEach(function(k){
-    var el = document.getElementById(map[k]);
-    if(el && p[k]) { el.value = p[k]; el.classList.add('ia'); }
-  });
-  fecharDrop('ac-'+pref+'_nome');
-  fecharDrop('ac-'+pref+'_cpf');
-  atualizarContadores(); atualizar();
-  showAlert('Cadastro carregado: ' + p.nome, 'ok');
-}
-
-function salvarPessoaAtual(pref) {
-  var dados = {
-    nome:    g(pref+'_nome'),   cpf:    g(pref+'_cpf'),
-    rg:      g(pref+'_rg'),     rg_org: g(pref+'_rg_org'),
-    ecivil:  g(pref+'_ecivil'), end:    g(pref+'_end'),
-    bairro:  g(pref+'_bairro'), cidade: g(pref+'_cidade'),
-    cep:     g(pref+'_cep'),    cel:    g(pref+'_cel'),
-    email:   g(pref+'_email')
-  };
-  if(!dados.nome && !dados.cpf) { showAlert('Preencha nome ou CPF antes de salvar.','warn'); return; }
-  fetch('/api/pessoas', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(dados)
-  }).then(function(){ showAlert('Cadastro salvo! Próxima vez é só digitar o nome.','ok'); });
-  fecharDrop('ac-'+pref+'_nome');
-  fecharDrop('ac-'+pref+'_cpf');
-}
-
-// ─── AUTOCOMPLETE VEÍCULOS ────────────────────────────────────
-function buscaVeiculo(el) {
-  var q = el.value.trim();
-  if(q.length < 2) { fecharDrop('ac-ve_placa'); return; }
-  clearTimeout(_acTimer['ve']);
-  _acTimer['ve'] = setTimeout(function(){
-    fetch('/api/veiculos?q=' + encodeURIComponent(q))
-    .then(function(r){return r.json();})
-    .then(function(lista){ renderDropVeiculo(lista); });
-  }, 300);
-}
-
-function renderDropVeiculo(lista) {
-  var drop = document.getElementById('ac-ve_placa');
-  if(!lista.length) { fecharDrop('ac-ve_placa'); return; }
-  drop.innerHTML = lista.map(function(v, i){
-    return '<div class="ac-item" onclick="preencherVeiculo('+i+','+JSON.stringify(JSON.stringify(lista))+')">' +
-      '<div class="ac-nome">' + v.placa + ' — ' + (v.modelo||'') + '</div>' +
-      '<div class="ac-meta">' + (v.ano||'') + (v.chassi?' · Chassi: '+v.chassi:'') + '</div>' +
-      '</div>';
-  }).join('') +
-  '<button class="ac-salvar" onclick="salvarVeiculoAtual()">+ Salvar veículo no cadastro</button>';
-  drop.classList.add('open');
-}
-
-function preencherVeiculo(idx, listaStr) {
-  var lista = JSON.parse(listaStr);
-  var v = lista[idx];
-  ['placa','chassi','modelo','ano'].forEach(function(k){
-    var el = document.getElementById('ve_'+k);
-    if(el && v[k]) { el.value = v[k]; el.classList.add('ia'); }
-  });
-  fecharDrop('ac-ve_placa');
-  atualizarContadores(); atualizar();
-  showAlert('Veículo carregado: ' + v.placa, 'ok');
-}
-
-function salvarVeiculoAtual() {
-  var dados = {
-    placa:   g('ve_placa'),  chassi: g('ve_chassi'),
-    modelo:  g('ve_modelo'), ano:    g('ve_ano')
-  };
-  if(!dados.placa) { showAlert('Preencha a placa antes de salvar.','warn'); return; }
-  fetch('/api/veiculos', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(dados)
-  }).then(function(){ showAlert('Veículo salvo! Próxima vez é só digitar a placa.','ok'); });
-  fecharDrop('ac-ve_placa');
-}
-
-function fecharDrop(id) {
-  var el = document.getElementById(id);
-  if(el) { el.classList.remove('open'); el.innerHTML=''; }
-}
-
-// Fecha dropdowns ao clicar fora
-document.addEventListener('click', function(e){
-  if(!e.target.closest('.fg')) {
-    document.querySelectorAll('.ac-drop').forEach(function(d){ d.classList.remove('open'); });
-  }
-});
-
-// ─── INIT ─────────────────────────────────────────────────────
 carregarHist();
 gerarPreview();
-setInterval(carregarHist, 30000); // atualiza histórico a cada 30s
+setInterval(carregarHist,30000);
 </script>
 </body>
 </html>
