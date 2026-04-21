@@ -29,12 +29,17 @@ def extrair_campos(texto):
         return ""
 
     r["v_nome"] = match([
-        r"Nome(?:\s+do\s+Proprietario)?[:\s]+([A-ZA-Z\s]{3,60}?)(?:\s*CPF|\s*CNPJ|\n)",
+        r"Nome(?:\s+do\s+Proprietario)?[:\s]+([A-Z][A-Z\s]{3,60}?)(?:\s*CPF|\s*CNPJ|\n)",
         r"Proprietario[:\s]+([A-Z][A-Z\s]{3,60}?)(?:\s*CPF|\n)",
         r"Nome\s+Solicitante[:\s]+([A-Z][A-Z\s]{3,60}?)(?:\s*Tipo|\n)",
         r"Aberto por[:\s]+([A-Z][A-Z\s]{3,60}?)(?:\s*Tipo|\n)",
         r"Nome:[:\s]+([A-Z][A-Z\s]{3,60}?)(?:\s*CPF|\s*CNPJ|\n)",
     ])
+    # Remove valores genéricos que não são nomes
+    palavras_invalidas = ['EMPRESARIAL','SITUACAO','ESPECIAL','REGULAR','SUSPENSA','CANCELADA',
+                          'INAPTA','BAIXADA','PENDENTE','CONSULTA','SERVICOS','RECEITA']
+    if r.get("v_nome") and r["v_nome"].strip().upper() in palavras_invalidas:
+        r["v_nome"] = ""
     r["v_cpf"] = match([
         r"CPF[/\s]*CNPJ[:\s]*([\d]{2,3}\.[\d]{3}\.[\d]{3}[/\-][\d]{4}[\-\d]{0,6})",
         r"CPF[:\s]*([\d]{3}\.[\d]{3}\.[\d]{3}-[\d]{2})",
