@@ -597,8 +597,27 @@ function salvar(){
   });
 }
 
-function proximo(){limpar();showAlert('Pronto para novo atendimento!','ok');}
+function proximo(){limparTudo();showAlert('Pronto para novo atendimento!','ok');}
+
 function limpar(){
+  // Limpa apenas os campos da aba atual
+  var mapa = {
+    'vendedor': ['v_nome','v_cpf','v_rg','v_rg_org','v_ecivil','v_nasc','v_end','v_bairro','v_cidade','v_cep','v_cel','v_email'],
+    'veiculo':  ['ve_modelo','ve_ano','ve_placa','ve_chassi'],
+    'comprador':['c_nome','c_cpf','c_rg','c_nasc','c_valor','c_end','c_cidade','c_cep','c_email']
+  };
+  var campos = mapa[tabAtual] || [];
+  campos.forEach(function(k){
+    var el=document.getElementById(k);
+    if(el){el.value='';el.classList.remove('ia');}
+  });
+  document.getElementById('paste-txt').value='';
+  atualizarContadores();
+  showAlert('Campos de "'+tabAtual+'" limpos!','ok');
+}
+
+function limparTudo(){
+  // Limpa absolutamente tudo — usado no "Próximo atendimento"
   CAMPOS.forEach(function(k){var el=document.getElementById(k);if(el){el.value='';el.classList.remove('ia');}});
   document.getElementById('paste-txt').value='';
   atualizarContadores();gerarPreview();
@@ -634,15 +653,12 @@ function verificarCNPJ(el, pref) {
 }
 
 function buscarCNPJ(cnpj, pref) {
-  var nomeEl = document.getElementById(pref+'_nome');
-  if(nomeEl && nomeEl.value) return; // já tem nome, não sobrescreve
-
   showAlert('Buscando dados do CNPJ...', 'ok');
 
   fetch('https://brasilapi.com.br/api/cnpj/v1/' + cnpj)
   .then(function(r){ return r.json(); })
   .then(function(d){
-    if(d.message || d.erro) {
+    if(d.message || d.erro || !d.razao_social) {
       // Tenta API alternativa
       return fetch('https://receitaws.com.br/v1/cnpj/' + cnpj)
         .then(function(r2){ return r2.json(); });
@@ -654,27 +670,30 @@ function buscarCNPJ(cnpj, pref) {
       showAlert('CNPJ não encontrado ou inválido.','warn'); return;
     }
 
-    // BrasilAPI usa razao_social, ReceitaWS usa nome
     var razao   = d.razao_social || d.nome || '';
     var fantasia = d.nome_fantasia || d.fantasia || '';
-    var logr    = d.logradouro || d.descricao_tipo_de_logradouro || '';
+    var logr    = d.logradouro || '';
     var numero  = d.numero || '';
     var compl   = d.complemento || '';
     var bairro  = d.bairro || '';
-    var cidade  = (d.municipio||d.municipio||'') + (d.uf?' / '+d.uf:'');
+    var municipio = d.municipio || '';
+    var uf      = d.uf || '';
+    var cidade  = municipio + (uf ? ' / ' + uf : '');
     var cep     = (d.cep||'').replace(/\D/g,'');
 
-    var nomeEl = document.getElementById(pref+'_nome');
-    var endEl  = document.getElementById(pref+'_end');
-    var baiEl  = document.getElementById(pref+'_bairro');
-    var cidEl  = document.getElementById(pref+'_cidade');
-    var cepEl  = document.getElementById(pref+'_cep');
+    // Campos corretos dependendo do prefixo (v = vendedor, c = comprador)
+    function setC(sufixo, val){
+      if(!val) return;
+      var id = pref + '_' + sufixo;
+      var el = document.getElementById(id);
+      if(el){ el.value = val.trim(); el.classList.add('ia'); }
+    }
 
-    if(nomeEl && razao)  { nomeEl.value = razao; nomeEl.classList.add('ia'); }
-    if(endEl  && logr)   { endEl.value  = logr + (numero?', Nº '+numero:'') + (compl?', '+compl:''); endEl.classList.add('ia'); }
-    if(baiEl  && bairro) { baiEl.value  = bairro; baiEl.classList.add('ia'); }
-    if(cidEl  && cidade) { cidEl.value  = cidade; cidEl.classList.add('ia'); }
-    if(cepEl  && cep.length===8) { cepEl.value = cep.slice(0,5)+'-'+cep.slice(5); cepEl.classList.add('ia'); }
+    setC('nome',   razao);
+    setC('end',    logr + (numero && numero!='SN' && numero!='00' ? ', Nº '+numero : '') + (compl?', '+compl:''));
+    setC('bairro', bairro);
+    setC('cidade', cidade);
+    if(cep.length===8) setC('cep', cep.slice(0,5)+'-'+cep.slice(5));
 
     atualizarContadores(); atualizar();
     showAlert('✓ Empresa encontrada: ' + razao + (fantasia?' ('+fantasia+')':''), 'ok');
