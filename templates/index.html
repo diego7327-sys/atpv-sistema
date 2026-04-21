@@ -205,7 +205,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
           <label>CPF / CNPJ
             <button class="btn-cpf-consulta" onclick="consultarCPF('v')" title="Consultar na Receita Federal">🔍 Consultar Receita</button>
           </label>
-          <input id="v_cpf" oninput="atualizar();buscaPessoaCpf(this,'v')" autocomplete="off">
+          <input id="v_cpf" oninput="atualizar();buscaPessoaCpf(this,'v');verificarCNPJ(this,'v')" autocomplete="off" placeholder="CPF ou CNPJ">
           <div class="ac-drop" id="ac-v_cpf"></div>
         </div>
       </div>
@@ -269,7 +269,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
           <label>CPF / CNPJ
             <button class="btn-cpf-consulta" onclick="consultarCPF('c')" title="Consultar na Receita Federal">🔍 Consultar Receita</button>
           </label>
-          <input id="c_cpf" oninput="atualizar();buscaPessoaCpf(this,'c')" autocomplete="off">
+          <input id="c_cpf" oninput="atualizar();buscaPessoaCpf(this,'c');verificarCNPJ(this,'c')" autocomplete="off" placeholder="CPF ou CNPJ">
           <div class="ac-drop" id="ac-c_cpf"></div>
         </div>
       </div>
@@ -364,19 +364,41 @@ function extrair(){
   fetch('/api/extrair',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({texto:txt})
+    body:JSON.stringify({texto:txt, aba:tabAtual})
   })
   .then(function(r){return r.json();})
   .then(function(data){
     pararLoad();btn.disabled=false;
     if(data.erro){showAlert(data.erro,'err');return;}
     var campos=data.campos,filled=data.total;
+
+    // Se estamos na aba comprador, remapeia campos v_ para c_
+    if(tabAtual==='comprador'){
+      var remapeado={};
+      Object.keys(campos).forEach(function(k){
+        if(k.startsWith('v_') && !k.startsWith('ve_')){
+          var ck = 'c_'+k.slice(2);
+          // só remapeia se o campo do comprador existir
+          if(['c_nome','c_cpf','c_rg','c_nasc','c_end','c_cidade','c_cep','c_email'].indexOf(ck)>=0){
+            remapeado[ck]=campos[k];
+          } else {
+            remapeado[k]=campos[k];
+          }
+        } else {
+          remapeado[k]=campos[k];
+        }
+      });
+      campos=remapeado;
+    }
+
     Object.keys(campos).forEach(function(k){set(k,campos[k]);});
     atualizarContadores();
     gerarPreview();
     showAlert('✓ '+filled+' campos extraídos! Confira e complete se necessário.','ok');
-    if(campos.ve_placa||campos.ve_chassi)ftab('veiculo');
-    else if(campos.v_nome||campos.v_cpf)ftab('vendedor');
+    // Navega para aba mais relevante
+    if(campos.ve_placa||campos.ve_chassi) ftab('veiculo');
+    else if(tabAtual==='comprador') ftab('comprador');
+    else if(campos.v_nome||campos.v_cpf) ftab('vendedor');
   })
   .catch(function(){pararLoad();btn.disabled=false;showAlert('Erro de conexão com o servidor.','err');});
 }
@@ -598,6 +620,67 @@ function showAlert(msg,tipo){
 
 // ─── USER BADGE (hostname simples) ────────────────────────────
 document.getElementById('user-badge').textContent=window.location.hostname||'local';
+
+// ─── BUSCA CNPJ AUTOMÁTICA ────────────────────────────────────
+var _cnpjTimer = {};
+function verificarCNPJ(el, pref) {
+  var digitos = el.value.replace(/\D/g,'');
+  // CNPJ tem 14 dígitos
+  if(digitos.length !== 14) return;
+  clearTimeout(_cnpjTimer[pref]);
+  _cnpjTimer[pref] = setTimeout(function(){ buscarCNPJ(digitos, pref); }, 600);
+}
+
+function buscarCNPJ(cnpj, pref) {
+  var nomeEl = document.getElementById(pref+'_nome');
+  if(nomeEl && nomeEl.value) return; // já tem nome, não sobrescreve
+
+  showAlert('Buscando dados do CNPJ...', 'ok');
+
+  fetch('https://brasilapi.com.br/api/cnpj/v1/' + cnpj)
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if(d.message || d.erro) {
+      // Tenta API alternativa
+      return fetch('https://receitaws.com.br/v1/cnpj/' + cnpj)
+        .then(function(r2){ return r2.json(); });
+    }
+    return d;
+  })
+  .then(function(d){
+    if(!d || d.status === 'ERROR') {
+      showAlert('CNPJ não encontrado ou inválido.','warn'); return;
+    }
+
+    // BrasilAPI usa razao_social, ReceitaWS usa nome
+    var razao   = d.razao_social || d.nome || '';
+    var fantasia = d.nome_fantasia || d.fantasia || '';
+    var logr    = d.logradouro || d.descricao_tipo_de_logradouro || '';
+    var numero  = d.numero || '';
+    var compl   = d.complemento || '';
+    var bairro  = d.bairro || '';
+    var cidade  = (d.municipio||d.municipio||'') + (d.uf?' / '+d.uf:'');
+    var cep     = (d.cep||'').replace(/\D/g,'');
+
+    var nomeEl = document.getElementById(pref+'_nome');
+    var endEl  = document.getElementById(pref+'_end');
+    var baiEl  = document.getElementById(pref+'_bairro');
+    var cidEl  = document.getElementById(pref+'_cidade');
+    var cepEl  = document.getElementById(pref+'_cep');
+
+    if(nomeEl && razao)  { nomeEl.value = razao; nomeEl.classList.add('ia'); }
+    if(endEl  && logr)   { endEl.value  = logr + (numero?', Nº '+numero:'') + (compl?', '+compl:''); endEl.classList.add('ia'); }
+    if(baiEl  && bairro) { baiEl.value  = bairro; baiEl.classList.add('ia'); }
+    if(cidEl  && cidade) { cidEl.value  = cidade; cidEl.classList.add('ia'); }
+    if(cepEl  && cep.length===8) { cepEl.value = cep.slice(0,5)+'-'+cep.slice(5); cepEl.classList.add('ia'); }
+
+    atualizarContadores(); atualizar();
+    showAlert('✓ Empresa encontrada: ' + razao + (fantasia?' ('+fantasia+')':''), 'ok');
+  })
+  .catch(function(){
+    showAlert('Não foi possível buscar o CNPJ. Verifique a conexão.','warn');
+  });
+}
 
 // ─── CONSULTA CPF RECEITA FEDERAL ────────────────────────────
 function consultarCPF(pref) {
