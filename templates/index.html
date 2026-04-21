@@ -267,6 +267,16 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
       <p class="cfg-note">Acesse após gerar a procuração para registrar a ATPV-E.</p>
       <a href="https://portal.detran.go.gov.br/sna/" target="_blank" class="link-det">🔗 Abrir portal DETRAN-GO</a>
     </div>
+    <div class="fb">
+      <div class="fb-title" style="color:var(--red)">Zona de perigo — limpeza de dados</div>
+      <p class="cfg-note">Use para apagar todos os dados de teste (histórico, cadastro de pessoas e veículos). <strong>Essa ação não tem volta!</strong></p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn-danger" onclick="limparHistorico()">🗑 Limpar histórico</button>
+        <button class="btn-danger" onclick="limparPessoas()">🗑 Limpar cadastro de pessoas</button>
+        <button class="btn-danger" onclick="limparVeiculos()">🗑 Limpar cadastro de veículos</button>
+        <button style="padding:10px 18px;background:none;border:2px solid var(--red);color:var(--red);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font)" onclick="limparTodosServidor()">⚠ Limpar TUDO do servidor</button>
+      </div>
+    </div>
   </div>
 
   <div class="action-bar">
@@ -747,6 +757,25 @@ function showAlert(msg,tipo){
   var el=document.getElementById('alert-box');
   el.textContent=msg;el.className='alert '+tipo;el.style.display='block';
   clearTimeout(el._t);el._t=setTimeout(function(){el.style.display='none';},5000);
+}
+
+// ═══ LIMPEZA SERVIDOR ════════════════════════════════════════
+function limparHistorico(){
+  if(!confirm('Apagar TODO o histórico? Não tem volta!')) return;
+  fetch('/api/historico-limpar',{method:'POST'}).then(function(){ carregarHist(); showAlert('✓ Histórico apagado!','ok'); });
+}
+function limparPessoas(){
+  if(!confirm('Apagar TODO o cadastro de pessoas? Não tem volta!')) return;
+  fetch('/api/pessoas-limpar',{method:'POST'}).then(function(){ showAlert('✓ Cadastro de pessoas apagado!','ok'); });
+}
+function limparVeiculos(){
+  if(!confirm('Apagar TODO o cadastro de veículos? Não tem volta!')) return;
+  fetch('/api/veiculos-limpar',{method:'POST'}).then(function(){ showAlert('✓ Cadastro de veículos apagado!','ok'); });
+}
+function limparTodosServidor(){
+  if(!confirm('⚠ ATENÇÃO: Isso vai apagar histórico, pessoas e veículos.\nTem certeza?')) return;
+  if(!confirm('Última chance! Confirmar limpeza total?')) return;
+  fetch('/api/limpar-tudo',{method:'POST'}).then(function(){ carregarHist(); showAlert('✓ Todos os dados apagados! Pode começar do zero.','ok'); });
 }
 
 // ═══ INIT ════════════════════════════════════════════════════
