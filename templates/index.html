@@ -24,6 +24,32 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 .hstat-v{font-size:17px;font-weight:600;font-family:var(--mono);color:var(--acc)}
 .hstat-l{font-size:9px;color:var(--mut);text-transform:uppercase;letter-spacing:.08em}
 .user-badge{font-size:11px;background:var(--surf2);border:1px solid var(--bord);border-radius:6px;padding:4px 10px;color:var(--mut);font-family:var(--mono)}
+.user-info{display:flex;align-items:center;gap:10px}
+.perfil-badge{font-size:10px;padding:3px 8px;border-radius:5px;font-weight:600;font-family:var(--mono)}
+.perfil-admin{background:rgba(0,212,170,.15);color:var(--acc)}
+.perfil-funcionario{background:rgba(0,153,255,.15);color:var(--acc2)}
+.perfil-empresa{background:rgba(255,165,2,.15);color:var(--warn)}
+.btn-logout{background:none;border:1px solid var(--bord);color:var(--mut);border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:var(--font)}
+.btn-logout:hover{border-color:var(--red);color:var(--red)}
+/* MODAL */
+.modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:var(--surf);border:1px solid var(--bord);border-radius:14px;padding:28px;width:100%;max-width:560px;max-height:85vh;overflow-y:auto}
+.modal-title{font-size:16px;font-weight:600;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}
+.modal-close{background:none;border:none;color:var(--mut);font-size:20px;cursor:pointer;line-height:1}
+.modal-close:hover{color:var(--txt)}
+.table-wrap{overflow-x:auto;margin-bottom:16px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:8px 10px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);border-bottom:1px solid var(--bord)}
+td{padding:9px 10px;border-bottom:1px solid var(--bord)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--surf2)}
+.tag{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;font-family:var(--mono)}
+.tag-admin{background:rgba(0,212,170,.15);color:var(--acc)}
+.tag-func{background:rgba(0,153,255,.15);color:var(--acc2)}
+.tag-emp{background:rgba(255,165,2,.15);color:var(--warn)}
+.tag-ok{background:rgba(0,212,170,.1);color:var(--acc)}
+.tag-off{background:rgba(255,71,87,.1);color:var(--red)}
 .app{display:grid;grid-template-columns:320px 1fr;flex:1}
 .left{border-right:1px solid var(--bord);display:flex;flex-direction:column;background:var(--surf);overflow-y:auto;max-height:calc(100vh - 57px);position:sticky;top:57px}
 .psec{padding:16px;border-bottom:1px solid var(--bord)}
@@ -112,7 +138,12 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
     <div class="hstat"><div class="hstat-v" id="st-hoje">0</div><div class="hstat-l">Hoje</div></div>
     <div class="hstat"><div class="hstat-v" id="st-total">0</div><div class="hstat-l">Histórico</div></div>
   </div>
-  <div class="user-badge" id="user-badge">—</div>
+  <div class="user-info">
+    <span id="user-nome" style="font-size:13px;font-weight:500"></span>
+    <span class="perfil-badge" id="perfil-badge"></span>
+    <button class="btn-logout" id="btn-admin" onclick="abrirAdmin()" style="display:none">⚙ Admin</button>
+    <button class="btn-logout" onclick="logout()">Sair</button>
+  </div>
 </header>
 <div class="app">
 <div class="left">
@@ -289,6 +320,66 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<!-- MODAL ADMIN -->
+<div class="modal-overlay" id="modal-admin">
+  <div class="modal">
+    <div class="modal-title">
+      <span>⚙ Administração</span>
+      <button class="modal-close" onclick="fecharAdmin()">✕</button>
+    </div>
+    <!-- Sub-abas admin -->
+    <div style="display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--bord);padding-bottom:0">
+      <button class="ftab active" onclick="adminTab('usuarios')" id="atab-usuarios" style="padding:8px 14px;font-size:12px">Funcionários</button>
+      <button class="ftab" onclick="adminTab('empresas')" id="atab-empresas" style="padding:8px 14px;font-size:12px">Garagens / Concessionárias</button>
+    </div>
+
+    <!-- USUÁRIOS -->
+    <div id="apanel-usuarios">
+      <div class="table-wrap">
+        <table id="tbl-usuarios"><thead><tr><th>Nome</th><th>Login</th><th>Perfil</th><th>Status</th><th></th></tr></thead><tbody></tbody></table>
+      </div>
+      <details style="margin-top:16px">
+        <summary style="cursor:pointer;font-size:13px;color:var(--acc);font-weight:500">+ Novo funcionário / usuário</summary>
+        <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="fg"><label>Nome completo</label><input id="nu_nome" placeholder="Nome"></div>
+          <div class="fg"><label>Login</label><input id="nu_login" placeholder="login.acesso"></div>
+          <div class="fg"><label>Senha</label><input id="nu_senha" type="password" placeholder="Senha"></div>
+          <div class="fg"><label>Perfil</label>
+            <select id="nu_perfil" onchange="toggleEmpresaSelect()">
+              <option value="funcionario">Funcionário</option>
+              <option value="admin">Administrador</option>
+              <option value="empresa">Garagem / Concessionária</option>
+            </select>
+          </div>
+          <div class="fg" id="fg-empresa" style="display:none;grid-column:span 2">
+            <label>Empresa vinculada</label>
+            <select id="nu_empresa_id"><option value="">Selecione...</option></select>
+          </div>
+        </div>
+        <button class="btn-main" style="margin-top:12px;padding:8px 18px;font-size:13px" onclick="salvarUsuario()">Salvar usuário</button>
+      </details>
+    </div>
+
+    <!-- EMPRESAS -->
+    <div id="apanel-empresas" style="display:none">
+      <div class="table-wrap">
+        <table id="tbl-empresas"><thead><tr><th>Nome</th><th>CNPJ</th><th>Contato</th><th></th></tr></thead><tbody></tbody></table>
+      </div>
+      <details style="margin-top:16px">
+        <summary style="cursor:pointer;font-size:13px;color:var(--acc);font-weight:500">+ Nova garagem / concessionária</summary>
+        <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="fg" style="grid-column:span 2"><label>Nome da empresa</label><input id="ne_nome" placeholder="Nome completo"></div>
+          <div class="fg"><label>CNPJ</label><input id="ne_cnpj" placeholder="00.000.000/0000-00"></div>
+          <div class="fg"><label>Contato / Responsável</label><input id="ne_contato" placeholder="Nome do responsável"></div>
+          <div class="fg"><label>Telefone</label><input id="ne_tel" placeholder="(62) 9..."></div>
+          <div class="fg"><label>E-mail</label><input id="ne_email" placeholder="email@empresa.com"></div>
+        </div>
+        <button class="btn-main" style="margin-top:12px;padding:8px 18px;font-size:13px" onclick="salvarEmpresa()">Salvar empresa</button>
+      </details>
+    </div>
+  </div>
+</div>
 <script>
 // ═══ ESTADO GLOBAL ═══════════════════════════════════════════
 var HOJE=0, tabAtual='vendedor', todosHist=[];
@@ -778,8 +869,147 @@ function limparTodosServidor(){
   fetch('/api/limpar-tudo',{method:'POST'}).then(function(){ carregarHist(); showAlert('✓ Todos os dados apagados! Pode começar do zero.','ok'); });
 }
 
+// ═══ AUTH ═════════════════════════════════════════════════════
+var MEU_PERFIL = '', MEU_NOME = '', MINHA_EMPRESA = null;
+
+function logout(){
+  fetch('/api/logout',{method:'POST'}).then(function(){ window.location.href='/login'; });
+}
+
+function carregarMe(){
+  fetch('/api/me').then(function(r){return r.json();}).then(function(d){
+    if(!d.logado){ window.location.href='/login'; return; }
+    MEU_PERFIL = d.perfil; MEU_NOME = d.nome; MINHA_EMPRESA = d.empresa_id;
+    document.getElementById('user-nome').textContent = d.nome;
+    var badge = document.getElementById('perfil-badge');
+    var labels = {admin:'Admin',funcionario:'Funcionário',empresa:'Empresa'};
+    var classes = {admin:'perfil-admin',funcionario:'perfil-funcionario',empresa:'perfil-empresa'};
+    badge.textContent = labels[d.perfil]||d.perfil;
+    badge.className = 'perfil-badge '+(classes[d.perfil]||'');
+    if(d.perfil==='admin'){
+      document.getElementById('btn-admin').style.display='inline-block';
+    }
+  });
+}
+
+// ═══ ADMIN ════════════════════════════════════════════════════
+function abrirAdmin(){
+  document.getElementById('modal-admin').classList.add('open');
+  adminTab('usuarios');
+}
+function fecharAdmin(){ document.getElementById('modal-admin').classList.remove('open'); }
+document.getElementById('modal-admin').addEventListener('click',function(e){ if(e.target===this) fecharAdmin(); });
+
+function adminTab(t){
+  ['usuarios','empresas'].forEach(function(k){
+    document.getElementById('atab-'+k).classList.toggle('active',k===t);
+    document.getElementById('apanel-'+k).style.display = k===t?'block':'none';
+  });
+  if(t==='usuarios') carregarUsuarios();
+  if(t==='empresas') carregarEmpresas();
+}
+
+function toggleEmpresaSelect(){
+  var p = document.getElementById('nu_perfil').value;
+  document.getElementById('fg-empresa').style.display = p==='empresa'?'block':'none';
+}
+
+function carregarUsuarios(){
+  fetch('/api/usuarios').then(function(r){return r.json();}).then(function(users){
+    var tb = document.querySelector('#tbl-usuarios tbody');
+    if(!users||users.length===0){ tb.innerHTML='<tr><td colspan="5" style="color:var(--mut);text-align:center;padding:20px">Nenhum usuário</td></tr>'; return; }
+    var perfilLabel={admin:'Admin',funcionario:'Funcionário',empresa:'Empresa'};
+    var perfilClass={admin:'tag-admin',funcionario:'tag-func',empresa:'tag-emp'};
+    tb.innerHTML = users.map(function(u){
+      return '<tr>'+
+        '<td>'+u.nome+'</td>'+
+        '<td style="font-family:var(--mono);font-size:12px">'+u.login+'</td>'+
+        '<td><span class="tag '+perfilClass[u.perfil]+'">'+perfilLabel[u.perfil]+'</span></td>'+
+        '<td><span class="tag '+(u.ativo?'tag-ok':'tag-off')+'">'+(u.ativo?'Ativo':'Inativo')+'</span></td>'+
+        '<td><button onclick="toggleUsuario(\''+u.id+'\','+(!u.ativo)+')" style="background:none;border:none;color:var(--mut);cursor:pointer;font-size:12px">'+(u.ativo?'Desativar':'Ativar')+'</button>'+
+        ' <button onclick="delUsuario(\''+u.id+'\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px">Excluir</button></td>'+
+        '</tr>';
+    }).join('');
+  });
+  // Popula select de empresas
+  fetch('/api/empresas').then(function(r){return r.json();}).then(function(emps){
+    var sel = document.getElementById('nu_empresa_id');
+    sel.innerHTML = '<option value="">Selecione...</option>' +
+      emps.map(function(e){ return '<option value="'+e.id+'">'+e.nome+'</option>'; }).join('');
+  });
+}
+
+function salvarUsuario(){
+  var dados = {
+    nome: document.getElementById('nu_nome').value,
+    login: document.getElementById('nu_login').value,
+    senha: document.getElementById('nu_senha').value,
+    perfil: document.getElementById('nu_perfil').value,
+    empresa_id: document.getElementById('nu_empresa_id').value || null
+  };
+  fetch('/api/usuarios',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dados)})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    showAlert('✓ Usuário criado com sucesso!','ok');
+    ['nu_nome','nu_login','nu_senha'].forEach(function(id){ document.getElementById(id).value=''; });
+    carregarUsuarios();
+  });
+}
+
+function toggleUsuario(id, ativo){
+  fetch('/api/usuarios/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({ativo:ativo})})
+  .then(function(){ carregarUsuarios(); showAlert('Usuário atualizado!','ok'); });
+}
+
+function delUsuario(id){
+  if(!confirm('Excluir este usuário?')) return;
+  fetch('/api/usuarios/'+id,{method:'DELETE'}).then(function(r){return r.json();})
+  .then(function(d){ if(d.erro){showAlert(d.erro,'err');return;} carregarUsuarios(); showAlert('Usuário excluído!','ok'); });
+}
+
+function carregarEmpresas(){
+  fetch('/api/empresas').then(function(r){return r.json();}).then(function(emps){
+    var tb = document.querySelector('#tbl-empresas tbody');
+    if(!emps||emps.length===0){ tb.innerHTML='<tr><td colspan="4" style="color:var(--mut);text-align:center;padding:20px">Nenhuma empresa</td></tr>'; return; }
+    tb.innerHTML = emps.map(function(e){
+      return '<tr>'+
+        '<td style="font-weight:500">'+e.nome+'</td>'+
+        '<td style="font-family:var(--mono);font-size:11px">'+(e.cnpj||'—')+'</td>'+
+        '<td>'+(e.contato||'—')+(e.tel?' · '+e.tel:'')+'</td>'+
+        '<td><button onclick="delEmpresa(\''+e.id+'\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px">Excluir</button></td>'+
+        '</tr>';
+    }).join('');
+  });
+}
+
+function salvarEmpresa(){
+  var dados = {
+    nome: document.getElementById('ne_nome').value,
+    cnpj: document.getElementById('ne_cnpj').value,
+    contato: document.getElementById('ne_contato').value,
+    tel: document.getElementById('ne_tel').value,
+    email: document.getElementById('ne_email').value
+  };
+  if(!dados.nome){ showAlert('Informe o nome da empresa.','warn'); return; }
+  fetch('/api/empresas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dados)})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    showAlert('✓ Empresa cadastrada!','ok');
+    ['ne_nome','ne_cnpj','ne_contato','ne_tel','ne_email'].forEach(function(id){ document.getElementById(id).value=''; });
+    carregarEmpresas();
+  });
+}
+
+function delEmpresa(id){
+  if(!confirm('Excluir esta empresa?')) return;
+  fetch('/api/empresas/'+id,{method:'DELETE'}).then(function(){ carregarEmpresas(); showAlert('Empresa excluída!','ok'); });
+}
+
 // ═══ INIT ════════════════════════════════════════════════════
-document.getElementById('user-badge').textContent=window.location.hostname||'local';
+document.getElementById('user-badge') && (document.getElementById('user-badge').textContent = window.location.hostname||'local');
+carregarMe();
 carregarHist();
 gerarPreview();
 setInterval(carregarHist,30000);
