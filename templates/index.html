@@ -116,7 +116,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 .ac-nome{font-size:13px;font-weight:500;color:var(--txt)}
 .ac-meta{font-size:11px;color:var(--mut);font-family:var(--mono);margin-top:2px}
 .ac-salvar{width:100%;padding:7px;background:none;border:none;border-top:1px solid var(--bord);color:var(--acc);font-size:11px;cursor:pointer;font-family:var(--font);text-align:center}
-.ac-salvar:hover{background:rgba(0,212,170,.08)}
+.ac-salvar-item{padding:9px 12px;cursor:pointer;border-top:1px solid var(--bord);text-align:center;font-size:11px;color:var(--acc);transition:background .1s}
+.ac-salvar-item:hover{background:rgba(0,212,170,.08)}
 
 .btn-cpf-consulta{
   float:right;background:none;border:1px solid rgba(0,153,255,.4);
@@ -814,17 +815,27 @@ function renderDropPessoa(lista, pref, dropId) {
   var drop = document.getElementById(dropId);
   if(!drop) return;
   if(!lista.length) { fecharDrop(dropId); return; }
-  // Guarda lista no drop para uso posterior
   drop._lista = lista;
   drop._pref  = pref;
   drop.innerHTML = lista.map(function(p, i){
-    return '<div class="ac-item" data-idx="'+i+'" onclick="preencherPessoa('+i+',\''+pref+'\')">' +
+    return '<div class="ac-item" data-idx="'+i+'" data-pref="'+pref+'">' +
       '<div class="ac-nome">' + (p.nome||'') + '</div>' +
-      '<div class="ac-meta">' + (p.cpf||'') + (p.cel?' · '+p.cel:'') + (p.nasc?' · Nasc: '+p.nasc:'') + '</div>' +
+      '<div class="ac-meta">' + (p.cpf||'') + (p.cel?' · '+p.cel:'') + '</div>' +
       '</div>';
   }).join('') +
-  '<button class="ac-salvar" onclick="salvarPessoaAtual(\''+pref+'\')">+ Salvar ' + (pref==='v'?'vendedor':'comprador') + ' no cadastro</button>';
+  '<div class="ac-item ac-salvar-item" data-salvar="1" data-pref="'+pref+'">+ Salvar ' + (pref==='v'?'vendedor':'comprador') + ' no cadastro</div>';
   drop.classList.add('open');
+  // Usa mousedown para não conflitar com o blur do input
+  drop.querySelectorAll('.ac-item').forEach(function(item){
+    item.addEventListener('mousedown', function(e){
+      e.preventDefault();
+      if(item.dataset.salvar){
+        salvarPessoaAtual(item.dataset.pref);
+      } else {
+        preencherPessoa(parseInt(item.dataset.idx), item.dataset.pref);
+      }
+    });
+  });
 }
 
 function preencherPessoa(idx, pref) {
@@ -907,13 +918,24 @@ function renderDropVeiculo(lista) {
   if(!lista.length) { fecharDrop('ac-ve_placa'); return; }
   drop._lista = lista;
   drop.innerHTML = lista.map(function(v, i){
-    return '<div class="ac-item" onclick="preencherVeiculo('+i+')">' +
+    return '<div class="ac-item" data-idx="'+i+'">' +
       '<div class="ac-nome">' + v.placa + ' — ' + (v.modelo||'') + '</div>' +
       '<div class="ac-meta">' + (v.ano||'') + (v.chassi?' · '+v.chassi:'') + '</div>' +
       '</div>';
   }).join('') +
-  '<button class="ac-salvar" onclick="salvarVeiculoAtual()">+ Salvar veículo no cadastro</button>';
+  '<div class="ac-item ac-salvar-item" data-salvar="1">+ Salvar veículo no cadastro</div>';
   drop.classList.add('open');
+  // Usa mousedown para não conflitar com blur
+  drop.querySelectorAll('.ac-item').forEach(function(item){
+    item.addEventListener('mousedown', function(e){
+      e.preventDefault();
+      if(item.dataset.salvar){
+        salvarVeiculoAtual();
+      } else {
+        preencherVeiculo(parseInt(item.dataset.idx));
+      }
+    });
+  });
 }
 
 function preencherVeiculo(idx) {
