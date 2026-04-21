@@ -107,6 +107,17 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--bord);border-radius:3px}
 
+/* AUTOCOMPLETE */
+.ac-drop{display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:var(--surf2);border:1px solid var(--acc);border-radius:0 0 8px 8px;max-height:200px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.ac-drop.open{display:block}
+.ac-item{padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--bord);transition:background .1s}
+.ac-item:last-child{border-bottom:none}
+.ac-item:hover,.ac-item.sel{background:rgba(0,212,170,.1)}
+.ac-nome{font-size:13px;font-weight:500;color:var(--txt)}
+.ac-meta{font-size:11px;color:var(--mut);font-family:var(--mono);margin-top:2px}
+.ac-salvar{width:100%;padding:7px;background:none;border:none;border-top:1px solid var(--bord);color:var(--acc);font-size:11px;cursor:pointer;font-family:var(--font);text-align:center}
+.ac-salvar:hover{background:rgba(0,212,170,.08)}
+
 @media(max-width:900px){
   .app{grid-template-columns:1fr}
   .left{max-height:none;position:static;border-right:none;border-bottom:1px solid var(--bord)}
@@ -178,8 +189,16 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
     <div class="fb">
       <div class="fb-title">Proprietário / Vendedor (outorgante) <span class="fill-count" id="cnt-vendedor">0 campos</span></div>
       <div class="g2">
-        <div class="fg"><label>Nome completo</label><input id="v_nome" oninput="atualizar()"></div>
-        <div class="fg"><label>CPF / CNPJ</label><input id="v_cpf" oninput="atualizar()"></div>
+        <div class="fg" style="position:relative">
+          <label>Nome completo</label>
+          <input id="v_nome" oninput="atualizar();buscaPessoa(this,'v')" autocomplete="off" placeholder="Digite para buscar...">
+          <div class="ac-drop" id="ac-v_nome"></div>
+        </div>
+        <div class="fg" style="position:relative">
+          <label>CPF / CNPJ</label>
+          <input id="v_cpf" oninput="atualizar();buscaPessoaCpf(this,'v')" autocomplete="off">
+          <div class="ac-drop" id="ac-v_cpf"></div>
+        </div>
       </div>
       <div class="g3">
         <div class="fg"><label>RG</label><input id="v_rg" oninput="atualizar()"></div>
@@ -216,7 +235,11 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
         <div class="fg"><label>Ano fabricação / Modelo</label><input id="ve_ano" oninput="atualizar()"></div>
       </div>
       <div class="g2">
-        <div class="fg"><label>Placa</label><input id="ve_placa" oninput="this.value=this.value.toUpperCase();atualizar()"></div>
+        <div class="fg" style="position:relative">
+          <label>Placa</label>
+          <input id="ve_placa" oninput="this.value=this.value.toUpperCase();atualizar();buscaVeiculo(this)" autocomplete="off" placeholder="Digite para buscar...">
+          <div class="ac-drop" id="ac-ve_placa"></div>
+        </div>
         <div class="fg"><label>Chassi</label><input id="ve_chassi" oninput="this.value=this.value.toUpperCase();atualizar()"></div>
       </div>
     </div>
@@ -227,8 +250,16 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
     <div class="fb">
       <div class="fb-title">Dados do comprador <span class="fill-count" id="cnt-comprador">0 campos</span></div>
       <div class="g2">
-        <div class="fg"><label>Nome completo</label><input id="c_nome" oninput="atualizar()"></div>
-        <div class="fg"><label>CPF / CNPJ</label><input id="c_cpf" oninput="atualizar()"></div>
+        <div class="fg" style="position:relative">
+          <label>Nome completo</label>
+          <input id="c_nome" oninput="atualizar();buscaPessoa(this,'c')" autocomplete="off" placeholder="Digite para buscar...">
+          <div class="ac-drop" id="ac-c_nome"></div>
+        </div>
+        <div class="fg" style="position:relative">
+          <label>CPF / CNPJ</label>
+          <input id="c_cpf" oninput="atualizar();buscaPessoaCpf(this,'c')" autocomplete="off">
+          <div class="ac-drop" id="ac-c_cpf"></div>
+        </div>
       </div>
       <div class="g2">
         <div class="fg"><label>RG</label><input id="c_rg" oninput="atualizar()"></div>
@@ -584,6 +615,142 @@ function buscarCep(cep, prefixo) {
   })
   .catch(function(){ if(spin) spin.style.display='none'; });
 }
+
+// ─── AUTOCOMPLETE PESSOAS ─────────────────────────────────────
+var _acTimer = {};
+
+function buscaPessoa(el, pref) {
+  var q = el.value.trim();
+  var dropId = 'ac-' + pref + '_nome';
+  if(q.length < 2) { fecharDrop(dropId); return; }
+  clearTimeout(_acTimer[dropId]);
+  _acTimer[dropId] = setTimeout(function(){
+    fetch('/api/pessoas?q=' + encodeURIComponent(q))
+    .then(function(r){return r.json();})
+    .then(function(lista){ renderDropPessoa(lista, pref, dropId, el); });
+  }, 300);
+}
+
+function buscaPessoaCpf(el, pref) {
+  var q = el.value.replace(/\D/g,'');
+  var dropId = 'ac-' + pref + '_cpf';
+  if(q.length < 4) { fecharDrop(dropId); return; }
+  clearTimeout(_acTimer[dropId]);
+  _acTimer[dropId] = setTimeout(function(){
+    fetch('/api/pessoas?q=' + encodeURIComponent(q))
+    .then(function(r){return r.json();})
+    .then(function(lista){ renderDropPessoa(lista, pref, dropId, el); });
+  }, 300);
+}
+
+function renderDropPessoa(lista, pref, dropId, el) {
+  var drop = document.getElementById(dropId);
+  if(!lista.length) { fecharDrop(dropId); return; }
+  drop.innerHTML = lista.map(function(p, i){
+    return '<div class="ac-item" onclick="preencherPessoa('+i+',\''+pref+'\','+JSON.stringify(JSON.stringify(lista))+')">' +
+      '<div class="ac-nome">' + p.nome + '</div>' +
+      '<div class="ac-meta">' + (p.cpf||'') + (p.cel?' · '+p.cel:'') + '</div>' +
+      '</div>';
+  }).join('') +
+  '<button class="ac-salvar" onclick="salvarPessoaAtual(\''+pref+'\')">+ Salvar ' + (pref==='v'?'vendedor':'comprador') + ' no cadastro</button>';
+  drop.classList.add('open');
+}
+
+function preencherPessoa(idx, pref, listaStr) {
+  var lista = JSON.parse(listaStr);
+  var p = lista[idx];
+  var map = {nome: pref+'_nome', cpf: pref+'_cpf', rg: pref+'_rg', rg_org: pref+'_rg_org',
+             ecivil: pref+'_ecivil', end: pref+'_end', bairro: pref+'_bairro',
+             cidade: pref+'_cidade', cep: pref+'_cep', cel: pref+'_cel', email: pref+'_email'};
+  Object.keys(map).forEach(function(k){
+    var el = document.getElementById(map[k]);
+    if(el && p[k]) { el.value = p[k]; el.classList.add('ia'); }
+  });
+  fecharDrop('ac-'+pref+'_nome');
+  fecharDrop('ac-'+pref+'_cpf');
+  atualizarContadores(); atualizar();
+  showAlert('Cadastro carregado: ' + p.nome, 'ok');
+}
+
+function salvarPessoaAtual(pref) {
+  var dados = {
+    nome:    g(pref+'_nome'),   cpf:    g(pref+'_cpf'),
+    rg:      g(pref+'_rg'),     rg_org: g(pref+'_rg_org'),
+    ecivil:  g(pref+'_ecivil'), end:    g(pref+'_end'),
+    bairro:  g(pref+'_bairro'), cidade: g(pref+'_cidade'),
+    cep:     g(pref+'_cep'),    cel:    g(pref+'_cel'),
+    email:   g(pref+'_email')
+  };
+  if(!dados.nome && !dados.cpf) { showAlert('Preencha nome ou CPF antes de salvar.','warn'); return; }
+  fetch('/api/pessoas', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(dados)
+  }).then(function(){ showAlert('Cadastro salvo! Próxima vez é só digitar o nome.','ok'); });
+  fecharDrop('ac-'+pref+'_nome');
+  fecharDrop('ac-'+pref+'_cpf');
+}
+
+// ─── AUTOCOMPLETE VEÍCULOS ────────────────────────────────────
+function buscaVeiculo(el) {
+  var q = el.value.trim();
+  if(q.length < 2) { fecharDrop('ac-ve_placa'); return; }
+  clearTimeout(_acTimer['ve']);
+  _acTimer['ve'] = setTimeout(function(){
+    fetch('/api/veiculos?q=' + encodeURIComponent(q))
+    .then(function(r){return r.json();})
+    .then(function(lista){ renderDropVeiculo(lista); });
+  }, 300);
+}
+
+function renderDropVeiculo(lista) {
+  var drop = document.getElementById('ac-ve_placa');
+  if(!lista.length) { fecharDrop('ac-ve_placa'); return; }
+  drop.innerHTML = lista.map(function(v, i){
+    return '<div class="ac-item" onclick="preencherVeiculo('+i+','+JSON.stringify(JSON.stringify(lista))+')">' +
+      '<div class="ac-nome">' + v.placa + ' — ' + (v.modelo||'') + '</div>' +
+      '<div class="ac-meta">' + (v.ano||'') + (v.chassi?' · Chassi: '+v.chassi:'') + '</div>' +
+      '</div>';
+  }).join('') +
+  '<button class="ac-salvar" onclick="salvarVeiculoAtual()">+ Salvar veículo no cadastro</button>';
+  drop.classList.add('open');
+}
+
+function preencherVeiculo(idx, listaStr) {
+  var lista = JSON.parse(listaStr);
+  var v = lista[idx];
+  ['placa','chassi','modelo','ano'].forEach(function(k){
+    var el = document.getElementById('ve_'+k);
+    if(el && v[k]) { el.value = v[k]; el.classList.add('ia'); }
+  });
+  fecharDrop('ac-ve_placa');
+  atualizarContadores(); atualizar();
+  showAlert('Veículo carregado: ' + v.placa, 'ok');
+}
+
+function salvarVeiculoAtual() {
+  var dados = {
+    placa:   g('ve_placa'),  chassi: g('ve_chassi'),
+    modelo:  g('ve_modelo'), ano:    g('ve_ano')
+  };
+  if(!dados.placa) { showAlert('Preencha a placa antes de salvar.','warn'); return; }
+  fetch('/api/veiculos', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(dados)
+  }).then(function(){ showAlert('Veículo salvo! Próxima vez é só digitar a placa.','ok'); });
+  fecharDrop('ac-ve_placa');
+}
+
+function fecharDrop(id) {
+  var el = document.getElementById(id);
+  if(el) { el.classList.remove('open'); el.innerHTML=''; }
+}
+
+// Fecha dropdowns ao clicar fora
+document.addEventListener('click', function(e){
+  if(!e.target.closest('.fg')) {
+    document.querySelectorAll('.ac-drop').forEach(function(d){ d.classList.remove('open'); });
+  }
+});
 
 // ─── INIT ─────────────────────────────────────────────────────
 carregarHist();
