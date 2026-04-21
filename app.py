@@ -138,7 +138,29 @@ def api_hist_del(idx):
     if 0<=idx<len(hist): hist.pop(idx); gravar(HIST_FILE, hist)
     return jsonify({"ok":True})
 
-# ── CADASTRO PESSOAS ─────────────────────────────────────────
+# ── LIMPEZA GERAL ────────────────────────────────────────────
+@app.route("/api/limpar-tudo", methods=["POST"])
+def api_limpar_tudo():
+    gravar(HIST_FILE, [])
+    gravar(PESSOAS_FILE, [])
+    gravar(VEICULOS_FILE, [])
+    return jsonify({"ok":True})
+
+@app.route("/api/historico-limpar", methods=["POST"])
+def api_hist_limpar():
+    gravar(HIST_FILE, [])
+    return jsonify({"ok":True})
+
+@app.route("/api/pessoas-limpar", methods=["POST"])
+def api_pessoas_limpar():
+    gravar(PESSOAS_FILE, [])
+    return jsonify({"ok":True})
+
+@app.route("/api/veiculos-limpar", methods=["POST"])
+def api_veiculos_limpar():
+    gravar(VEICULOS_FILE, [])
+    return jsonify({"ok":True})
+
 @app.route("/api/pessoas", methods=["GET"])
 def api_pessoas_get():
     q = request.args.get("q","").lower()
