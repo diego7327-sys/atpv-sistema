@@ -159,8 +159,11 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
     <p class="paste-label">
       Copie o texto do PDF do DETRAN, WhatsApp ou qualquer documento e cole abaixo. O sistema extrai os campos automaticamente.
     </p>
-    <textarea class="paste-area" id="paste-txt"
-      placeholder="Cole aqui o texto copiado...&#10;&#10;Exemplos aceitos:&#10;• PDF do sistema DETRAN-GO&#10;• Consulta de atendimento veicular&#10;• CRV / CRLV copiado&#10;• Qualquer texto com placa, chassi, nome, CPF..."></textarea>
+    <div style="position:relative">
+      <textarea class="paste-area" id="paste-txt"
+        placeholder="Cole aqui o texto copiado...&#10;&#10;Exemplos aceitos:&#10;• PDF do sistema DETRAN-GO&#10;• Consulta de atendimento veicular&#10;• CRV / CRLV copiado&#10;• Qualquer texto com placa, chassi, nome, CPF..."></textarea>
+      <button onclick="limparTexto()" title="Limpar texto" style="position:absolute;top:6px;right:8px;background:rgba(255,71,87,.15);border:1px solid rgba(255,71,87,.3);color:#ff4757;border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;font-family:var(--font)">✕ Limpar</button>
+    </div>
     <button class="btn-ext" onclick="extrair()">✦ Extrair e preencher campos</button>
     <div class="load-wrap" id="load-wrap">
       <div class="load-msg" id="load-msg">Processando...</div>
@@ -614,6 +617,11 @@ function limpar(){
   document.getElementById('paste-txt').value='';
   atualizarContadores();
   showAlert('Campos de "'+tabAtual+'" limpos!','ok');
+}
+
+function limparTexto(){
+  document.getElementById('paste-txt').value='';
+  document.getElementById('paste-txt').focus();
 }
 
 function limparTudo(){
