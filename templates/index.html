@@ -786,6 +786,7 @@ function buscarCep(cep, prefixo) {
 
 // ─── AUTOCOMPLETE PESSOAS ─────────────────────────────────────
 var _acTimer = {};
+var _acListas = {}; // guarda listas globalmente por prefixo
 
 function buscaPessoa(el, pref) {
   var q = el.value.trim();
@@ -815,47 +816,38 @@ function renderDropPessoa(lista, pref, dropId) {
   var drop = document.getElementById(dropId);
   if(!drop) return;
   if(!lista.length) { fecharDrop(dropId); return; }
-  drop._lista = lista;
-  drop._pref  = pref;
+  _acListas['pessoa_'+pref] = lista; // guarda globalmente
   drop.innerHTML = lista.map(function(p, i){
-    return '<div class="ac-item" data-idx="'+i+'" data-pref="'+pref+'">' +
+    return '<div class="ac-item" onmousedown="event.preventDefault();selecionarPessoa('+i+',\''+pref+'\')">' +
       '<div class="ac-nome">' + (p.nome||'') + '</div>' +
       '<div class="ac-meta">' + (p.cpf||'') + (p.cel?' · '+p.cel:'') + '</div>' +
       '</div>';
   }).join('') +
-  '<div class="ac-item ac-salvar-item" data-salvar="1" data-pref="'+pref+'">+ Salvar ' + (pref==='v'?'vendedor':'comprador') + ' no cadastro</div>';
+  '<div class="ac-item ac-salvar-item" onmousedown="event.preventDefault();salvarPessoaAtual(\''+pref+'\')">+ Salvar ' + (pref==='v'?'vendedor':'comprador') + ' no cadastro</div>';
   drop.classList.add('open');
-  // Usa mousedown para não conflitar com o blur do input
-  drop.querySelectorAll('.ac-item').forEach(function(item){
-    item.addEventListener('mousedown', function(e){
-      e.preventDefault();
-      if(item.dataset.salvar){
-        salvarPessoaAtual(item.dataset.pref);
-      } else {
-        preencherPessoa(parseInt(item.dataset.idx), item.dataset.pref);
-      }
-    });
-  });
 }
 
-function preencherPessoa(idx, pref) {
-  var dropNome = document.getElementById('ac-'+pref+'_nome');
-  var dropCpf  = document.getElementById('ac-'+pref+'_cpf');
-  var lista = (dropNome && dropNome._lista) || (dropCpf && dropCpf._lista);
-  if(!lista || !lista[idx]) return;
+function selecionarPessoa(idx, pref) {
+  var lista = _acListas['pessoa_'+pref];
+  if(!lista || !lista[idx]) { showAlert('Erro ao carregar cadastro.','err'); return; }
   var p = lista[idx];
-  var map = {nome:'_nome', cpf:'_cpf', rg:'_rg', rg_org:'_rg_org', nasc:'_nasc',
-             ecivil:'_ecivil', end:'_end', bairro:'_bairro',
-             cidade:'_cidade', cep:'_cep', cel:'_cel', email:'_email'};
-  Object.keys(map).forEach(function(k){
-    var el = document.getElementById(pref+map[k]);
+  var campos = {
+    nome:'_nome', cpf:'_cpf', rg:'_rg', rg_org:'_rg_org', nasc:'_nasc',
+    ecivil:'_ecivil', end:'_end', bairro:'_bairro',
+    cidade:'_cidade', cep:'_cep', cel:'_cel', email:'_email'
+  };
+  Object.keys(campos).forEach(function(k){
+    var el = document.getElementById(pref+campos[k]);
     if(el && p[k]) { el.value = p[k]; el.classList.add('ia'); }
   });
   fecharDrop('ac-'+pref+'_nome');
   fecharDrop('ac-'+pref+'_cpf');
   atualizarContadores(); atualizar();
-  showAlert('Cadastro carregado: ' + p.nome, 'ok');
+  showAlert('✓ Cadastro carregado: ' + p.nome, 'ok');
 }
+
+// mantém compatibilidade com chamadas antigas
+function preencherPessoa(idx, pref) { selecionarPessoa(idx, pref); }
 
 function salvarPessoaAtual(pref) {
   var dados = {
@@ -870,7 +862,7 @@ function salvarPessoaAtual(pref) {
   fetch('/api/pessoas', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify(dados)
-  }).then(function(){ showAlert('✓ Cadastro salvo! Próxima vez é só digitar o nome.','ok'); });
+  }).then(function(){ showAlert('✓ Cadastro salvo!','ok'); });
   fecharDrop('ac-'+pref+'_nome');
   fecharDrop('ac-'+pref+'_cpf');
 }
@@ -900,9 +892,8 @@ document.addEventListener('DOMContentLoaded', function(){
         .then(function(r){return r.json();})
         .then(function(lista){
           if(lista.length === 1) {
-            // Só 1 resultado: preenche direto
-            document.getElementById('ac-ve_placa')._lista = lista;
-            preencherVeiculo(0);
+            _acListas['veiculo'] = lista;
+            selecionarVeiculo(0);
           } else {
             renderDropVeiculo(lista);
           }
@@ -916,32 +907,20 @@ function renderDropVeiculo(lista) {
   var drop = document.getElementById('ac-ve_placa');
   if(!drop) return;
   if(!lista.length) { fecharDrop('ac-ve_placa'); return; }
-  drop._lista = lista;
+  _acListas['veiculo'] = lista; // guarda globalmente
   drop.innerHTML = lista.map(function(v, i){
-    return '<div class="ac-item" data-idx="'+i+'">' +
+    return '<div class="ac-item" onmousedown="event.preventDefault();selecionarVeiculo('+i+')">' +
       '<div class="ac-nome">' + v.placa + ' — ' + (v.modelo||'') + '</div>' +
       '<div class="ac-meta">' + (v.ano||'') + (v.chassi?' · '+v.chassi:'') + '</div>' +
       '</div>';
   }).join('') +
-  '<div class="ac-item ac-salvar-item" data-salvar="1">+ Salvar veículo no cadastro</div>';
+  '<div class="ac-item ac-salvar-item" onmousedown="event.preventDefault();salvarVeiculoAtual()">+ Salvar veículo no cadastro</div>';
   drop.classList.add('open');
-  // Usa mousedown para não conflitar com blur
-  drop.querySelectorAll('.ac-item').forEach(function(item){
-    item.addEventListener('mousedown', function(e){
-      e.preventDefault();
-      if(item.dataset.salvar){
-        salvarVeiculoAtual();
-      } else {
-        preencherVeiculo(parseInt(item.dataset.idx));
-      }
-    });
-  });
 }
 
-function preencherVeiculo(idx) {
-  var drop = document.getElementById('ac-ve_placa');
-  var lista = drop && drop._lista;
-  if(!lista || !lista[idx]) return;
+function selecionarVeiculo(idx) {
+  var lista = _acListas['veiculo'];
+  if(!lista || !lista[idx]) { showAlert('Erro ao carregar veículo.','err'); return; }
   var v = lista[idx];
   ['placa','chassi','modelo','ano'].forEach(function(k){
     var el = document.getElementById('ve_'+k);
@@ -952,6 +931,9 @@ function preencherVeiculo(idx) {
   showAlert('✓ Veículo carregado: ' + v.placa + ' — ' + (v.modelo||''), 'ok');
 }
 
+// mantém compatibilidade
+function preencherVeiculo(idx) { selecionarVeiculo(idx); }
+
 function salvarVeiculoAtual() {
   var dados = {
     placa:  g('ve_placa'),  chassi: g('ve_chassi'),
@@ -961,18 +943,18 @@ function salvarVeiculoAtual() {
   fetch('/api/veiculos', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify(dados)
-  }).then(function(){ showAlert('✓ Veículo salvo! Próxima vez é só digitar a placa.','ok'); });
+  }).then(function(){ showAlert('✓ Veículo salvo!','ok'); });
   fecharDrop('ac-ve_placa');
 }
 
 function fecharDrop(id) {
   var el = document.getElementById(id);
-  if(el) { el.classList.remove('open'); el.innerHTML=''; delete el._lista; }
+  if(el) { el.classList.remove('open'); el.innerHTML=''; }
 }
 
 // Fecha dropdowns ao clicar fora
 document.addEventListener('click', function(e){
-  if(!e.target.closest('.fg')) {
+  if(!e.target.closest('.ac-drop') && !e.target.closest('.fg')) {
     document.querySelectorAll('.ac-drop').forEach(function(d){ d.classList.remove('open'); });
   }
 });
