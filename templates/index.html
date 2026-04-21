@@ -544,6 +544,11 @@ function delHist(i,e){
 function salvar(){
   var nome=g('v_nome'),placa=g('ve_placa');
   if(!nome&&!placa){showAlert('Preencha ao menos nome ou placa antes de salvar.','warn');return;}
+  // Evita duplicata: checa se já existe mesmo nome+placa nos últimos 2 registros
+  var igualRecente = todosHist.slice(0,2).some(function(h){
+    return h.nome===nome && h.placa===placa;
+  });
+  if(igualRecente){showAlert('Este atendimento já está salvo no histórico.','warn');return;}
   var snap={};CAMPOS.forEach(function(k){snap[k]=g(k);});
   fetch('/api/historico',{
     method:'POST',
@@ -552,7 +557,7 @@ function salvar(){
   }).then(function(){carregarHist();showAlert('Atendimento salvo no histórico compartilhado!','ok');});
 }
 
-function proximo(){salvar();limpar();}
+function proximo(){limpar();showAlert('Pronto para novo atendimento!','ok');}
 function limpar(){
   CAMPOS.forEach(function(k){var el=document.getElementById(k);if(el){el.value='';el.classList.remove('ia');}});
   document.getElementById('paste-txt').value='';
