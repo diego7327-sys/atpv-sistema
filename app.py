@@ -5,7 +5,11 @@ from datetime import datetime, date
 from functools import wraps
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
+app.secret_key = os.environ.get('SECRET_KEY', 'atpv-diego-2670-secret-key-fixo')
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = False
+app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 horas
+app.config['SESSION_COOKIE_HTTPONLY'] = True
 
 # ── ARQUIVOS ─────────────────────────────────────────────────
 HIST_FILE     = "historico.json"
@@ -172,6 +176,7 @@ def api_login():
     user = next((u for u in users if u['login'].lower()==login and u.get('ativo',True)), None)
     if not user or not check_password_hash(user['senha'], senha):
         return jsonify({"erro": "Login ou senha incorretos"}), 401
+    session.permanent = True
     session['user_id']  = user['id']
     session['user_nome']= user['nome']
     session['perfil']   = user['perfil']
