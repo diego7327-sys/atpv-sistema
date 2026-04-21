@@ -421,6 +421,162 @@ def api_veiculos_limpar():
     if session.get('perfil') != 'admin': return jsonify({"erro":"Sem permissão"}), 403
     gravar(VEICULOS_FILE, []); return jsonify({"ok":True})
 
+# ── FINANCEIRO — atualizar valor/status de um atendimento ─────
+@app.route("/api/historico/<int:idx>/financeiro", methods=["PUT"])
+@login_required
+def api_fin_put(idx):
+    data = request.get_json()
+    hist = ler(HIST_FILE)
+    perfil = session.get('perfil')
+    empresa_id = session.get('empresa_id')
+    # Empresa só edita seus próprios
+    if perfil == 'empresa':
+        visivel = [h for h in hist if h.get('empresa_id')==empresa_id]
+        if idx < 0 or idx >= len(visivel): return jsonify({"erro":"Não encontrado"}), 404
+        real_idx = hist.index(visivel[idx])
+    else:
+        if idx < 0 or idx >= len(hist): return jsonify({"erro":"Não encontrado"}), 404
+        real_idx = idx
+    hist[real_idx]['valor_cobrado'] = data.get('valor_cobrado', hist[real_idx].get('valor_cobrado',''))
+    hist[real_idx]['status_pgto']   = data.get('status_pgto', hist[real_idx].get('status_pgto','pendente'))
+    hist[real_idx]['obs_fin']       = data.get('obs_fin', hist[real_idx].get('obs_fin',''))
+    gravar(HIST_FILE, hist)
+    return jsonify({"ok":True})
+
+# ── RELATÓRIOS ────────────────────────────────────────────────
+@app.route("/api/relatorios")
+@login_required
+def api_relatorios():
+    perfil      = session.get('perfil')
+    empresa_id  = session.get('empresa_id')
+    user_id     = session.get('user_id')
+
+    # Filtros
+    de   = request.args.get('de','')    # DD/MM/AAAA
+    ate  = request.args.get('ate','')
+    func = request.args.get('func','')  # user_id filtro
+    emp  = request.args.get('emp','')   # empresa_id filtro
+
+    hist = ler(HIST_FILE)
+
+    # Restrição por perfil
+    if perfil == 'empresa':
+        hist = [h for h in hist if h.get('empresa_id') == empresa_id]
+    elif perfil == 'funcionario':
+        # Verifica se tem permissão de relatório
+        users = ler(USERS_FILE)
+        me = next((u for u in users if u['id']==user_id), {})
+        if not me.get('ver_relatorio', False):
+            return jsonify({"erro":"Sem permissão para relatórios"}), 403
+
+    # Filtro de datas
+    def parse_data(s):
+        try:
+            d,m,a = s.split('/')
+            return datetime(int(a),int(m),int(d))
+        except: return None
+
+    if de:
+        dt_de = parse_data(de)
+        if dt_de:
+            hist = [h for h in hist if parse_data(h.get('data','').split(' ')[0]) and parse_data(h.get('data','').split(' ')[0]) >= dt_de]
+    if ate:
+        dt_ate = parse_data(ate)
+        if dt_ate:
+            hist = [h for h in hist if parse_data(h.get('data','').split(' ')[0]) and parse_data(h.get('data','').split(' ')[0]) <= dt_ate]
+    if func and perfil == 'admin':
+        hist = [h for h in hist if h.get('user_id') == func]
+    if emp and perfil in ['admin','funcionario']:
+        hist = [h for h in hist if h.get('empresa_id') == emp]
+
+    # Totais
+    total     = len(hist)
+    recebidos = sum(1 for h in hist if h.get('status_pgto')=='pago')
+    pendentes = total - recebidos
+
+    def parse_val(v):
+        if not v: return 0.0
+        return float(str(v).replace('R$','').replace('.','').replace(',','.').strip() or 0)
+
+    val_total    = sum(parse_val(h.get('valor_cobrado','')) for h in hist)
+    val_recebido = sum(parse_val(h.get('valor_cobrado','')) for h in hist if h.get('status_pgto')=='pago')
+    val_pendente = val_total - val_recebido
+
+    # Agrupamento por funcionário
+    por_func = {}
+    for h in hist:
+        uid  = h.get('user_id','?')
+        nome = h.get('user_nome','Desconhecido')
+        if uid not in por_func:
+            por_func[uid] = {'nome':nome,'total':0,'recebidos':0,'val_total':0,'val_recebido':0}
+        por_func[uid]['total']       += 1
+        por_func[uid]['val_total']   += parse_val(h.get('valor_cobrado',''))
+        if h.get('status_pgto')=='pago':
+            por_func[uid]['recebidos']    += 1
+            por_func[uid]['val_recebido'] += parse_val(h.get('valor_cobrado',''))
+
+    # Agrupamento por empresa
+    empresas_map = {e['id']:e['nome'] for e in ler(EMPRESAS_FILE)}
+    por_emp = {}
+    for h in hist:
+        eid  = h.get('empresa_id') or 'escritorio'
+        nome = empresas_map.get(eid,'Escritório') if eid!='escritorio' else 'Escritório'
+        if eid not in por_emp:
+            por_emp[eid] = {'nome':nome,'total':0,'recebidos':0,'val_total':0,'val_recebido':0,'atendimentos':[]}
+        por_emp[eid]['total']       += 1
+        por_emp[eid]['val_total']   += parse_val(h.get('valor_cobrado',''))
+        if h.get('status_pgto')=='pago':
+            por_emp[eid]['recebidos']    += 1
+            por_emp[eid]['val_recebido'] += parse_val(h.get('valor_cobrado',''))
+        por_emp[eid]['atendimentos'].append({
+            'placa':   h.get('placa',''),
+            'modelo':  h.get('modelo',''),
+            'chassi':  h.get('snap',{}).get('ve_chassi','') if h.get('snap') else '',
+            'vendedor':h.get('snap',{}).get('v_nome','') if h.get('snap') else '',
+            'data':    h.get('data',''),
+            'valor':   h.get('valor_cobrado',''),
+            'status':  h.get('status_pgto','pendente'),
+        })
+
+    # Agrupamento por mês
+    por_mes = {}
+    for h in hist:
+        dt_str = h.get('data','')
+        mes = dt_str[3:10] if len(dt_str)>=10 else '?'
+        if mes not in por_mes: por_mes[mes]={'total':0,'recebidos':0,'val_total':0}
+        por_mes[mes]['total'] += 1
+        por_mes[mes]['val_total'] += parse_val(h.get('valor_cobrado',''))
+        if h.get('status_pgto')=='pago': por_mes[mes]['recebidos'] += 1
+
+    return jsonify({
+        'total':total,'recebidos':recebidos,'pendentes':pendentes,
+        'val_total':round(val_total,2),'val_recebido':round(val_recebido,2),'val_pendente':round(val_pendente,2),
+        'por_func':list(por_func.values()),
+        'por_emp':list(por_emp.values()),
+        'por_mes':[ {'mes':k,'total':v['total'],'recebidos':v['recebidos'],'val_total':round(v['val_total'],2)} for k,v in sorted(por_mes.items(),reverse=True) ],
+        'atendimentos': [{
+            'idx':i,'data':h.get('data',''),'placa':h.get('placa',''),'modelo':h.get('modelo',''),
+            'vendedor':h.get('snap',{}).get('v_nome','') if h.get('snap') else '',
+            'chassi':h.get('snap',{}).get('ve_chassi','') if h.get('snap') else '',
+            'func':h.get('user_nome',''),'empresa':empresas_map.get(h.get('empresa_id',''),'Escritório'),
+            'valor':h.get('valor_cobrado',''),'status':h.get('status_pgto','pendente'),
+        } for i,h in enumerate(hist)]
+    })
+
+# ── PERMISSÕES DE RELATÓRIO ───────────────────────────────────
+@app.route("/api/usuarios/<uid>/permissoes", methods=["PUT"])
+@login_required
+def api_permissoes(uid):
+    if session.get('perfil') != 'admin':
+        return jsonify({"erro":"Sem permissão"}), 403
+    data  = request.get_json()
+    users = ler(USERS_FILE)
+    idx   = next((i for i,u in enumerate(users) if u['id']==uid), None)
+    if idx is None: return jsonify({"erro":"Não encontrado"}), 404
+    users[idx]['ver_relatorio'] = data.get('ver_relatorio', False)
+    gravar(USERS_FILE, users)
+    return jsonify({"ok":True})
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT",5000))
     app.run(host="0.0.0.0", port=port, debug=False)
