@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ATPV-E | Diego Despachante</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root{
+  --bg:#0d0f14;--surf:#161920;--surf2:#1e2229;--bord:#2a2f3a;
+  --acc:#00d4aa;--acc2:#0099ff;--txt:#e8eaf0;--mut:#6b7280;
+  --red:#ff4757;--warn:#ffa502;
+  --font:'IBM Plex Sans',sans-serif;--mono:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--txt);min-height:100vh;display:flex;flex-direction:column}
+
+/* ─── HEADER ─── */
+header{display:flex;align-items:center;justify-content:space-between;padding:12px 24px;border-bottom:1px solid var(--bord);background:var(--surf);position:sticky;top:0;z-index:100}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-ico{width:32px;height:32px;background:var(--acc);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#000;font-family:var(--mono)}
+.logo-txt{font-size:14px;font-weight:600}
+.logo-sub{font-size:10px;color:var(--mut);font-family:var(--mono)}
+.hstats{display:flex;gap:18px}
+.hstat{text-align:center}
+.hstat-v{font-size:17px;font-weight:600;font-family:var(--mono);color:var(--acc)}
+.hstat-l{font-size:9px;color:var(--mut);text-transform:uppercase;letter-spacing:.08em}
+.user-badge{font-size:11px;background:var(--surf2);border:1px solid var(--bord);border-radius:6px;padding:4px 10px;color:var(--mut);font-family:var(--mono)}
+
+/* ─── LAYOUT ─── */
+.app{display:grid;grid-template-columns:360px 1fr;flex:1}
+
+/* ─── ESQUERDA ─── */
+.left{border-right:1px solid var(--bord);display:flex;flex-direction:column;background:var(--surf);overflow-y:auto;max-height:calc(100vh - 57px);position:sticky;top:57px}
+.psec{padding:18px;border-bottom:1px solid var(--bord)}
+.psec:last-child{border-bottom:none;flex:1}
+.sec-l{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.12em;color:var(--mut);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.sec-l::after{content:'';flex:1;height:1px;background:var(--bord)}
+
+.paste-label{font-size:11px;color:var(--mut);line-height:1.5;margin-bottom:8px}
+.paste-area{width:100%;min-height:150px;background:var(--surf2);border:1px solid var(--bord);border-radius:9px;padding:11px;font-size:12px;color:var(--txt);font-family:var(--mono);resize:vertical;line-height:1.7;transition:border-color .15s}
+.paste-area:focus{outline:none;border-color:var(--acc)}
+.paste-area::placeholder{color:var(--mut)}
+.btn-ext{width:100%;padding:11px;background:var(--acc);color:#000;border:none;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font);transition:opacity .15s;margin-top:10px}
+.btn-ext:hover{opacity:.85}
+.btn-ext:disabled{opacity:.4;cursor:not-allowed}
+
+.load-wrap{display:none;margin-top:10px}
+.load-msg{font-size:11px;color:var(--mut);font-family:var(--mono);margin-bottom:5px}
+.load-track{height:3px;background:var(--bord);border-radius:2px;overflow:hidden}
+.load-fill{height:100%;background:var(--acc);border-radius:2px;width:0;transition:width .3s}
+
+/* HISTÓRICO */
+.hist-search{width:100%;background:var(--surf2);border:1px solid var(--bord);border-radius:7px;padding:7px 10px;font-size:12px;color:var(--txt);font-family:var(--font);margin-bottom:10px}
+.hist-search:focus{outline:none;border-color:var(--acc)}
+.hist-list{display:flex;flex-direction:column;gap:3px;max-height:280px;overflow-y:auto}
+.hist-item{padding:8px 10px;border-radius:7px;cursor:pointer;transition:background .1s;border:1px solid transparent}
+.hist-item:hover{background:var(--surf2);border-color:var(--bord)}
+.hist-nome{font-size:13px;font-weight:500}
+.hist-meta{font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:2px}
+.hist-del{float:right;background:none;border:none;color:var(--mut);cursor:pointer;font-size:13px;padding:0 2px;line-height:1}
+.hist-del:hover{color:var(--red)}
+.hist-empty{font-size:12px;color:var(--mut);text-align:center;padding:20px 0}
+
+/* ─── DIREITA ─── */
+.right{display:flex;flex-direction:column}
+.ftabs{display:flex;gap:0;padding:0 24px;border-bottom:1px solid var(--bord);background:var(--surf);overflow-x:auto}
+.ftab{padding:14px 16px;font-size:12px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;color:var(--mut);background:none;border-top:none;border-left:none;border-right:none;font-family:var(--font);transition:all .15s;white-space:nowrap}
+.ftab.active{color:var(--acc);border-bottom-color:var(--acc)}
+.ftc{display:none}.ftc.active{display:block}
+.fields{padding:22px 24px}
+
+.alert{margin:0 24px 12px;padding:9px 14px;border-radius:8px;font-size:13px;display:none}
+.alert.ok{background:rgba(0,212,170,.1);color:var(--acc);border:1px solid rgba(0,212,170,.3)}
+.alert.err{background:rgba(255,71,87,.1);color:var(--red);border:1px solid rgba(255,71,87,.3)}
+.alert.warn{background:rgba(255,165,2,.1);color:var(--warn);border:1px solid rgba(255,165,2,.3)}
+
+.fb{margin-bottom:22px}
+.fb-title{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--acc);font-family:var(--mono);margin-bottom:12px;padding-bottom:7px;border-bottom:1px solid var(--bord)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.g1{display:grid;grid-template-columns:1fr;gap:10px}
+.fg{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.fg label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--mut)}
+.fg input,.fg select{background:var(--surf);border:1px solid var(--bord);border-radius:7px;padding:8px 11px;font-size:13px;color:var(--txt);font-family:var(--font);transition:border-color .15s;width:100%}
+.fg input:focus,.fg select:focus{outline:none;border-color:var(--acc)}
+.fg select option{background:var(--surf2)}
+.fg input.ia{border-color:var(--acc);background:rgba(0,212,170,.05)}
+
+.prev-doc{background:var(--surf);border:1px solid var(--bord);border-radius:9px;padding:18px;font-family:var(--mono);font-size:11px;line-height:1.9;white-space:pre-wrap;color:#b0b8c8;max-height:420px;overflow-y:auto}
+
+.action-bar{display:flex;gap:8px;flex-wrap:wrap;padding:14px 24px;border-top:1px solid var(--bord);background:var(--surf);position:sticky;bottom:0}
+.btn-main{padding:10px 20px;background:var(--acc);color:#000;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font);transition:opacity .15s}
+.btn-main:hover{opacity:.85}
+.btn-sec{padding:10px 18px;background:none;border:1px solid var(--bord);color:var(--txt);border-radius:8px;font-size:13px;cursor:pointer;font-family:var(--font);transition:background .15s}
+.btn-sec:hover{background:var(--surf2)}
+.btn-danger{padding:10px 18px;background:none;border:1px solid rgba(255,71,87,.35);color:var(--red);border-radius:8px;font-size:13px;cursor:pointer;font-family:var(--font)}
+
+.cfg-note{font-size:12px;color:var(--mut);line-height:1.6;margin-bottom:14px}
+.link-det{display:inline-flex;align-items:center;gap:6px;color:var(--acc2);font-size:13px;text-decoration:none;border:1px solid rgba(0,153,255,.3);padding:8px 14px;border-radius:8px;transition:background .15s}
+.link-det:hover{background:rgba(0,153,255,.07)}
+
+/* TAG CAMPOS PREENCHIDOS */
+.fill-count{display:inline-block;background:rgba(0,212,170,.15);color:var(--acc);border-radius:5px;font-size:11px;padding:2px 8px;font-family:var(--mono);margin-left:8px;vertical-align:middle}
+
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bord);border-radius:3px}
+
+@media(max-width:900px){
+  .app{grid-template-columns:1fr}
+  .left{max-height:none;position:static;border-right:none;border-bottom:1px solid var(--bord)}
+  .g2,.g3{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-ico">D</div>
+    <div>
+      <div class="logo-txt">Diego Despachante</div>
+      <div class="logo-sub">Sistema ATPV-E · Cód. 2670</div>
+    </div>
+  </div>
+  <div class="hstats">
+    <div class="hstat"><div class="hstat-v" id="st-hoje">0</div><div class="hstat-l">Hoje</div></div>
+    <div class="hstat"><div class="hstat-v" id="st-total">—</div><div class="hstat-l">Histórico</div></div>
+  </div>
+  <div class="user-badge" id="user-badge">carregando...</div>
+</header>
+
+<div class="app">
+
+<!-- ═══ ESQUERDA ═══ -->
+<div class="left">
+
+  <div class="psec">
+    <div class="sec-l">Colar dados do documento</div>
+    <p class="paste-label">
+      Copie o texto do PDF do DETRAN, WhatsApp ou qualquer documento e cole abaixo. O sistema extrai os campos automaticamente.
+    </p>
+    <textarea class="paste-area" id="paste-txt"
+      placeholder="Cole aqui o texto copiado...&#10;&#10;Exemplos aceitos:&#10;• PDF do sistema DETRAN-GO&#10;• Consulta de atendimento veicular&#10;• CRV / CRLV copiado&#10;• Qualquer texto com placa, chassi, nome, CPF..."></textarea>
+    <button class="btn-ext" onclick="extrair()">✦ Extrair e preencher campos</button>
+    <div class="load-wrap" id="load-wrap">
+      <div class="load-msg" id="load-msg">Processando...</div>
+      <div class="load-track"><div class="load-fill" id="load-fill"></div></div>
+    </div>
+  </div>
+
+  <div class="psec">
+    <div class="sec-l">Histórico compartilhado</div>
+    <input class="hist-search" placeholder="Buscar por nome ou placa..." oninput="filtrarHist(this.value)">
+    <div class="hist-list" id="hist-list">
+      <div class="hist-empty">Carregando...</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══ DIREITA ═══ -->
+<div class="right">
+
+  <div class="ftabs">
+    <button class="ftab active" onclick="ftab('vendedor')">Vendedor</button>
+    <button class="ftab" onclick="ftab('veiculo')">Veículo</button>
+    <button class="ftab" onclick="ftab('comprador')">Comprador</button>
+    <button class="ftab" onclick="ftab('preview')">Pré-visualização</button>
+    <button class="ftab" onclick="ftab('config')">Configurações</button>
+  </div>
+
+  <div id="alert-box" class="alert"></div>
+
+  <!-- VENDEDOR -->
+  <div id="fc-vendedor" class="ftc active fields">
+    <div class="fb">
+      <div class="fb-title">Proprietário / Vendedor (outorgante) <span class="fill-count" id="cnt-vendedor">0 campos</span></div>
+      <div class="g2">
+        <div class="fg"><label>Nome completo</label><input id="v_nome" oninput="atualizar()"></div>
+        <div class="fg"><label>CPF / CNPJ</label><input id="v_cpf" oninput="atualizar()"></div>
+      </div>
+      <div class="g3">
+        <div class="fg"><label>RG</label><input id="v_rg" oninput="atualizar()"></div>
+        <div class="fg"><label>Órgão exp.</label><input id="v_rg_org" oninput="atualizar()"></div>
+        <div class="fg"><label>Estado civil</label>
+          <select id="v_ecivil" onchange="atualizar()">
+            <option value="">Selecione</option>
+            <option>Solteiro(a)</option><option>Casado(a)</option>
+            <option>Divorciado(a)</option><option>Viúvo(a)</option><option>União estável</option>
+          </select>
+        </div>
+      </div>
+      <div class="g2">
+        <div class="fg"><label>Endereço (Rua/Av., nº)</label><input id="v_end" oninput="atualizar()"></div>
+        <div class="fg"><label>Bairro</label><input id="v_bairro" oninput="atualizar()"></div>
+      </div>
+      <div class="g3">
+        <div class="fg"><label>Município / UF</label><input id="v_cidade" oninput="atualizar()"></div>
+        <div class="fg"><label>CEP</label><input id="v_cep" oninput="atualizar()"></div>
+        <div class="fg"><label>Celular</label><input id="v_cel" oninput="atualizar()"></div>
+      </div>
+      <div class="g1">
+        <div class="fg"><label>E-mail</label><input id="v_email" oninput="atualizar()"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VEÍCULO -->
+  <div id="fc-veiculo" class="ftc fields">
+    <div class="fb">
+      <div class="fb-title">Dados do veículo <span class="fill-count" id="cnt-veiculo">0 campos</span></div>
+      <div class="g2">
+        <div class="fg"><label>Marca / Modelo</label><input id="ve_modelo" oninput="atualizar()"></div>
+        <div class="fg"><label>Ano fabricação / Modelo</label><input id="ve_ano" oninput="atualizar()"></div>
+      </div>
+      <div class="g2">
+        <div class="fg"><label>Placa</label><input id="ve_placa" oninput="this.value=this.value.toUpperCase();atualizar()"></div>
+        <div class="fg"><label>Chassi</label><input id="ve_chassi" oninput="this.value=this.value.toUpperCase();atualizar()"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COMPRADOR -->
+  <div id="fc-comprador" class="ftc fields">
+    <div class="fb">
+      <div class="fb-title">Dados do comprador <span class="fill-count" id="cnt-comprador">0 campos</span></div>
+      <div class="g2">
+        <div class="fg"><label>Nome completo</label><input id="c_nome" oninput="atualizar()"></div>
+        <div class="fg"><label>CPF / CNPJ</label><input id="c_cpf" oninput="atualizar()"></div>
+      </div>
+      <div class="g2">
+        <div class="fg"><label>RG</label><input id="c_rg" oninput="atualizar()"></div>
+        <div class="fg"><label>Valor da venda (R$)</label><input id="c_valor" oninput="atualizar()"></div>
+      </div>
+      <div class="g2">
+        <div class="fg"><label>Endereço completo</label><input id="c_end" oninput="atualizar()"></div>
+        <div class="fg"><label>Cidade / UF</label><input id="c_cidade" oninput="atualizar()"></div>
+      </div>
+      <div class="g2">
+        <div class="fg"><label>CEP</label><input id="c_cep" oninput="atualizar()"></div>
+        <div class="fg"><label>E-mail</label><input id="c_email" oninput="atualizar()"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRÉ-VIZ -->
+  <div id="fc-preview" class="ftc fields">
+    <div class="fb">
+      <div class="fb-title">Documento — pré-visualização</div>
+      <div class="prev-doc" id="prev-box">Preencha os dados para visualizar...</div>
+    </div>
+  </div>
+
+  <!-- CONFIG -->
+  <div id="fc-config" class="ftc fields">
+    <div class="fb">
+      <div class="fb-title">Dados fixos do escritório</div>
+      <p class="cfg-note">Estes dados são inseridos automaticamente em todas as procurações.</p>
+      <div class="g2">
+        <div class="fg"><label>Nome do escritório</label><input id="cfg_nome" value="DIEGO DESPACHANTE"></div>
+        <div class="fg"><label>Código DETRAN</label><input id="cfg_cod" value="2670"></div>
+      </div>
+      <div class="g1">
+        <div class="fg"><label>Endereço completo</label><input id="cfg_end" value="AVENIDA BRASIL N.464 VILA JUSSARA ANAPOLIS-GO"></div>
+      </div>
+      <div class="g2">
+        <div class="fg"><label>CEP</label><input id="cfg_cep" value="75123-115"></div>
+        <div class="fg"><label>Cidade (para data)</label><input id="cfg_cidade" value="ANÁPOLIS/GO"></div>
+      </div>
+    </div>
+    <div class="fb">
+      <div class="fb-title">Portal DETRAN-GO</div>
+      <p class="cfg-note">Acesse após gerar a procuração para registrar a ATPV-E.</p>
+      <a href="https://portal.detran.go.gov.br/sna/" target="_blank" class="link-det">🔗 Abrir portal DETRAN-GO</a>
+    </div>
+  </div>
+
+  <div class="action-bar">
+    <button class="btn-main" onclick="gerarPDF()">⬇ Baixar Procuração PDF</button>
+    <button class="btn-sec" onclick="salvar()">Salvar no histórico</button>
+    <button class="btn-sec" onclick="proximo()">Próximo atendimento</button>
+    <button class="btn-danger" onclick="limpar()">Limpar</button>
+  </div>
+
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+// ─── CAMPOS ───────────────────────────────────────────────────
+var CAMPOS=['v_nome','v_cpf','v_rg','v_rg_org','v_ecivil','v_end','v_bairro','v_cidade','v_cep','v_cel','v_email',
+            've_modelo','ve_ano','ve_placa','ve_chassi',
+            'c_nome','c_cpf','c_rg','c_valor','c_end','c_cidade','c_cep','c_email'];
+var HOJE=0;
+var todosHist=[];
+
+function g(id){return(document.getElementById(id)||{}).value||'';}
+function set(id,val){var el=document.getElementById(id);if(el&&val&&val.trim()){el.value=val.trim();el.classList.add('ia');}}
+function blank(v,n){return v&&v.trim()?v:'_'.repeat(n||22);}
+
+// ─── TABS ─────────────────────────────────────────────────────
+function ftab(t){
+  document.querySelectorAll('.ftab').forEach(function(el,i){
+    el.classList.toggle('active',['vendedor','veiculo','comprador','preview','config'][i]===t);
+  });
+  document.querySelectorAll('.ftc').forEach(function(el){el.classList.remove('active');});
+  document.getElementById('fc-'+t).classList.add('active');
+  if(t==='preview')gerarPreview();
+}
+
+// ─── EXTRAÇÃO ─────────────────────────────────────────────────
+function extrair(){
+  var txt=document.getElementById('paste-txt').value;
+  if(!txt.trim()){alert('Cole algum texto antes de extrair.');return;}
+  var btn=document.querySelector('.btn-ext');
+  btn.disabled=true;
+  animLoad(['Lendo documento...','Identificando campos...','Preenchendo formulário...']);
+
+  fetch('/api/extrair',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({texto:txt})
+  })
+  .then(function(r){return r.json();})
+  .then(function(data){
+    pararLoad();btn.disabled=false;
+    if(data.erro){showAlert(data.erro,'err');return;}
+    var campos=data.campos,filled=data.total;
+    Object.keys(campos).forEach(function(k){set(k,campos[k]);});
+    atualizarContadores();
+    gerarPreview();
+    showAlert('✓ '+filled+' campos extraídos! Confira e complete se necessário.','ok');
+    if(campos.ve_placa||campos.ve_chassi)ftab('veiculo');
+    else if(campos.v_nome||campos.v_cpf)ftab('vendedor');
+  })
+  .catch(function(){pararLoad();btn.disabled=false;showAlert('Erro de conexão com o servidor.','err');});
+}
+
+// ─── LOADING ──────────────────────────────────────────────────
+var _iv=null;
+function animLoad(msgs){
+  var lw=document.getElementById('load-wrap'),lm=document.getElementById('load-msg'),lf=document.getElementById('load-fill');
+  lw.style.display='block';var i=0,pct=0;
+  _iv=setInterval(function(){if(i<msgs.length){lm.textContent=msgs[i];i++;}pct=Math.min(pct+Math.random()*20+8,88);lf.style.width=Math.round(pct)+'%';},600);
+}
+function pararLoad(){
+  clearInterval(_iv);
+  var lf=document.getElementById('load-fill');lf.style.width='100%';
+  setTimeout(function(){document.getElementById('load-wrap').style.display='none';lf.style.width='0';},300);
+}
+
+// ─── CONTADORES ───────────────────────────────────────────────
+function atualizarContadores(){
+  var vend=['v_nome','v_cpf','v_rg','v_end','v_bairro','v_cidade','v_cep','v_cel'].filter(function(k){return g(k);}).length;
+  var veic=['ve_modelo','ve_ano','ve_placa','ve_chassi'].filter(function(k){return g(k);}).length;
+  var comp=['c_nome','c_cpf','c_rg','c_valor'].filter(function(k){return g(k);}).length;
+  document.getElementById('cnt-vendedor').textContent=vend+' campos';
+  document.getElementById('cnt-veiculo').textContent=veic+' campos';
+  document.getElementById('cnt-comprador').textContent=comp+' campos';
+}
+function atualizar(){atualizarContadores();}
+
+// ─── PRÉ-VISUALIZAÇÃO ─────────────────────────────────────────
+function gerarPreview(){
+  var cfg=getCfg();
+  var d=new Date();
+  var ms=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  var dt=d.getDate().toString().padStart(2,'0')+'/'+ms[d.getMonth()]+'/'+d.getFullYear();
+  var txt=
+'PROCURAÇÃO — INTENÇÃO DE VENDA E EMISSÃO ATPV-E\n'+
+'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'+
+'PROPRIETÁRIO / VENDEDOR\n\n'+
+'Nome:       '+blank(g('v_nome'),35)+'\n'+
+'CPF/CNPJ:   '+blank(g('v_cpf'),20)+'   RG: '+blank(g('v_rg'),10)+' '+blank(g('v_rg_org'),8)+'\n'+
+'Est.Civil:  '+blank(g('v_ecivil'),15)+'\n'+
+'Endereço:   '+blank(g('v_end'),35)+'\n'+
+'Bairro:     '+blank(g('v_bairro'),22)+'   CEP: '+blank(g('v_cep'),10)+'\n'+
+'Município:  '+blank(g('v_cidade'),22)+'   Cel: '+blank(g('v_cel'),14)+'\n'+
+'E-mail:     '+blank(g('v_email'),32)+'\n\n'+
+'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'+
+'Nomeia como procurador: '+cfg.nome+' (cód. '+cfg.cod+')\n'+
+'Sede: '+cfg.end+' — CEP '+cfg.cep+'\n'+
+'Para: INCLUSÃO DE INTENÇÃO DE VENDA / CANCELAMENTO ATPV / EMISSÃO ATPV-E\n\n'+
+'VEÍCULO\n\n'+
+'Marca/Modelo: '+blank(g('ve_modelo'),25)+'   Ano: '+blank(g('ve_ano'),10)+'\n'+
+'Placa:        '+blank(g('ve_placa'),10)+'   Chassi: '+blank(g('ve_chassi'),20)+'\n\n'+
+'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'+
+'COMPRADOR\n\n'+
+'Nome:       '+blank(g('c_nome'),35)+'\n'+
+'CPF/CNPJ:   '+blank(g('c_cpf'),20)+'   RG: '+blank(g('c_rg'),12)+'\n'+
+'Endereço:   '+blank(g('c_end'),35)+'   '+blank(g('c_cidade'),15)+'\n'+
+'CEP:        '+blank(g('c_cep'),10)+'   E-mail: '+blank(g('c_email'),25)+'\n'+
+'Valor:      '+blank(g('c_valor'),15)+'\n\n'+
+'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'+
+cfg.cidade+', '+dt+'\n\n\n'+
+'_________________________________________________\n'+
+'Assinatura do Outorgante (Proprietário Vendedor)';
+  document.getElementById('prev-box').textContent=txt;
+}
+
+// ─── GERAR PDF ────────────────────────────────────────────────
+function gerarPDF(){
+  var cfg=getCfg();
+  var d=new Date();
+  var ms=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  var dt=d.getDate().toString().padStart(2,'0')+'/'+ms[d.getMonth()]+'/'+d.getFullYear();
+  var {jsPDF}=window.jspdf;
+  var doc=new jsPDF({unit:'mm',format:'a4'});
+  var W=210,ML=20,TW=170;var y=20;
+
+  function lnEsc(){doc.setDrawColor(26,26,46);doc.setLineWidth(0.8);doc.line(ML,y,ML+TW,y);doc.setLineWidth(0.3);y+=5;}
+  function lnCin(){doc.setDrawColor(190,190,190);doc.setLineWidth(0.3);doc.line(ML,y,ML+TW,y);y+=4;}
+  function bar(t){doc.setFillColor(26,26,46);doc.roundedRect(ML,y,TW,6.5,1.5,1.5,'F');doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(255,255,255);doc.text(t,W/2,y+4.4,{align:'center'});doc.setTextColor(30,30,30);y+=10;}
+  function cam(lb,val,x,cy,w){
+    doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(120,120,120);doc.text(lb,x,cy);
+    doc.setFontSize(9.5);doc.setTextColor(25,25,25);
+    var v=(val&&val.trim())?val:'_'.repeat(Math.max(4,Math.floor(w/2.2)));
+    doc.text(v,x,cy+4.5,{maxWidth:w});return cy+9;
+  }
+  function par(txt,x,cy,w,sz){
+    doc.setFont('helvetica','normal');doc.setFontSize(sz||8.5);doc.setTextColor(40,40,40);
+    var lines=doc.splitTextToSize(txt,w);doc.text(lines,x,cy);return cy+lines.length*4.2+2;
+  }
+
+  doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(26,26,46);
+  doc.text('PROCURAÇÃO',W/2,y,{align:'center'});y+=6;
+  doc.setFontSize(9);doc.setTextColor(80,80,80);
+  doc.text('INTENÇÃO DE VENDA E EMISSÃO ATPV-E',W/2,y,{align:'center'});y+=7;
+  lnEsc();
+
+  bar('DADOS DO PROPRIETÁRIO / VENDEDOR (OUTORGANTE)');
+  cam('Nome completo',g('v_nome'),ML,y,108);cam('CPF / CNPJ',g('v_cpf'),ML+112,y,58);y+=11;
+  cam('RG',g('v_rg'),ML,y,38);cam('Órgão exp.',g('v_rg_org'),ML+42,y,35);cam('Estado civil',g('v_ecivil'),ML+81,y,89);y+=11;
+  cam('Endereço (Rua/Av., nº)',g('v_end'),ML,y,108);cam('Bairro',g('v_bairro'),ML+112,y,58);y+=11;
+  cam('Município / UF',g('v_cidade'),ML,y,58);cam('CEP',g('v_cep'),ML+62,y,34);cam('Celular',g('v_cel'),ML+100,y,70);y+=11;
+  cam('E-mail',g('v_email'),ML,y,TW);y+=12;lnCin();
+
+  var mandato='Nomeia(m) e constitui(em) seu(s) bastante(s) procurador(es), o Escritório de DESPACHANTE '+cfg.nome+', código '+cfg.cod+', com sede à '+cfg.end+' — CEP: '+cfg.cep+', para como se presente fosse, representá-lo(a) junto ao DETRAN/GO, para solicitação dos serviços de INCLUSÃO DE INTENÇÃO DE VENDA ou CANCELAMENTO ATPV e/ou EMISSÃO DA ATPV-E do veículo abaixo discriminado, podendo para tanto requerer e assinar o que for necessário, efetuar pagamentos, receber e dar quitações, praticar quaisquer atos necessários para o fiel cumprimento deste Mandato, o que desde já fica dado por firme e valioso.';
+  y=par(mandato,ML,y,TW,8.5);y+=4;
+
+  bar('DADOS DO VEÍCULO');
+  cam('Marca / Modelo',g('ve_modelo'),ML,y,108);cam('Ano fabricação / Modelo',g('ve_ano'),ML+112,y,58);y+=11;
+  cam('Placa',g('ve_placa'),ML,y,52);cam('Chassi',g('ve_chassi'),ML+56,y,TW-56);y+=14;
+
+  bar('DADOS DO COMPRADOR');
+  y=par('Declaro que os dados abaixo são verdadeiros, assumindo inteira responsabilidade, isentando o despachante de qualquer infortúnio.',ML,y,TW,8);y+=3;
+  cam('Nome completo do comprador',g('c_nome'),ML,y,108);cam('CPF / CNPJ',g('c_cpf'),ML+112,y,58);y+=11;
+  cam('RG',g('c_rg'),ML,y,52);cam('Valor da venda',g('c_valor'),ML+56,y,114);y+=11;
+  cam('Endereço completo',g('c_end'),ML,y,108);cam('Cidade / UF',g('c_cidade'),ML+112,y,58);y+=11;
+  cam('CEP',g('c_cep'),ML,y,52);cam('E-mail',g('c_email'),ML+56,y,114);y+=14;
+
+  lnCin();y+=4;
+  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(50,50,50);
+  doc.text(cfg.cidade+', '+dt,ML,y);y+=18;
+  doc.setDrawColor(120,120,120);doc.line(W/2+8,y,ML+TW,y);
+  doc.setFontSize(7.5);doc.setTextColor(100,100,100);
+  doc.text('Assinatura do Outorgante (Proprietário Vendedor)',W/2+8,y+4);
+
+  y=285;doc.setDrawColor(190,190,190);doc.line(ML,y,ML+TW,y);y+=4;
+  doc.setFont('helvetica','oblique');doc.setFontSize(7);doc.setTextColor(150,150,150);
+  doc.text(cfg.nome+' — Código DETRAN '+cfg.cod+' — '+cfg.end+' — CEP '+cfg.cep,W/2,y,{align:'center'});
+
+  var placa=g('ve_placa')||'veiculo';
+  doc.save('ATPV_'+placa.replace(/[^A-Z0-9]/gi,'_')+'_'+Date.now()+'.pdf');
+  HOJE++;document.getElementById('st-hoje').textContent=HOJE;
+  showAlert('PDF gerado e baixado!','ok');
+}
+
+// ─── HISTÓRICO ────────────────────────────────────────────────
+function carregarHist(){
+  fetch('/api/historico')
+  .then(function(r){return r.json();})
+  .then(function(data){
+    todosHist=data;
+    document.getElementById('st-total').textContent=data.length;
+    renderHist(data);
+  });
+}
+function renderHist(lista){
+  var el=document.getElementById('hist-list');
+  if(!lista||!lista.length){el.innerHTML='<div class="hist-empty">Nenhum atendimento salvo</div>';return;}
+  el.innerHTML=lista.map(function(h,i){
+    var idx=todosHist.indexOf(h);
+    return '<div class="hist-item">'+
+      '<button class="hist-del" onclick="delHist('+idx+',event)" title="Remover">✕</button>'+
+      '<div onclick="carregarItem('+idx+')">'+
+      '<div class="hist-nome">'+h.nome+'</div>'+
+      '<div class="hist-meta">'+h.modelo+' | '+h.placa+' | '+h.data+'</div>'+
+      '</div></div>';
+  }).join('');
+}
+function filtrarHist(q){
+  if(!q){renderHist(todosHist);return;}
+  var f=q.toLowerCase();
+  renderHist(todosHist.filter(function(h){
+    return (h.nome||'').toLowerCase().includes(f)||(h.placa||'').toLowerCase().includes(f)||(h.modelo||'').toLowerCase().includes(f);
+  }));
+}
+function carregarItem(i){
+  var h=todosHist[i];
+  CAMPOS.forEach(function(k){var el=document.getElementById(k);if(el)el.value=h.snap&&h.snap[k]?h.snap[k]:'';});
+  atualizarContadores();gerarPreview();ftab('vendedor');
+  showAlert('Atendimento carregado!','ok');
+}
+function delHist(i,e){
+  e.stopPropagation();
+  if(!confirm('Remover este atendimento?'))return;
+  fetch('/api/historico/'+i,{method:'DELETE'}).then(function(){carregarHist();});
+}
+
+function salvar(){
+  var nome=g('v_nome'),placa=g('ve_placa');
+  if(!nome&&!placa){showAlert('Preencha ao menos nome ou placa antes de salvar.','warn');return;}
+  var snap={};CAMPOS.forEach(function(k){snap[k]=g(k);});
+  fetch('/api/historico',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({nome:nome||'—',placa:placa||'—',modelo:g('ve_modelo'),snap:snap})
+  }).then(function(){carregarHist();showAlert('Atendimento salvo no histórico compartilhado!','ok');});
+}
+
+function proximo(){salvar();limpar();}
+function limpar(){
+  CAMPOS.forEach(function(k){var el=document.getElementById(k);if(el){el.value='';el.classList.remove('ia');}});
+  document.getElementById('paste-txt').value='';
+  atualizarContadores();gerarPreview();
+}
+
+// ─── CONFIG ───────────────────────────────────────────────────
+function getCfg(){return{
+  nome:g('cfg_nome')||'DIEGO DESPACHANTE',
+  cod:g('cfg_cod')||'2670',
+  end:g('cfg_end')||'AVENIDA BRASIL N.464 VILA JUSSARA ANAPOLIS-GO',
+  cep:g('cfg_cep')||'75123-115',
+  cidade:g('cfg_cidade')||'ANÁPOLIS/GO'
+};}
+
+// ─── ALERTA ───────────────────────────────────────────────────
+function showAlert(msg,tipo){
+  var el=document.getElementById('alert-box');
+  el.textContent=msg;el.className='alert '+tipo;el.style.display='block';
+  clearTimeout(el._t);el._t=setTimeout(function(){el.style.display='none';},5000);
+}
+
+// ─── USER BADGE (hostname simples) ────────────────────────────
+document.getElementById('user-badge').textContent=window.location.hostname||'local';
+
+// ─── INIT ─────────────────────────────────────────────────────
+carregarHist();
+gerarPreview();
+setInterval(carregarHist, 30000); // atualiza histórico a cada 30s
+</script>
+</body>
+</html>
