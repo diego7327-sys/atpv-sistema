@@ -174,6 +174,7 @@ tr:hover td{background:var(--surf2)}
     <button class="ftab active" onclick="ftab('vendedor')">Vendedor</button>
     <button class="ftab" onclick="ftab('veiculo')">Veículo</button>
     <button class="ftab" onclick="ftab('comprador')">Comprador</button>
+    <button class="ftab" onclick="ftab('contratante')" style="color:var(--warn)">★ Contratante</button>
     <button class="ftab" onclick="ftab('preview')">Pré-visualização</button>
     <button class="ftab" onclick="ftab('relatorios')" id="tab-rel">📊 Relatórios</button>
     <button class="ftab" onclick="ftab('config')">Configurações</button>
@@ -274,6 +275,112 @@ tr:hover td{background:var(--surf2)}
     </div>
   </div>
 
+  <!-- COMPRADOR -->
+  <div id="fc-comprador" class="ftc fields">
+    <div class="fb">
+      <div class="fb-title">Dados do comprador <span class="fill-count" id="cnt-comprador">0 campos</span></div>
+      <div class="g2">
+        <div class="fg">
+          <label>Nome completo</label>
+          <input id="c_nome" oninput="atualizar();acBuscar('c_nome','pessoa','c')" autocomplete="off" placeholder="Digite para buscar...">
+          <div class="ac-drop" id="ac-c_nome"></div>
+        </div>
+        <div class="fg">
+          <label>CPF / CNPJ <button class="btn-cpf-consulta" onclick="consultarCPF('c')">🔍 Receita</button></label>
+          <input id="c_cpf" oninput="atualizar();acBuscar('c_cpf','pessoa','c');checarCNPJ(this,'c')" autocomplete="off" placeholder="CPF ou CNPJ">
+          <div class="ac-drop" id="ac-c_cpf"></div>
+        </div>
+      </div>
+      <div class="g2">
+        <div class="fg"><label>RG</label><input id="c_rg" oninput="atualizar()"></div>
+        <div class="fg"><label>Data de nascimento</label><input id="c_nasc" placeholder="DD/MM/AAAA" oninput="atualizar()"></div>
+      </div>
+      <div class="g3">
+        <div class="fg"><label>Valor da venda (R$) ★</label><input id="c_valor" placeholder="R$ 0,00" oninput="atualizar()" style="border-color:rgba(0,212,170,.4)"></div>
+        <div class="fg"><label>Cidade / UF</label><input id="c_cidade" oninput="atualizar()"></div>
+        <div class="fg"><label>CEP <span id="c_cep_spin" style="display:none;color:var(--acc);font-size:10px">buscando...</span></label><input id="c_cep" oninput="maskCep(this,'c');atualizar()" placeholder="00000-000"></div>
+      </div>
+      <div class="g2">
+        <div class="fg"><label>Endereço completo</label><input id="c_end" oninput="atualizar()"></div>
+        <div class="fg"><label>E-mail</label><input id="c_email" oninput="atualizar()"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTRATANTE -->
+  <div id="fc-contratante" class="ftc fields">
+    <div class="fb">
+      <div class="fb-title">Contratante / Responsável pelo processo
+        <span style="font-size:11px;font-weight:400;color:var(--mut);margin-left:8px">Quem contratou o serviço (pode ser diferente do vendedor/comprador)</span>
+      </div>
+
+      <!-- Busca rápida -->
+      <div style="background:rgba(0,212,170,.06);border:1px solid rgba(0,212,170,.2);border-radius:9px;padding:14px;margin-bottom:16px">
+        <div style="font-size:11px;color:var(--acc);font-weight:600;margin-bottom:8px">BUSCAR CONTRATANTE CADASTRADO</div>
+        <div class="fg" style="margin:0;position:relative">
+          <input id="ct_busca" oninput="acBuscarContratante(this)" autocomplete="off" placeholder="Digite nome, CPF ou CNPJ para buscar...">
+          <div class="ac-drop" id="ac-ct_busca"></div>
+        </div>
+      </div>
+
+      <div class="g2">
+        <div class="fg">
+          <label>Nome / Razão Social ★</label>
+          <input id="ct_nome" oninput="atualizar()" placeholder="Nome do contratante">
+        </div>
+        <div class="fg">
+          <label>CPF / CNPJ</label>
+          <input id="ct_cpf" oninput="atualizar();checarCNPJ(this,'ct')" placeholder="CPF ou CNPJ">
+        </div>
+      </div>
+      <div class="g3">
+        <div class="fg">
+          <label>Tipo</label>
+          <select id="ct_tipo" onchange="atualizar()">
+            <option value="pessoa_fisica">Pessoa Física</option>
+            <option value="empresa">Empresa / Garagem</option>
+            <option value="concessionaria">Concessionária</option>
+            <option value="despachante">Outro Despachante</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label>Forma de pagamento</label>
+          <select id="ct_pgto" onchange="atualizar()">
+            <option value="por_processo">Por processo</option>
+            <option value="mensalidade">Mensalidade fixa</option>
+            <option value="combinado">A combinar</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label>Telefone / WhatsApp</label>
+          <input id="ct_tel" oninput="atualizar()" placeholder="(62) 9...">
+        </div>
+      </div>
+      <div class="g2">
+        <div class="fg">
+          <label>Valor do serviço (R$) ★</label>
+          <input id="ct_valor_servico" oninput="atualizar()" placeholder="R$ 0,00" style="border-color:rgba(0,212,170,.4)">
+        </div>
+        <div class="fg">
+          <label>Status pagamento</label>
+          <select id="ct_status_pgto" onchange="atualizar()">
+            <option value="pendente">Pendente</option>
+            <option value="pago">Pago</option>
+            <option value="mensalidade">Na mensalidade</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg">
+        <label>Observação</label>
+        <input id="ct_obs" oninput="atualizar()" placeholder="Observações sobre este processo...">
+      </div>
+
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button class="btn-sec" style="padding:8px 16px;font-size:12px" onclick="salvarContratanteAtual()">💾 Salvar contratante no cadastro</button>
+      </div>
+    </div>
+  </div>
+
   <!-- PRÉ-VIZ -->
   <div id="fc-preview" class="ftc fields">
     <div class="fb">
@@ -289,7 +396,7 @@ tr:hover td{background:var(--surf2)}
 
       <!-- FILTROS -->
       <div style="background:var(--surf2);border:1px solid var(--bord);border-radius:10px;padding:16px;margin-bottom:20px">
-        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);margin-bottom:12px">Filtrar período</div>
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);margin-bottom:12px">Filtrar período e busca</div>
         <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
           <div class="fg" style="margin:0;min-width:130px">
             <label>De</label>
@@ -299,7 +406,7 @@ tr:hover td{background:var(--surf2)}
             <label>Até</label>
             <input id="rel-ate" type="date" oninput="carregarRelatorio()">
           </div>
-          <div class="fg" style="margin:0;min-width:140px" id="fg-rel-func" style="display:none">
+          <div class="fg" style="margin:0;min-width:140px" id="fg-rel-func">
             <label>Funcionário</label>
             <select id="rel-func" onchange="carregarRelatorio()">
               <option value="">Todos</option>
@@ -316,23 +423,49 @@ tr:hover td{background:var(--surf2)}
           <button class="btn-sec" style="padding:8px 14px;font-size:12px" onclick="filtroRapido('mes')">Este mês</button>
           <button class="btn-sec" style="padding:8px 14px;font-size:12px" onclick="filtroRapido('ano')">Este ano</button>
         </div>
+        <!-- Busca textual -->
+        <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+          <div class="fg" style="margin:0;flex:1;min-width:150px">
+            <label>Placa</label>
+            <input id="rel-placa" placeholder="Buscar placa..." oninput="filtrarTabela()">
+          </div>
+          <div class="fg" style="margin:0;flex:1;min-width:150px">
+            <label>Modelo / Marca</label>
+            <input id="rel-modelo" placeholder="Buscar modelo..." oninput="filtrarTabela()">
+          </div>
+          <div class="fg" style="margin:0;flex:1;min-width:150px">
+            <label>Chassi</label>
+            <input id="rel-chassi" placeholder="Buscar chassi..." oninput="filtrarTabela()">
+          </div>
+          <div class="fg" style="margin:0;flex:1;min-width:150px">
+            <label>Vendedor</label>
+            <input id="rel-vendedor" placeholder="Nome do vendedor..." oninput="filtrarTabela()">
+          </div>
+          <div class="fg" style="margin:0;flex:1;min-width:150px">
+            <label>Comprador</label>
+            <input id="rel-comprador" placeholder="Nome do comprador..." oninput="filtrarTabela()">
+          </div>
+        </div>
       </div>
 
-      <!-- CARDS RESUMO -->
+      <!-- CARDS RESUMO — clicáveis para filtrar -->
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px" id="rel-cards">
-        <div style="background:var(--surf2);border-radius:10px;padding:16px;text-align:center">
+        <div onclick="filtrarStatus('')" style="background:var(--surf2);border-radius:10px;padding:16px;text-align:center;cursor:pointer;border:2px solid transparent;transition:border-color .15s" id="card-total">
           <div style="font-size:11px;color:var(--mut);margin-bottom:6px">TOTAL DE PROCESSOS</div>
           <div style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--txt)" id="rc-total">—</div>
+          <div style="font-size:10px;color:var(--mut);margin-top:4px">Clique para ver todos</div>
         </div>
-        <div style="background:rgba(0,212,170,.08);border:1px solid rgba(0,212,170,.2);border-radius:10px;padding:16px;text-align:center">
+        <div onclick="filtrarStatus('pago')" style="background:rgba(0,212,170,.08);border:2px solid rgba(0,212,170,.2);border-radius:10px;padding:16px;text-align:center;cursor:pointer;transition:border-color .15s" id="card-rec">
           <div style="font-size:11px;color:var(--mut);margin-bottom:6px">RECEBIDOS</div>
           <div style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--acc)" id="rc-rec">—</div>
           <div style="font-size:12px;color:var(--acc);margin-top:4px" id="rc-val-rec">R$ —</div>
+          <div style="font-size:10px;color:var(--mut);margin-top:4px">Clique para ver só recebidos</div>
         </div>
-        <div style="background:rgba(255,71,87,.08);border:1px solid rgba(255,71,87,.2);border-radius:10px;padding:16px;text-align:center">
+        <div onclick="filtrarStatus('pendente')" style="background:rgba(255,71,87,.08);border:2px solid rgba(255,71,87,.2);border-radius:10px;padding:16px;text-align:center;cursor:pointer;transition:border-color .15s" id="card-pend">
           <div style="font-size:11px;color:var(--mut);margin-bottom:6px">PENDENTES</div>
           <div style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--red)" id="rc-pend">—</div>
           <div style="font-size:12px;color:var(--red);margin-top:4px" id="rc-val-pend">R$ —</div>
+          <div style="font-size:10px;color:var(--mut);margin-top:4px">Clique para ver só pendentes</div>
         </div>
       </div>
 
@@ -346,6 +479,7 @@ tr:hover td{background:var(--surf2)}
 
       <!-- TABELA ATENDIMENTOS -->
       <div id="rpanel-atendimentos">
+        <div style="font-size:12px;color:var(--mut);margin-bottom:8px" id="rel-count-label"></div>
         <div style="overflow-x:auto">
           <table id="tbl-atend">
             <thead><tr>
@@ -501,7 +635,8 @@ var _timers = {};
 var CAMPOS_V = ['v_nome','v_cpf','v_rg','v_rg_org','v_ecivil','v_nasc','v_end','v_bairro','v_cidade','v_cep','v_cel','v_email'];
 var CAMPOS_VE= ['ve_modelo','ve_ano','ve_placa','ve_chassi'];
 var CAMPOS_C = ['c_nome','c_cpf','c_rg','c_nasc','c_valor','c_end','c_cidade','c_cep','c_email'];
-var CAMPOS_TODOS = CAMPOS_V.concat(CAMPOS_VE).concat(CAMPOS_C);
+var CAMPOS_CT= ['ct_nome','ct_cpf','ct_tipo','ct_pgto','ct_tel','ct_valor_servico','ct_status_pgto','ct_obs'];
+var CAMPOS_TODOS = CAMPOS_V.concat(CAMPOS_VE).concat(CAMPOS_C).concat(CAMPOS_CT);
 
 function g(id){ return (document.getElementById(id)||{}).value||''; }
 function setVal(id,val){ var el=document.getElementById(id); if(el&&val&&val.trim()){ el.value=val.trim(); el.classList.add('ia'); } }
@@ -511,7 +646,7 @@ function blank(v,n){ return v&&v.trim()?v:'_'.repeat(n||22); }
 function ftab(t){
   tabAtual=t;
   document.querySelectorAll('.ftab').forEach(function(el,i){
-    el.classList.toggle('active',['vendedor','veiculo','comprador','preview','relatorios','config'][i]===t);
+    el.classList.toggle('active',['vendedor','veiculo','comprador','contratante','preview','relatorios','config'][i]===t);
   });
   document.querySelectorAll('.ftc').forEach(function(el){ el.classList.remove('active'); });
   document.getElementById('fc-'+t).classList.add('active');
@@ -943,11 +1078,82 @@ function filtroRapido(tipo){
   carregarRelatorio();
 }
 
+var relFiltroStatus = ''; // '', 'pago', 'pendente'
+
+function filtrarStatus(status){
+  relFiltroStatus = status;
+  // Destaca card ativo
+  ['card-total','card-rec','card-pend'].forEach(function(id){
+    document.getElementById(id).style.outline='none';
+  });
+  if(status==='') document.getElementById('card-total').style.outline='2px solid var(--acc)';
+  if(status==='pago') document.getElementById('card-rec').style.outline='2px solid var(--acc)';
+  if(status==='pendente') document.getElementById('card-pend').style.outline='2px solid var(--red)';
+  // Vai para aba atendimentos
+  relTab('atendimentos');
+  filtrarTabela();
+}
+
+function filtrarTabela(){
+  if(!relDados.atendimentos) return;
+  var placa    = (document.getElementById('rel-placa').value||'').toLowerCase();
+  var modelo   = (document.getElementById('rel-modelo').value||'').toLowerCase();
+  var chassi   = (document.getElementById('rel-chassi').value||'').toLowerCase();
+  var vendedor = (document.getElementById('rel-vendedor').value||'').toLowerCase();
+  var comprador= (document.getElementById('rel-comprador').value||'').toLowerCase();
+
+  var lista = relDados.atendimentos.filter(function(a){
+    if(relFiltroStatus && a.status !== relFiltroStatus) return false;
+    if(placa    && !(a.placa||'').toLowerCase().includes(placa))    return false;
+    if(modelo   && !(a.modelo||'').toLowerCase().includes(modelo))  return false;
+    if(chassi   && !(a.chassi||'').toLowerCase().includes(chassi))  return false;
+    if(vendedor && !(a.vendedor||'').toLowerCase().includes(vendedor)) return false;
+    if(comprador){
+      var snap = (relDados._snaps&&relDados._snaps[a.idx])||{};
+      var cNome = (snap.c_nome||'').toLowerCase();
+      if(!cNome.includes(comprador)) return false;
+    }
+    return true;
+  });
+
+  var lbl = document.getElementById('rel-count-label');
+  if(lbl) lbl.textContent = lista.length + ' registro(s) encontrado(s)' + (relFiltroStatus?' — Filtro: '+relFiltroStatus:'');
+
+  var tb = document.getElementById('tbody-atend');
+  if(!lista.length){
+    tb.innerHTML='<tr><td colspan="9" style="text-align:center;color:var(--mut);padding:20px">Nenhum resultado encontrado</td></tr>';
+    return;
+  }
+  tb.innerHTML = lista.map(function(a){
+    var tagCls = a.status==='pago'?'tag-pago':'tag-pendente';
+    return '<tr>'+
+      '<td style="font-size:11px;white-space:nowrap">'+a.data+'</td>'+
+      '<td style="font-family:var(--mono);font-weight:600">'+a.placa+'</td>'+
+      '<td style="font-size:12px">'+a.modelo+'</td>'+
+      '<td style="font-size:12px">'+a.vendedor+'</td>'+
+      '<td style="font-size:12px">'+a.func+'</td>'+
+      '<td style="font-size:12px">'+a.empresa+'</td>'+
+      '<td style="font-family:var(--mono);font-size:12px">'+(a.valor||'—')+'</td>'+
+      '<td><span class="'+tagCls+'">'+a.status+'</span></td>'+
+      '<td><button class="btn-fin" onclick="abrirFin('+a.idx+',event)">Editar</button></td>'+
+      '</tr>';
+  }).join('');
+}
+
 function limparFiltros(){
   document.getElementById('rel-de').value='';
   document.getElementById('rel-ate').value='';
   document.getElementById('rel-func').value='';
   document.getElementById('rel-emp').value='';
+  document.getElementById('rel-placa').value='';
+  document.getElementById('rel-modelo').value='';
+  document.getElementById('rel-chassi').value='';
+  document.getElementById('rel-vendedor').value='';
+  document.getElementById('rel-comprador').value='';
+  relFiltroStatus='';
+  ['card-total','card-rec','card-pend'].forEach(function(id){
+    document.getElementById(id).style.outline='none';
+  });
   carregarRelatorio();
 }
 
@@ -985,26 +1191,8 @@ function renderRelatorio(d){
   document.getElementById('rc-val-rec').textContent  = fmtVal(d.val_recebido);
   document.getElementById('rc-val-pend').textContent = fmtVal(d.val_pendente);
 
-  // Tabela atendimentos
-  var tb = document.getElementById('tbody-atend');
-  if(!d.atendimentos||!d.atendimentos.length){
-    tb.innerHTML='<tr><td colspan="9" style="text-align:center;color:var(--mut);padding:20px">Nenhum atendimento no período</td></tr>';
-  } else {
-    tb.innerHTML = d.atendimentos.map(function(a){
-      var tagCls = a.status==='pago'?'tag-pago':'tag-pendente';
-      return '<tr>'+
-        '<td style="font-size:11px;white-space:nowrap">'+a.data+'</td>'+
-        '<td style="font-family:var(--mono);font-weight:600">'+a.placa+'</td>'+
-        '<td style="font-size:12px">'+a.modelo+'</td>'+
-        '<td style="font-size:12px">'+a.vendedor+'</td>'+
-        '<td style="font-size:12px">'+a.func+'</td>'+
-        '<td style="font-size:12px">'+a.empresa+'</td>'+
-        '<td style="font-family:var(--mono);font-size:12px">'+(a.valor||'—')+'</td>'+
-        '<td><span class="'+tagCls+'">'+a.status+'</span></td>'+
-        '<td><button class="btn-fin" onclick="abrirFin('+a.idx+',event)">Editar</button></td>'+
-        '</tr>';
-    }).join('');
-  }
+  // Tabela atendimentos — delega para filtrarTabela que aplica todos os filtros
+  filtrarTabela();
 
   // Por funcionário
   var tf = document.getElementById('tbody-func');
@@ -1141,10 +1329,16 @@ function salvar(){
   if(igual){showAlert('Já está salvo no histórico.','warn');return;}
   var snap={};CAMPOS_TODOS.forEach(function(k){snap[k]=g(k);});
   fetch('/api/historico',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({nome:nome||'—',placa:placa||'—',modelo:g('ve_modelo'),snap:snap})
+    body:JSON.stringify({
+      nome:nome||'—',placa:placa||'—',modelo:g('ve_modelo'),snap:snap,
+      contratante_nome:g('ct_nome'),contratante_cpf:g('ct_cpf'),
+      contratante_tipo:g('ct_tipo'),ct_pgto:g('ct_pgto'),
+      valor_cobrado:g('ct_valor_servico'),status_pgto:g('ct_status_pgto'),obs:g('ct_obs'),
+    })
   }).then(function(){
     carregarHist();showAlert('✓ Atendimento salvo!','ok');
     salvarCadastros();
+    if(g('ct_nome')) salvarContratanteAtual();
   });
 }
 function salvarCadastros(){
@@ -1163,7 +1357,7 @@ function salvarCadastros(){
 
 // ═══ LIMPAR ══════════════════════════════════════════════════
 function limparAba(){
-  var mapa={vendedor:CAMPOS_V,veiculo:CAMPOS_VE,comprador:CAMPOS_C};
+  var mapa={vendedor:CAMPOS_V,veiculo:CAMPOS_VE,comprador:CAMPOS_C,contratante:CAMPOS_CT};
   (mapa[tabAtual]||[]).forEach(function(k){var el=document.getElementById(k);if(el){el.value='';el.classList.remove('ia');}});
   document.getElementById('paste-txt').value='';
   atualizarContadores();
@@ -1205,6 +1399,55 @@ function limparTodosServidor(){
   if(!confirm('⚠ ATENÇÃO: Isso vai apagar histórico, pessoas e veículos.\nTem certeza?')) return;
   if(!confirm('Última chance! Confirmar limpeza total?')) return;
   fetch('/api/limpar-tudo',{method:'POST'}).then(function(){ carregarHist(); showAlert('✓ Todos os dados apagados! Pode começar do zero.','ok'); });
+}
+
+// ═══ CONTRATANTE ═════════════════════════════════════════════
+function acBuscarContratante(el){
+  var q=el.value.trim();
+  if(q.length<1){acFechar('ac-ct_busca');return;}
+  clearTimeout(_timers['ct_busca']);
+  _timers['ct_busca']=setTimeout(function(){
+    fetch('/api/contratantes?q='+encodeURIComponent(q))
+    .then(function(r){return r.json();})
+    .then(function(lista){acRenderContratante(lista);});
+  },200);
+}
+function acRenderContratante(lista){
+  var drop=document.getElementById('ac-ct_busca');
+  if(!drop)return;
+  if(!lista.length){acFechar('ac-ct_busca');return;}
+  AC['contratante']=lista;
+  drop.innerHTML='';
+  lista.forEach(function(p,i){
+    var div=document.createElement('div');
+    div.className='ac-item';
+    div.innerHTML='<div class="ac-nome">'+(p.nome||'')+'</div><div class="ac-meta">'+(p.cpf||'')+(p.tipo?' · '+p.tipo:'')+'</div>';
+    div.setAttribute('data-i',i);
+    drop.appendChild(div);
+    (function(idx){
+      div.addEventListener('mousedown',function(e){
+        e.preventDefault();e.stopImmediatePropagation();
+        setTimeout(function(){preencherContratante(idx);},10);
+      });
+    })(i);
+  });
+  drop.classList.add('open');
+}
+function preencherContratante(idx){
+  var lista=AC['contratante'];
+  if(!lista||!lista[idx])return;
+  var p=lista[idx];
+  [{k:'nome',id:'ct_nome'},{k:'cpf',id:'ct_cpf'},{k:'tipo',id:'ct_tipo'},{k:'pgto',id:'ct_pgto'},{k:'tel',id:'ct_tel'}]
+  .forEach(function(m){var el=document.getElementById(m.id);if(el&&p[m.k]){el.value=p[m.k];el.classList.add('ia');}});
+  acFechar('ac-ct_busca');
+  document.getElementById('ct_busca').value='';
+  atualizar();showAlert('✓ Contratante: '+p.nome,'ok');
+}
+function salvarContratanteAtual(){
+  var dados={nome:g('ct_nome'),cpf:g('ct_cpf'),tipo:g('ct_tipo'),pgto:g('ct_pgto'),tel:g('ct_tel')};
+  if(!dados.nome){showAlert('Informe o nome do contratante.','warn');return;}
+  fetch('/api/contratantes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dados)})
+  .then(function(){showAlert('✓ Contratante salvo!','ok');});
 }
 
 // ═══ AUTH ═════════════════════════════════════════════════════
