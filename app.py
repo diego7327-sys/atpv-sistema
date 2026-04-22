@@ -81,16 +81,70 @@ def extrair_campos(texto):
                 return m.group(1).strip()
         return ""
 
-    r["v_nome"] = match([
-        r"Nome(?:\s+do\s+Proprietario)?[:\s]+([A-Z][A-Z\s]{3,60}?)(?:\s*CPF|\s*CNPJ|\n)",
-        r"Proprietario[:\s]+([A-Z][A-Z\s]{3,60}?)(?:\s*CPF|\n)",
-        r"Nome\s+Solicitante[:\s]+([A-Z][A-Z\s]{3,60}?)(?:\s*Tipo|\n)",
-        r"Aberto por[:\s]+([A-Z][A-Z\s]{3,60}?)(?:\s*Tipo|\n)",
-        r"Nome:[:\s]+([A-Z][A-Z\s]{3,60}?)(?:\s*CPF|\s*CNPJ|\n)",
-        r"Nome[^\n:]*:\s*[\t ]*\n[\t ]*([A-Z][A-Z\s]{3,60}?)[\t ]*\n",
-    ])
+    # ── DETECTA SE É CNH (OCR) ───────────────────────────────
+    is_cnh = bool(re.search(r"CARTEIRA\s+NACIONAL\s+DE\s+HABILITAC|DRIVER\s+LICENSE|PERMISO\s+DE\s+CONDUC|HABILITAC[AÃ]O", t, re.IGNORECASE))
+    is_rg  = bool(re.search(r"CARTEIRA\s+DE\s+IDENTIDADE|REGISTRO\s+GERAL|INSTITUTO\s+DE\s+IDENTIFICA", t, re.IGNORECASE))
+
+    if is_cnh:
+        # CNH: nome é a primeira linha com só letras maiúsculas após o cabeçalho
+        # Padrão: após "CONDUCCION\n" ou "LICENSE\n" vem o nome
+        nome_cnh = match([
+            r"CONDUCCION\s*\n\s*([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÀÈÌÒÙÇ][A-ZÁÉÍÓÚÂÊÎÔÛÃÕÀÈÌÒÙÇ\s]{3,60}?)(?:\s*\n)",
+            r"LICENSE[/\s]*PERMISO[^\n]*\n\s*([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÀÈÌÒÙÇ][A-ZÁÉÍÓÚÂÊÎÔÛÃÕÀÈÌÒÙÇ\s]{3,60}?)(?:\s*\n)",
+            r"HABILITAC[AÃ]O[^\n]*\n\s*([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÀÈÌÒÙÇ][A-ZÁÉÍÓÚÂÊÎÔÛÃÕÀÈÌÒÙÇ\s]{3,60}?)(?:\s*\n)",
+        ])
+        # Se não achou com padrão, pega a primeira linha com 2+ palavras só letras maiúsculas
+        if not nome_cnh:
+            for linha in t.split('\n'):
+                linha = linha.strip()
+                if re.match(r'^[A-ZÁÉÍÓÚÂÊÎÔÛÃÕÀÈÌÒÙÇ]{2,}(\s+[A-ZÁÉÍÓÚÂÊÎÔÛÃÕÀÈÌÒÙÇ]{2,})+$', linha):
+                    if len(linha) > 8 and not any(w in linha for w in ['BRASIL','FEDERAL','MINISTERIO','SECRETARIA','NACIONAL','TRANSITO','TERRITORIO','HABILITACAO']):
+                        nome_cnh = linha
+                        break
+        if nome_cnh:
+            r["v_nome"] = nome_cnh.strip()
+
+        # Data de nascimento na CNH: formato "DD/MM/AAAA, CIDADE, UF" ou linha isolada
+        nasc_m = re.search(r"(\d{2}/\d{2}/\d{4}),?\s+([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÀÈÌÒÙÇ][A-Z\s]+),?\s+([A-Z]{2})", t)
+        if nasc_m:
+            r["v_nasc"] = nasc_m.group(1)
+            r["v_cidade"] = nasc_m.group(2).strip() + "/" + nasc_m.group(3)
+
+        # RG da CNH (número de registro — 9+ dígitos)
+        rg_cnh = re.search(r"\b(\d{9,11})\b", t)
+        if rg_cnh:
+            r["v_rg"] = rg_cnh.group(1)
+
+        # Cidade atual (GOIANIA, GO — última ocorrência de cidade/UF)
+        cidades = re.findall(r"([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÀÈÌÒÙÇ][A-Z\s]{2,20}),\s*([A-Z]{2})(?:\s|\n|$)", t)
+        for cidade, uf in reversed(cidades):
+            cidade = cidade.strip()
+            if cidade not in ['DRIVER LICENSE','PERMISO','REPUBLICA','MINISTERIO','SECRETARIA']:
+                if not r.get("v_cidade"):
+                    r["v_cidade"] = cidade + "/" + uf
+                break
+
+    elif is_rg:
+        # RG: nome após "NOME" ou primeira linha com letras maiúsculas
+        r["v_nome"] = match([
+            r"NOME[:\s]*([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÀÈÌÒÙÇ][A-Z\s]{3,60}?)(?:\s*\n|\s*DATA)",
+        ])
+        r["v_nasc"] = match([r"NASCIMENTO[:\s]*(\d{2}/\d{2}/\d{4})"])
+        r["v_cidade"] = match([r"NATURAL[:\s]*([A-Z][A-Z\s]{2,30}?)(?:\s*\n|\s*UF)"])
+
+    # ── NOME — padrões gerais (DETRAN, formulários etc) ──────
+    if not r.get("v_nome"):
+        r["v_nome"] = match([
+            r"Nome(?:\s+do\s+Proprietario)?[:\s]+([A-Z][A-Z\s]{3,60}?)(?:\s*CPF|\s*CNPJ|\n)",
+            r"Proprietario[:\s]+([A-Z][A-Z\s]{3,60}?)(?:\s*CPF|\n)",
+            r"Nome\s+Solicitante[:\s]+([A-Z][A-Z\s]{3,60}?)(?:\s*Tipo|\n)",
+            r"Aberto por[:\s]+([A-Z][A-Z\s]{3,60}?)(?:\s*Tipo|\n)",
+            r"Nome:[:\s]+([A-Z][A-Z\s]{3,60}?)(?:\s*CPF|\s*CNPJ|\n)",
+            r"Nome[^\n:]*:\s*[\t ]*\n[\t ]*([A-Z][A-Z\s]{3,60}?)[\t ]*\n",
+        ])
     palavras_invalidas = ['EMPRESARIAL','SITUACAO','ESPECIAL','REGULAR','SUSPENSA','CANCELADA',
-                          'INAPTA','BAIXADA','PENDENTE','CONSULTA','SERVICOS','RECEITA']
+                          'INAPTA','BAIXADA','PENDENTE','CONSULTA','SERVICOS','RECEITA',
+                          'DRIVER LICENSE','HABILITACAO','REPUBLICA','MINISTERIO']
     if r.get("v_nome") and r["v_nome"].strip().upper() in palavras_invalidas:
         r["v_nome"] = ""
 
@@ -101,7 +155,17 @@ def extrair_campos(texto):
         r"\b(\d{3}\.\d{3}\.\d{3}-\d{2})\b",
         r"\b(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})\b",
     ])
-    r["v_rg"] = match([r"RG[:\s]*([\d]{5,12})", r"Identidade[:\s]*([\d]{5,12})"])
+
+    if not r.get("v_rg"):
+        r["v_rg"] = match([r"RG[:\s]*([\d]{5,12})", r"Identidade[:\s]*([\d]{5,12})"])
+
+    # Data de nascimento geral
+    if not r.get("v_nasc"):
+        nasc_g = match([
+            r"Nascimento[:\s]*(\d{2}/\d{2}/\d{4})",
+            r"Data\s+de\s+Nasc[:\s]*(\d{2}/\d{2}/\d{4})",
+        ])
+        if nasc_g: r["v_nasc"] = nasc_g
 
     pm = re.search(r"Placa[:\s]*([A-Z]{3}[-\s]?[\dA-Z]{4})", t, re.IGNORECASE) or \
          re.search(r"\b([A-Z]{3}[-]?[0-9][A-Z0-9][0-9]{2})\b", t)
@@ -114,7 +178,6 @@ def extrair_campos(texto):
     r["ve_modelo"] = match([
         r"Marca[/\s]*Modelo[:\s]*[\d-]*\s*([A-Z0-9][A-Z0-9\s/\-\.]{3,50}?)(?:\s*Ano|\s*cor|\s*Cap|\n)",
         r"Modelo[:\s]*[\d-]*\s*([A-Z0-9][A-Z0-9\s/\-\.]{3,40}?)(?:\s*Ano|\s*Cor|\n)",
-        # Formato "319465-VOLVO/FH 460 6X2T Ano Mod"
         r"\d{4,6}-([A-Z][A-Z0-9\s/\.]{3,40}?)(?:\s*Ano\s*Mod|\s*Ano\s*Fab|\n)",
     ])
     if r.get("ve_modelo"): r["ve_modelo"] = re.sub(r"^\d+-","",r["ve_modelo"]).strip()
@@ -142,10 +205,11 @@ def extrair_campos(texto):
 
     r["v_bairro"] = match([r"Bairro[:\s]*([A-Z][^\n]{3,40}?)(?:\s*CEP|\s*Munic|\s*Compl|\n)"])
 
-    cm2 = re.search(r"Munic[íi]pio[:\s]*([^\n]{3,50}?)(?:\s*CEP|\s*UF|\n)", t, re.IGNORECASE)
-    cidade_raw = re.sub(r"^[\d\s]+[-]\s*","",cm2.group(1)).strip() if cm2 else ""
-    if not cidade_raw: cidade_raw = match([r"Cidade[:\s]*([A-Z][^\n]{3,30}?)(?:\s*CEP|\s*UF|\n)"])
-    r["v_cidade"] = cidade_raw
+    if not r.get("v_cidade"):
+        cm2 = re.search(r"Munic[íi]pio[:\s]*([^\n]{3,50}?)(?:\s*CEP|\s*UF|\n)", t, re.IGNORECASE)
+        cidade_raw = re.sub(r"^[\d\s]+[-]\s*","",cm2.group(1)).strip() if cm2 else ""
+        if not cidade_raw: cidade_raw = match([r"Cidade[:\s]*([A-Z][^\n]{3,30}?)(?:\s*CEP|\s*UF|\n)"])
+        r["v_cidade"] = cidade_raw
 
     cep_m = re.search(r"CEP[:\s]*([\d]{2}[.;]?[\d]{3}[-.]?[\d]{3})", t, re.IGNORECASE)
     if cep_m:
