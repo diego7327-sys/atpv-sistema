@@ -112,8 +112,10 @@ def extrair_campos(texto):
     if cm: r["ve_chassi"] = cm.group(1).upper()
 
     r["ve_modelo"] = match([
-        r"Marca[/\s]*Modelo[:\s]*[\d-]*\s*([A-Z0-9\s/]{4,50}?)(?:\s*Ano|\s*\n)",
-        r"Modelo[:\s]*([A-Z0-9\s/]{4,40}?)(?:\s*Ano|\s*Cor|\n)",
+        r"Marca[/\s]*Modelo[:\s]*[\d-]*\s*([A-Z0-9][A-Z0-9\s/\-\.]{3,50}?)(?:\s*Ano|\s*cor|\s*Cap|\n)",
+        r"Modelo[:\s]*[\d-]*\s*([A-Z0-9][A-Z0-9\s/\-\.]{3,40}?)(?:\s*Ano|\s*Cor|\n)",
+        # Formato "319465-VOLVO/FH 460 6X2T Ano Mod"
+        r"\d{4,6}-([A-Z][A-Z0-9\s/\.]{3,40}?)(?:\s*Ano\s*Mod|\s*Ano\s*Fab|\n)",
     ])
     if r.get("ve_modelo"): r["ve_modelo"] = re.sub(r"^\d+-","",r["ve_modelo"]).strip()
 
