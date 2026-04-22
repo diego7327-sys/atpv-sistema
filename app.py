@@ -1,48 +1,101 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from werkzeug.security import generate_password_hash, check_password_hash
 import json, os, re, secrets
-from datetime import datetime, date
+from datetime import datetime
 from functools import wraps
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'atpv-diego-2670-secret-key-fixo')
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = False
-app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 horas
+app.config['PERMANENT_SESSION_LIFETIME'] = 86400
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 
-# ── ARQUIVOS ─────────────────────────────────────────────────
-HIST_FILE     = "historico.json"
-PESSOAS_FILE  = "pessoas.json"
-VEICULOS_FILE = "veiculos.json"
-USERS_FILE    = "usuarios.json"
-EMPRESAS_FILE = "empresas.json"
-CONTRAT_FILE  = "contratantes.json"
+# ── BANCO DE DADOS ────────────────────────────────────────────
+DATABASE_URL = os.environ.get('DATABASE_URL', '')
 
-def ler(f):
-    if os.path.exists(f):
-        with open(f,"r",encoding="utf-8") as fp: return json.load(fp)
-    return []
+def get_db():
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    return conn
 
-def gravar(f, data):
-    with open(f,"w",encoding="utf-8") as fp: json.dump(data, fp, ensure_ascii=False, indent=2)
-
-# ── USUÁRIOS PADRÃO ──────────────────────────────────────────
-def init_usuarios():
-    if not os.path.exists(USERS_FILE):
-        admin = {
+def init_db():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS dados (
+            chave TEXT PRIMARY KEY,
+            valor TEXT NOT NULL,
+            atualizado TIMESTAMP DEFAULT NOW()
+        )
+    """)
+    conn.commit()
+    # Cria admin padrão se não existir
+    cur.execute("SELECT valor FROM dados WHERE chave = 'usuarios'")
+    row = cur.fetchone()
+    if not row:
+        admin = [{
             "id": "1",
             "nome": "Diego Caetano",
             "login": "diego",
             "senha": generate_password_hash("diego2670"),
-            "perfil": "admin",  # admin, funcionario, empresa
+            "perfil": "admin",
             "empresa_id": None,
             "ativo": True,
             "criado": datetime.now().strftime("%d/%m/%Y %H:%M")
-        }
-        gravar(USERS_FILE, [admin])
+        }]
+        cur.execute("INSERT INTO dados (chave, valor) VALUES (%s, %s)",
+                   ('usuarios', json.dumps(admin, ensure_ascii=False)))
+        conn.commit()
+    cur.close()
+    conn.close()
 
-init_usuarios()
+def ler(chave):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT valor FROM dados WHERE chave = %s", (chave,))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if row:
+            return json.loads(row['valor'])
+        return []
+    except Exception as e:
+        print(f"Erro ler {chave}: {e}")
+        return []
+
+def gravar(chave, data):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO dados (chave, valor, atualizado)
+            VALUES (%s, %s, NOW())
+            ON CONFLICT (chave) DO UPDATE
+            SET valor = EXCLUDED.valor, atualizado = NOW()
+        """, (chave, json.dumps(data, ensure_ascii=False)))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Erro gravar {chave}: {e}")
+
+# Chaves do banco (substituem os arquivos JSON)
+HIST_FILE     = "historico"
+PESSOAS_FILE  = "pessoas"
+VEICULOS_FILE = "veiculos"
+USERS_FILE    = "usuarios"
+EMPRESAS_FILE = "empresas"
+CONTRAT_FILE  = "contratantes"
+
+# Inicializa banco
+try:
+    init_db()
+    print("Banco de dados inicializado!")
+except Exception as e:
+    print(f"Erro ao inicializar banco: {e}")
 
 # ── AUTENTICAÇÃO ─────────────────────────────────────────────
 def login_required(f):
