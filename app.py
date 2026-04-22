@@ -17,6 +17,7 @@ PESSOAS_FILE  = "pessoas.json"
 VEICULOS_FILE = "veiculos.json"
 USERS_FILE    = "usuarios.json"
 EMPRESAS_FILE = "empresas.json"
+CONTRAT_FILE  = "contratantes.json"
 
 def ler(f):
     if os.path.exists(f):
@@ -575,6 +576,30 @@ def api_permissoes(uid):
     if idx is None: return jsonify({"erro":"Não encontrado"}), 404
     users[idx]['ver_relatorio'] = data.get('ver_relatorio', False)
     gravar(USERS_FILE, users)
+    return jsonify({"ok":True})
+
+# ── CONTRATANTES ─────────────────────────────────────────────
+@app.route("/api/contratantes", methods=["GET"])
+@login_required
+def api_contrat_get():
+    q = request.args.get("q","").lower()
+    lista = ler(CONTRAT_FILE)
+    if q:
+        lista = [c for c in lista if q in (c.get("nome","")+"  "+c.get("cpf","")).lower()]
+    return jsonify(lista[:20])
+
+@app.route("/api/contratantes", methods=["POST"])
+@login_required
+def api_contrat_post():
+    data = request.get_json()
+    if not data.get("nome"): return jsonify({"erro":"Nome obrigatório"}), 400
+    lista = ler(CONTRAT_FILE)
+    cpf = data.get("cpf","").strip()
+    idx = next((i for i,c in enumerate(lista) if cpf and c.get("cpf")==cpf), None)
+    data["atualizado"] = datetime.now().strftime("%d/%m/%Y %H:%M")
+    if idx is not None: lista[idx] = data
+    else: lista.insert(0, data)
+    gravar(CONTRAT_FILE, lista[:500])
     return jsonify({"ok":True})
 
 if __name__ == "__main__":
