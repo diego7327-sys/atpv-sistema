@@ -697,6 +697,38 @@ def api_permissoes(uid):
     gravar(USERS_FILE, users)
     return jsonify({"ok":True})
 
+# ── COFRE SECRETO — só admin ─────────────────────────────────
+@app.route("/api/cofre", methods=["GET"])
+@login_required
+def api_cofre_get():
+    if session.get('perfil') != 'admin':
+        return jsonify({"erro":"Sem permissão"}), 403
+    return jsonify(ler("cofre"))
+
+@app.route("/api/cofre", methods=["POST"])
+@login_required
+def api_cofre_post():
+    if session.get('perfil') != 'admin':
+        return jsonify({"erro":"Sem permissão"}), 403
+    data = request.get_json()
+    if not data.get("desc") or not data.get("val"):
+        return jsonify({"erro":"Preencha todos os campos"}), 400
+    cofre = ler("cofre")
+    cofre.append({"desc": data["desc"], "val": data["val"]})
+    gravar("cofre", cofre)
+    return jsonify({"ok":True})
+
+@app.route("/api/cofre/<int:idx>", methods=["DELETE"])
+@login_required
+def api_cofre_del(idx):
+    if session.get('perfil') != 'admin':
+        return jsonify({"erro":"Sem permissão"}), 403
+    cofre = ler("cofre")
+    if 0 <= idx < len(cofre):
+        cofre.pop(idx)
+        gravar("cofre", cofre)
+    return jsonify({"ok":True})
+
 # ── CONTRATANTES ─────────────────────────────────────────────
 @app.route("/api/contratantes", methods=["GET"])
 @login_required
