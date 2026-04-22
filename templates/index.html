@@ -544,6 +544,19 @@ tr:hover td{background:var(--surf2)}
       <p class="cfg-note">Acesse após gerar a procuração para registrar a ATPV-E.</p>
       <a href="https://portal.detran.go.gov.br/sna/" target="_blank" class="link-det">🔗 Abrir portal DETRAN-GO</a>
     </div>
+
+    <!-- COFRE SECRETO — só admin vê -->
+    <div class="fb" id="cofre-sec" style="display:none">
+      <div class="fb-title" style="color:var(--warn)">🔐 Cofre do Sistema — Somente Admin</div>
+      <p class="cfg-note">Guarde aqui senhas, links e informações importantes. Criptografado e visível apenas para você.</p>
+      <div id="cofre-lista" style="margin-bottom:14px"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end">
+        <div class="fg" style="margin:0"><label>Descrição</label><input id="cofre-desc" placeholder="Ex: Senha Neon, Link GitHub..."></div>
+        <div class="fg" style="margin:0"><label>Valor</label><input id="cofre-val" placeholder="Senha ou link..."></div>
+        <button class="btn-sec" style="padding:9px 14px;font-size:12px" onclick="adicionarCofre()">+ Salvar</button>
+      </div>
+    </div>
+
     <div class="fb">
       <div class="fb-title" style="color:var(--red)">Zona de perigo — limpeza de dados</div>
       <p class="cfg-note">Use para apagar todos os dados de teste (histórico, cadastro de pessoas e veículos). <strong>Essa ação não tem volta!</strong></p>
@@ -1450,6 +1463,63 @@ function salvarContratanteAtual(){
   .then(function(){showAlert('✓ Contratante salvo!','ok');});
 }
 
+// ═══ COFRE SECRETO ═══════════════════════════════════════════
+function carregarCofre(){
+  fetch('/api/cofre').then(function(r){return r.json();}).then(function(lista){
+    var el=document.getElementById('cofre-lista');
+    if(!lista||!lista.length){
+      el.innerHTML='<div style="font-size:12px;color:var(--mut);padding:8px 0">Nenhuma informação salva ainda.</div>';
+      return;
+    }
+    el.innerHTML='<table style="width:100%;font-size:12px;border-collapse:collapse">'+
+      '<tr><th style="text-align:left;padding:6px 8px;color:var(--mut);font-size:10px;border-bottom:1px solid var(--bord)">DESCRIÇÃO</th>'+
+      '<th style="text-align:left;padding:6px 8px;color:var(--mut);font-size:10px;border-bottom:1px solid var(--bord)">VALOR</th>'+
+      '<th style="border-bottom:1px solid var(--bord)"></th></tr>'+
+      lista.map(function(item,i){
+        return '<tr>'+
+          '<td style="padding:8px;font-weight:500">'+item.desc+'</td>'+
+          '<td style="padding:8px;font-family:var(--mono);font-size:11px">'+
+            '<span id="cofre-v-'+i+'" style="filter:blur(4px);cursor:pointer" onclick="revelarCofre('+i+')">'+item.val+'</span>'+
+            ' <button onclick="copiarCofre(\''+item.val+'\')" style="background:none;border:none;color:var(--acc);cursor:pointer;font-size:11px">📋</button>'+
+          '</td>'+
+          '<td style="padding:8px"><button onclick="removerCofre('+i+')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:11px">✕</button></td>'+
+          '</tr>';
+      }).join('')+
+      '</table>';
+  });
+}
+
+function revelarCofre(i){
+  var el=document.getElementById('cofre-v-'+i);
+  if(el) el.style.filter=el.style.filter?'':'blur(4px)';
+}
+
+function copiarCofre(val){
+  if(navigator.clipboard) navigator.clipboard.writeText(val).then(function(){ showAlert('✓ Copiado!','ok'); });
+}
+
+function adicionarCofre(){
+  var desc=document.getElementById('cofre-desc').value.trim();
+  var val=document.getElementById('cofre-val').value.trim();
+  if(!desc||!val){ showAlert('Preencha descrição e valor.','warn'); return; }
+  fetch('/api/cofre',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({desc:desc,val:val})})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    document.getElementById('cofre-desc').value='';
+    document.getElementById('cofre-val').value='';
+    carregarCofre();
+    showAlert('✓ Salvo no cofre!','ok');
+  });
+}
+
+function removerCofre(idx){
+  if(!confirm('Remover este item do cofre?')) return;
+  fetch('/api/cofre/'+idx,{method:'DELETE'})
+  .then(function(){ carregarCofre(); showAlert('Item removido.','ok'); });
+}
+
 // ═══ AUTH ═════════════════════════════════════════════════════
 var MEU_PERFIL = '', MEU_NOME = '', MINHA_EMPRESA = null;
 
@@ -1469,6 +1539,8 @@ function carregarMe(){
     badge.className = 'perfil-badge '+(classes[d.perfil]||'');
     if(d.perfil==='admin'){
       document.getElementById('btn-admin').style.display='inline-block';
+      document.getElementById('cofre-sec').style.display='block';
+      carregarCofre();
     }
     carregarFiltrosRelatorio();
   });
