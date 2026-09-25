@@ -268,40 +268,9 @@ tr:hover td{background:var(--surf2)}
         <div class="fg"><label>Cidade / UF</label><input id="c_cidade" oninput="atualizar()"></div>
         <div class="fg"><label>CEP <span id="c_cep_spin" style="display:none;color:var(--acc);font-size:10px">buscando...</span></label><input id="c_cep" oninput="maskCep(this,'c');atualizar()" placeholder="00000-000"></div>
       </div>
-      <div class="g2">
-        <div class="fg"><label>Endereço completo</label><input id="c_end" oninput="atualizar()"></div>
-        <div class="fg"><label>E-mail</label><input id="c_email" oninput="atualizar()"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- COMPRADOR -->
-  <div id="fc-comprador" class="ftc fields">
-    <div class="fb">
-      <div class="fb-title">Dados do comprador <span class="fill-count" id="cnt-comprador">0 campos</span></div>
-      <div class="g2">
-        <div class="fg">
-          <label>Nome completo</label>
-          <input id="c_nome" oninput="atualizar();acBuscar('c_nome','pessoa','c')" autocomplete="off" placeholder="Digite para buscar...">
-          <div class="ac-drop" id="ac-c_nome"></div>
-        </div>
-        <div class="fg">
-          <label>CPF / CNPJ <button class="btn-cpf-consulta" onclick="consultarCPF('c')">🔍 Receita</button></label>
-          <input id="c_cpf" oninput="atualizar();acBuscar('c_cpf','pessoa','c');checarCNPJ(this,'c')" autocomplete="off" placeholder="CPF ou CNPJ">
-          <div class="ac-drop" id="ac-c_cpf"></div>
-        </div>
-      </div>
-      <div class="g2">
-        <div class="fg"><label>RG</label><input id="c_rg" oninput="atualizar()"></div>
-        <div class="fg"><label>Data de nascimento</label><input id="c_nasc" placeholder="DD/MM/AAAA" oninput="atualizar()"></div>
-      </div>
       <div class="g3">
-        <div class="fg"><label>Valor da venda (R$) ★</label><input id="c_valor" placeholder="R$ 0,00" oninput="atualizar()" style="border-color:rgba(0,212,170,.4)"></div>
-        <div class="fg"><label>Cidade / UF</label><input id="c_cidade" oninput="atualizar()"></div>
-        <div class="fg"><label>CEP <span id="c_cep_spin" style="display:none;color:var(--acc);font-size:10px">buscando...</span></label><input id="c_cep" oninput="maskCep(this,'c');atualizar()" placeholder="00000-000"></div>
-      </div>
-      <div class="g2">
         <div class="fg"><label>Endereço completo</label><input id="c_end" oninput="atualizar()"></div>
+        <div class="fg"><label>Bairro</label><input id="c_bairro" oninput="atualizar()"></div>
         <div class="fg"><label>E-mail</label><input id="c_email" oninput="atualizar()"></div>
       </div>
     </div>
@@ -655,7 +624,7 @@ var _timers = {};
 
 var CAMPOS_V = ['v_nome','v_cpf','v_rg','v_rg_org','v_ecivil','v_nasc','v_end','v_bairro','v_cidade','v_cep','v_cel','v_email'];
 var CAMPOS_VE= ['ve_modelo','ve_ano','ve_placa','ve_chassi'];
-var CAMPOS_C = ['c_nome','c_cpf','c_rg','c_nasc','c_valor','c_end','c_cidade','c_cep','c_email'];
+var CAMPOS_C = ['c_nome','c_cpf','c_rg','c_nasc','c_valor','c_end','c_bairro','c_cidade','c_cep','c_email'];
 var CAMPOS_CT= ['ct_nome','ct_cpf','ct_tipo','ct_pgto','ct_tel','ct_valor_servico','ct_status_pgto','ct_obs'];
 var CAMPOS_TODOS = CAMPOS_V.concat(CAMPOS_VE).concat(CAMPOS_C).concat(CAMPOS_CT);
 
@@ -691,7 +660,8 @@ function extrair(){
     // Se estiver na aba comprador, remapeia v_ -> c_
     if(tabAtual==='comprador'){
       var mapa={'v_nome':'c_nome','v_cpf':'c_cpf','v_rg':'c_rg','v_end':'c_end',
-                'v_cidade':'c_cidade','v_cep':'c_cep','v_email':'c_email','v_nasc':'c_nasc'};
+                'v_cidade':'c_cidade','v_cep':'c_cep','v_email':'c_email','v_nasc':'c_nasc',
+                'v_bairro':'c_bairro'};
       var remapeado={};
       Object.keys(campos).forEach(function(k){
         remapeado[mapa[k]||k] = campos[k];
@@ -972,7 +942,8 @@ function gerarPreview(){
 'COMPRADOR\n\n'+
 'Nome:      '+blank(g('c_nome'),35)+'\n'+
 'CPF/CNPJ:  '+blank(g('c_cpf'),20)+'   RG: '+blank(g('c_rg'),12)+'\n'+
-'Endereço:  '+blank(g('c_end'),35)+'   '+blank(g('c_cidade'),15)+'\n'+
+'Endereço:  '+blank(g('c_end'),35)+'\n'+
+'Bairro:    '+blank(g('c_bairro'),22)+'   Cidade: '+blank(g('c_cidade'),15)+'\n'+
 'CEP:       '+blank(g('c_cep'),10)+'   E-mail: '+blank(g('c_email'),25)+'\n'+
 'Valor:     '+blank(g('c_valor'),15)+'\n\n'+
 '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'+
@@ -1011,8 +982,8 @@ function gerarPDF(){
   y=par('Declaro que os dados abaixo são verdadeiros, assumindo inteira responsabilidade, isentando o despachante de qualquer infortúnio.',ML,y,TW,8);y+=3;
   cam('Nome completo do comprador',g('c_nome'),ML,y,108);cam('CPF / CNPJ',g('c_cpf'),ML+112,y,58);y+=11;
   cam('RG',g('c_rg'),ML,y,52);cam('Valor da venda',g('c_valor'),ML+56,y,114);y+=11;
-  cam('Endereço completo',g('c_end'),ML,y,108);cam('Cidade / UF',g('c_cidade'),ML+112,y,58);y+=11;
-  cam('CEP',g('c_cep'),ML,y,52);cam('E-mail',g('c_email'),ML+56,y,114);y+=14;
+  cam('Endereço completo',g('c_end'),ML,y,108);cam('Bairro',g('c_bairro'),ML+112,y,58);y+=11;
+  cam('Cidade / UF',g('c_cidade'),ML,y,58);cam('CEP',g('c_cep'),ML+62,y,34);cam('E-mail',g('c_email'),ML+100,y,70);y+=14;
   lnC();y+=4;
   doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(50,50,50);doc.text(cfg.cidade+', '+dt,ML,y);y+=18;
   doc.setDrawColor(120,120,120);doc.line(W/2+8,y,ML+TW,y);
@@ -1370,7 +1341,7 @@ function salvarCadastros(){
   var cN=g('c_nome'),cC=g('c_cpf');
   if(cN||cC) fetch('/api/pessoas',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({nome:cN,cpf:cC,rg:g('c_rg'),nasc:g('c_nasc'),
-    end:g('c_end'),cidade:g('c_cidade'),cep:g('c_cep'),email:g('c_email')})});
+    end:g('c_end'),bairro:g('c_bairro'),cidade:g('c_cidade'),cep:g('c_cep'),email:g('c_email')})});
   var vP=g('ve_placa');
   if(vP) fetch('/api/veiculos',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({placa:vP,chassi:g('ve_chassi'),modelo:g('ve_modelo'),ano:g('ve_ano')})});
