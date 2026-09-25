@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from werkzeug.security import generate_password_hash, check_password_hash
 import json, os, re, secrets
+import urllib.request, urllib.error
 from datetime import datetime
 from functools import wraps
 import psycopg2
@@ -12,6 +13,10 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = False
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400
 app.config['SESSION_COOKIE_HTTPONLY'] = True
+
+# ── ZAPSIGN (assinatura eletrônica) ───────────────────────────
+ZAPSIGN_TOKEN = os.environ.get('ZAPSIGN_TOKEN', '')
+ZAPSIGN_API   = os.environ.get('ZAPSIGN_API', 'https://api.zapsign.com.br/api/v1')
 
 # ── BANCO DE DADOS ────────────────────────────────────────────
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
@@ -752,6 +757,94 @@ def api_contrat_post():
     else: lista.insert(0, data)
     gravar(CONTRAT_FILE, lista[:500])
     return jsonify({"ok":True})
+
+# ── ASSINATURA ELETRÔNICA (ZapSign) ───────────────────────────
+def _zapsign(caminho, payload=None, metodo="GET"):
+    """Chama a API da ZapSign. Devolve (dados, erro)."""
+    url = ZAPSIGN_API.rstrip("/") + caminho
+    corpo = json.dumps(payload, ensure_ascii=False).encode("utf-8") if payload is not None else None
+    req = urllib.request.Request(url, data=corpo, method=metodo, headers={
+        "Authorization": "Bearer " + ZAPSIGN_TOKEN,
+        "Content-Type": "application/json",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=90) as r:
+            return json.loads(r.read().decode("utf-8")), None
+    except urllib.error.HTTPError as e:
+        detalhe = ""
+        try:
+            detalhe = e.read().decode("utf-8")[:400]
+        except Exception:
+            pass
+        if e.code in (401, 403):
+            return None, "Token da ZapSign inválido ou sem permissão para usar a API."
+        return None, "ZapSign respondeu erro %s. %s" % (e.code, detalhe)
+    except Exception as e:
+        return None, "Não foi possível falar com a ZapSign: %s" % e
+
+@app.route("/api/assinatura", methods=["POST"])
+@login_required
+def api_assinatura():
+    if not ZAPSIGN_TOKEN:
+        return jsonify({"erro": "Token da ZapSign não configurado. Adicione a variável ZAPSIGN_TOKEN no Render."}), 400
+    data = request.get_json() or {}
+    pdf  = (data.get("pdf_base64") or "").strip()
+    nome = (data.get("nome") or "").strip()
+    if not pdf:
+        return jsonify({"erro": "PDF não recebido."}), 400
+    if not nome:
+        return jsonify({"erro": "Preencha o nome do vendedor antes de enviar para assinatura."}), 400
+    if "," in pdf[:120] and pdf.startswith("data:"):
+        pdf = pdf.split(",", 1)[1]
+
+    signer = {
+        "name": nome,
+        "auth_mode": "assinaturaTela",
+        "send_automatic_email": False,
+        "send_automatic_whatsapp": False,
+    }
+    email = (data.get("email") or "").strip()
+    if email:
+        signer["email"] = email
+    fone = re.sub(r"\D", "", data.get("telefone") or "")
+    if len(fone) >= 10:
+        signer["phone_country"] = "55"
+        signer["phone_number"]  = fone[-11:]
+
+    payload = {
+        "name": (data.get("titulo") or "Procuração ATPV-e")[:255],
+        "base64_pdf": pdf,
+        "lang": "pt-br",
+        "signers": [signer],
+    }
+    resp, erro = _zapsign("/docs/", payload, "POST")
+    if erro:
+        return jsonify({"erro": erro}), 502
+
+    signers = resp.get("signers") or [{}]
+    return jsonify({
+        "ok": True,
+        "doc_token": resp.get("token", ""),
+        "status": resp.get("status", ""),
+        "sign_url": signers[0].get("sign_url", ""),
+        "signer_nome": signers[0].get("name", nome),
+    })
+
+@app.route("/api/assinatura/<doc_token>", methods=["GET"])
+@login_required
+def api_assinatura_status(doc_token):
+    if not ZAPSIGN_TOKEN:
+        return jsonify({"erro": "Token da ZapSign não configurado."}), 400
+    resp, erro = _zapsign("/docs/%s/" % doc_token)
+    if erro:
+        return jsonify({"erro": erro}), 502
+    return jsonify({
+        "ok": True,
+        "status": resp.get("status", ""),
+        "signed_file": resp.get("signed_file", "") or "",
+        "signers": [{"nome": s.get("name",""), "status": s.get("status",""),
+                     "sign_url": s.get("sign_url","")} for s in (resp.get("signers") or [])],
+    })
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT",5000))
