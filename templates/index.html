@@ -540,6 +540,7 @@ tr:hover td{background:var(--surf2)}
 
   <div class="action-bar">
     <button class="btn-main" onclick="gerarPDF()">⬇ Baixar Procuração PDF</button>
+    <button class="btn-sec" id="btn-assin" onclick="enviarAssinatura()" style="border-color:rgba(0,212,170,.45);color:var(--acc)">✍ Enviar para assinatura</button>
     <button class="btn-sec" onclick="salvar()">Salvar histórico</button>
     <button class="btn-sec" onclick="limparTudo()">Próximo atendimento</button>
     <button class="btn-danger" onclick="limparAba()">Limpar aba</button>
@@ -550,6 +551,26 @@ tr:hover td{background:var(--surf2)}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <!-- MODAL ADMIN -->
+<div class="modal-overlay" id="modal-assin">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-title">
+      <span>✍ Link de assinatura gerado</span>
+      <button class="modal-close" onclick="fecharAssin()">✕</button>
+    </div>
+    <p style="font-size:13px;color:var(--mut);margin:0 0 16px;line-height:1.5">
+      Documento criado na ZapSign para <b id="assin-nome" style="color:var(--txt)"></b>.
+      Envie o link abaixo para o cliente assinar pelo celular.
+    </p>
+    <div class="fg"><label>Link de assinatura</label><input id="assin-url" readonly onclick="this.select()"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">
+      <button class="btn-main" onclick="copiarLinkAssin()">📋 Copiar link</button>
+      <button class="btn-sec" id="assin-wa" onclick="abrirWhatsAssin()">💬 Abrir no WhatsApp</button>
+      <button class="btn-sec" onclick="conferirAssin()">🔄 Conferir status</button>
+    </div>
+    <div id="assin-status" style="margin-top:16px;font-size:12px;color:var(--mut);line-height:1.6"></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-admin">
   <div class="modal">
     <div class="modal-title">
@@ -954,7 +975,7 @@ cfg.cidade+', '+dt+'\n\n\n'+
 }
 
 // ═══ GERAR PDF ═══════════════════════════════════════════════
-function gerarPDF(){
+function montarPDF(){
   var cfg=getCfg(); var d=new Date();
   var ms=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
   var dt=d.getDate().toString().padStart(2,'0')+'/'+ms[d.getMonth()]+'/'+d.getFullYear();
@@ -991,10 +1012,88 @@ function gerarPDF(){
   y=285;doc.setDrawColor(190,190,190);doc.line(ML,y,ML+TW,y);y+=4;
   doc.setFont('helvetica','oblique');doc.setFontSize(7);doc.setTextColor(150,150,150);
   doc.text(cfg.nome+' — Código DETRAN '+cfg.cod+' — '+cfg.end+' — CEP '+cfg.cep,W/2,y,{align:'center'});
+  return doc;
+}
+
+function gerarPDF(){
   var placa=g('ve_placa')||'veiculo';
-  doc.save('ATPV_'+placa.replace(/[^A-Z0-9]/gi,'_')+'_'+Date.now()+'.pdf');
+  montarPDF().save('ATPV_'+placa.replace(/[^A-Z0-9]/gi,'_')+'_'+Date.now()+'.pdf');
   HOJE++;document.getElementById('st-hoje').textContent=HOJE;
   showAlert('✓ PDF gerado e baixado!','ok');
+}
+
+// ═══ ASSINATURA ELETRÔNICA (ZapSign) ═════════════════════════
+var ASSIN_TOKEN='';
+
+function enviarAssinatura(){
+  var nome=g('v_nome');
+  if(!nome){ showAlert('Preencha o nome do vendedor antes de enviar para assinatura.','warn'); ftab('vendedor'); return; }
+  var btn=document.getElementById('btn-assin');
+  var txtOrig=btn?btn.textContent:'';
+  if(btn){ btn.disabled=true; btn.textContent='Enviando...'; }
+  function restaurar(){ if(btn){ btn.disabled=false; btn.textContent=txtOrig; } }
+
+  var b64;
+  try{ b64=montarPDF().output('datauristring').split(',')[1]; }
+  catch(e){ restaurar(); showAlert('Erro ao gerar o PDF.','err'); return; }
+
+  var placa=g('ve_placa');
+  fetch('/api/assinatura',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({pdf_base64:b64,nome:nome,email:g('v_email'),telefone:g('v_cel'),
+      titulo:'Procuração ATPV-e'+(placa?' — '+placa:'')})})
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    restaurar();
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    if(!d.sign_url){ showAlert('A ZapSign não devolveu o link de assinatura.','err'); return; }
+    abrirModalAssin(d.sign_url,nome,g('v_cel'),d.doc_token);
+    showAlert('✓ Documento enviado para assinatura!','ok');
+  })
+  .catch(function(){ restaurar(); showAlert('Falha de conexão ao enviar para assinatura.','err'); });
+}
+
+function abrirModalAssin(url,nome,cel,token){
+  ASSIN_TOKEN=token||'';
+  document.getElementById('assin-nome').textContent=nome;
+  document.getElementById('assin-url').value=url;
+  document.getElementById('assin-status').textContent='';
+  var wa=document.getElementById('assin-wa');
+  var fone=(cel||'').replace(/\D/g,'');
+  if(fone.length>=10){ wa.style.display=''; wa.setAttribute('data-fone','55'+fone.slice(-11)); }
+  else { wa.style.display='none'; }
+  document.getElementById('modal-assin').classList.add('open');
+}
+
+function fecharAssin(){ document.getElementById('modal-assin').classList.remove('open'); }
+
+function copiarLinkAssin(){
+  var el=document.getElementById('assin-url');
+  el.select(); el.setSelectionRange(0,99999);
+  var ok=function(){ showAlert('✓ Link copiado!','ok'); };
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(el.value).then(ok).catch(function(){ document.execCommand('copy'); ok(); });
+  } else { document.execCommand('copy'); ok(); }
+}
+
+function abrirWhatsAssin(){
+  var fone=document.getElementById('assin-wa').getAttribute('data-fone')||'';
+  var url=document.getElementById('assin-url').value;
+  var msg='Olá! Segue o link para assinar a procuração do ATPV-e:\n\n'+url;
+  window.open('https://wa.me/'+fone+'?text='+encodeURIComponent(msg),'_blank');
+}
+
+function conferirAssin(){
+  var box=document.getElementById('assin-status');
+  if(!ASSIN_TOKEN){ box.textContent='Sem documento para consultar.'; return; }
+  box.textContent='Consultando...';
+  fetch('/api/assinatura/'+ASSIN_TOKEN).then(function(r){ return r.json(); }).then(function(d){
+    if(d.erro){ box.textContent=d.erro; return; }
+    var sg=(d.signers&&d.signers[0])?d.signers[0].status:'';
+    var html='Documento: <b style="color:var(--txt)">'+(d.status||'-')+'</b>';
+    if(sg) html+=' — signatário: <b style="color:var(--txt)">'+sg+'</b>';
+    if(d.signed_file) html+='<br><a href="'+d.signed_file+'" target="_blank" style="color:var(--acc)">⬇ Baixar PDF assinado</a>';
+    box.innerHTML=html;
+  }).catch(function(){ box.textContent='Falha ao consultar o status.'; });
 }
 
 // ═══ HISTÓRICO ═══════════════════════════════════════════════
