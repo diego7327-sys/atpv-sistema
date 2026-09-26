@@ -4,8 +4,10 @@ import json, os, re, secrets
 import urllib.request, urllib.error
 from datetime import datetime
 from functools import wraps
+from contextlib import contextmanager
 import psycopg2
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor, Json
+from psycopg2 import pool as pgpool
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'atpv-diego-2670-secret-key-fixo')
@@ -20,87 +22,294 @@ ZAPSIGN_API   = os.environ.get('ZAPSIGN_API', 'https://api.zapsign.com.br/api/v1
 
 # ── BANCO DE DADOS ────────────────────────────────────────────
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
+HIST_PAGINA  = int(os.environ.get('HIST_PAGINA', '100'))
 
-def get_db():
-    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
-    return conn
+_POOL = None
 
-def init_db():
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS dados (
-            chave TEXT PRIMARY KEY,
-            valor TEXT NOT NULL,
-            atualizado TIMESTAMP DEFAULT NOW()
-        )
-    """)
-    conn.commit()
-    # Cria admin padrão se não existir
-    cur.execute("SELECT valor FROM dados WHERE chave = 'usuarios'")
+def _get_pool():
+    """Pool de conexões — evita abrir uma conexão nova (e um handshake
+    TLS com o Neon) a cada requisição."""
+    global _POOL
+    if _POOL is None and DATABASE_URL:
+        _POOL = pgpool.ThreadedConnectionPool(1, 8, DATABASE_URL,
+                                              cursor_factory=RealDictCursor)
+    return _POOL
+
+@contextmanager
+def db(commit=False):
+    """Abre cursor, devolve a conexão ao pool no fim, sempre."""
+    p = _get_pool()
+    if p is None:
+        raise RuntimeError("DATABASE_URL não configurada")
+    conn = p.getconn()
+    try:
+        cur = conn.cursor()
+        yield cur
+        if commit:
+            conn.commit()
+        cur.close()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        p.putconn(conn)
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS empresas (
+    id          TEXT PRIMARY KEY,
+    nome        TEXT NOT NULL,
+    cnpj        TEXT DEFAULT '',
+    contato     TEXT DEFAULT '',
+    tel         TEXT DEFAULT '',
+    email       TEXT DEFAULT '',
+    criado      TEXT DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS usuarios (
+    id            TEXT PRIMARY KEY,
+    nome          TEXT DEFAULT '',
+    login         TEXT NOT NULL,
+    senha         TEXT NOT NULL,
+    perfil        TEXT DEFAULT 'funcionario',
+    empresa_id    TEXT,
+    ativo         BOOLEAN DEFAULT TRUE,
+    ver_relatorio BOOLEAN DEFAULT FALSE,
+    criado        TEXT DEFAULT ''
+);
+CREATE UNIQUE INDEX IF NOT EXISTS usuarios_login_uniq ON usuarios (lower(login));
+
+CREATE TABLE IF NOT EXISTS pessoas (
+    id         BIGSERIAL PRIMARY KEY,
+    nome       TEXT DEFAULT '',
+    cpf        TEXT DEFAULT '',
+    rg         TEXT DEFAULT '',
+    rg_org     TEXT DEFAULT '',
+    nasc       TEXT DEFAULT '',
+    ecivil     TEXT DEFAULT '',
+    endereco   TEXT DEFAULT '',
+    bairro     TEXT DEFAULT '',
+    cidade     TEXT DEFAULT '',
+    cep        TEXT DEFAULT '',
+    cel        TEXT DEFAULT '',
+    email      TEXT DEFAULT '',
+    atualizado TEXT DEFAULT ''
+);
+CREATE UNIQUE INDEX IF NOT EXISTS pessoas_cpf_uniq ON pessoas (cpf) WHERE cpf <> '';
+CREATE INDEX IF NOT EXISTS pessoas_nome_idx ON pessoas (lower(nome));
+
+CREATE TABLE IF NOT EXISTS veiculos (
+    id         BIGSERIAL PRIMARY KEY,
+    placa      TEXT NOT NULL UNIQUE,
+    chassi     TEXT DEFAULT '',
+    modelo     TEXT DEFAULT '',
+    ano        TEXT DEFAULT '',
+    atualizado TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS veiculos_modelo_idx ON veiculos (lower(modelo));
+
+CREATE TABLE IF NOT EXISTS contratantes (
+    id         BIGSERIAL PRIMARY KEY,
+    nome       TEXT NOT NULL,
+    cpf        TEXT DEFAULT '',
+    tipo       TEXT DEFAULT '',
+    tel        TEXT DEFAULT '',
+    pgto       TEXT DEFAULT '',
+    atualizado TEXT DEFAULT ''
+);
+CREATE UNIQUE INDEX IF NOT EXISTS contratantes_cpf_uniq ON contratantes (cpf) WHERE cpf <> '';
+CREATE INDEX IF NOT EXISTS contratantes_nome_idx ON contratantes (lower(nome));
+
+CREATE TABLE IF NOT EXISTS atendimentos (
+    id               BIGSERIAL PRIMARY KEY,
+    criado           TIMESTAMPTZ DEFAULT NOW(),
+    data             TEXT DEFAULT '',
+    nome             TEXT DEFAULT '',
+    placa            TEXT DEFAULT '',
+    modelo           TEXT DEFAULT '',
+    vendedor_nome    TEXT DEFAULT '',
+    chassi           TEXT DEFAULT '',
+    contratante_nome TEXT DEFAULT '',
+    contratante_cpf  TEXT DEFAULT '',
+    contratante_tipo TEXT DEFAULT '',
+    ct_pgto          TEXT DEFAULT '',
+    valor_cobrado    TEXT DEFAULT '',
+    status_pgto      TEXT DEFAULT 'pendente',
+    obs              TEXT DEFAULT '',
+    obs_fin          TEXT DEFAULT '',
+    user_id          TEXT DEFAULT '',
+    user_nome        TEXT DEFAULT '',
+    perfil           TEXT DEFAULT '',
+    empresa_id       TEXT,
+    assinatura_token TEXT DEFAULT '',
+    assinatura_url   TEXT DEFAULT '',
+    snap             JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE INDEX IF NOT EXISTS atend_criado_idx  ON atendimentos (criado DESC, id DESC);
+CREATE INDEX IF NOT EXISTS atend_empresa_idx ON atendimentos (empresa_id);
+CREATE INDEX IF NOT EXISTS atend_nome_idx    ON atendimentos (lower(nome));
+CREATE INDEX IF NOT EXISTS atend_placa_idx   ON atendimentos (lower(placa));
+
+CREATE TABLE IF NOT EXISTS cofre (
+    id        BIGSERIAL PRIMARY KEY,
+    descricao TEXT DEFAULT '',
+    valor     TEXT DEFAULT '',
+    criado    TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS migracoes (
+    nome     TEXT PRIMARY KEY,
+    aplicada TIMESTAMPTZ DEFAULT NOW()
+);
+"""
+
+def _ler_blob(cur, chave):
+    """Lê uma chave do formato antigo (tabela 'dados' com JSON em texto)."""
+    cur.execute("SELECT to_regclass('public.dados') AS t")
+    if not cur.fetchone()['t']:
+        return []
+    cur.execute("SELECT valor FROM dados WHERE chave = %s", (chave,))
     row = cur.fetchone()
     if not row:
-        admin = [{
-            "id": "1",
-            "nome": "Diego Caetano",
-            "login": "diego",
-            "senha": generate_password_hash("diego2670"),
-            "perfil": "admin",
-            "empresa_id": None,
-            "ativo": True,
-            "criado": datetime.now().strftime("%d/%m/%Y %H:%M")
-        }]
-        cur.execute("INSERT INTO dados (chave, valor) VALUES (%s, %s)",
-                   ('usuarios', json.dumps(admin, ensure_ascii=False)))
-        conn.commit()
-    cur.close()
-    conn.close()
-
-def ler(chave):
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute("SELECT valor FROM dados WHERE chave = %s", (chave,))
-        row = cur.fetchone()
-        cur.close()
-        conn.close()
-        if row:
-            return json.loads(row['valor'])
         return []
-    except Exception as e:
-        print(f"Erro ler {chave}: {e}")
+    try:
+        d = json.loads(row['valor'])
+        return d if isinstance(d, list) else []
+    except Exception:
         return []
 
-def gravar(chave, data):
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO dados (chave, valor, atualizado)
-            VALUES (%s, %s, NOW())
-            ON CONFLICT (chave) DO UPDATE
-            SET valor = EXCLUDED.valor, atualizado = NOW()
-        """, (chave, json.dumps(data, ensure_ascii=False)))
-        conn.commit()
-        cur.close()
-        conn.close()
-    except Exception as e:
-        print(f"Erro gravar {chave}: {e}")
+def _data_br(txt):
+    """'25/09/2026 10:30' -> datetime. Devolve None se não der para ler."""
+    if not txt:
+        return None
+    for fmt in ("%d/%m/%Y %H:%M", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(str(txt).strip(), fmt)
+        except ValueError:
+            continue
+    return None
 
-# Chaves do banco (substituem os arquivos JSON)
-HIST_FILE     = "historico"
-PESSOAS_FILE  = "pessoas"
-VEICULOS_FILE = "veiculos"
-USERS_FILE    = "usuarios"
-EMPRESAS_FILE = "empresas"
-CONTRAT_FILE  = "contratantes"
+def _sim_nao(v, padrao=True):
+    if isinstance(v, bool): return v
+    if v is None: return padrao
+    return str(v).lower() in ('true', '1', 'sim')
 
-# Inicializa banco
+def migrar_do_blob(cur):
+    """Copia os dados do formato antigo para as tabelas novas.
+    Roda uma única vez; a tabela 'dados' NÃO é apagada — fica como backup."""
+    cur.execute("SELECT 1 FROM migracoes WHERE nome = 'normalizacao_v1'")
+    if cur.fetchone():
+        return None
+
+    contagem = {}
+
+    for e in _ler_blob(cur, "empresas"):
+        cur.execute("""INSERT INTO empresas (id,nome,cnpj,contato,tel,email,criado)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING""",
+                    (str(e.get("id") or secrets.token_hex(8)), e.get("nome",""), e.get("cnpj",""),
+                     e.get("contato",""), e.get("tel",""), e.get("email",""), e.get("criado","")))
+    contagem['empresas'] = cur.rowcount if cur.rowcount and cur.rowcount > 0 else len(_ler_blob(cur,"empresas"))
+
+    for u in _ler_blob(cur, "usuarios"):
+        if not u.get("login") or not u.get("senha"):
+            continue
+        cur.execute("""INSERT INTO usuarios (id,nome,login,senha,perfil,empresa_id,ativo,ver_relatorio,criado)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                       ON CONFLICT (lower(login)) DO NOTHING""",
+                    (str(u.get("id") or secrets.token_hex(8)), u.get("nome",""), u.get("login"),
+                     u.get("senha"), u.get("perfil","funcionario"), u.get("empresa_id"),
+                     _sim_nao(u.get("ativo"), True), _sim_nao(u.get("ver_relatorio"), False),
+                     u.get("criado","")))
+    contagem['usuarios'] = len(_ler_blob(cur, "usuarios"))
+
+    for p in _ler_blob(cur, "pessoas"):
+        cur.execute("""INSERT INTO pessoas (nome,cpf,rg,rg_org,nasc,ecivil,endereco,bairro,cidade,cep,cel,email,atualizado)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                       ON CONFLICT (cpf) WHERE cpf <> '' DO NOTHING""",
+                    (p.get("nome",""), p.get("cpf",""), p.get("rg",""), p.get("rg_org",""),
+                     p.get("nasc",""), p.get("ecivil",""), p.get("end",""), p.get("bairro",""),
+                     p.get("cidade",""), p.get("cep",""), p.get("cel",""), p.get("email",""),
+                     p.get("atualizado","")))
+    contagem['pessoas'] = len(_ler_blob(cur, "pessoas"))
+
+    for v in _ler_blob(cur, "veiculos"):
+        if not v.get("placa"):
+            continue
+        cur.execute("""INSERT INTO veiculos (placa,chassi,modelo,ano,atualizado)
+                       VALUES (%s,%s,%s,%s,%s) ON CONFLICT (placa) DO NOTHING""",
+                    (v.get("placa","").upper(), v.get("chassi",""), v.get("modelo",""),
+                     v.get("ano",""), v.get("atualizado","")))
+    contagem['veiculos'] = len(_ler_blob(cur, "veiculos"))
+
+    for c in _ler_blob(cur, "contratantes"):
+        if not c.get("nome"):
+            continue
+        cur.execute("""INSERT INTO contratantes (nome,cpf,tipo,tel,pgto,atualizado)
+                       VALUES (%s,%s,%s,%s,%s,%s)
+                       ON CONFLICT (cpf) WHERE cpf <> '' DO NOTHING""",
+                    (c.get("nome"), c.get("cpf",""), c.get("tipo",""), c.get("tel",""),
+                     c.get("pgto",""), c.get("atualizado","")))
+    contagem['contratantes'] = len(_ler_blob(cur, "contratantes"))
+
+    for c in _ler_blob(cur, "cofre"):
+        cur.execute("INSERT INTO cofre (descricao,valor) VALUES (%s,%s)",
+                    (c.get("desc",""), c.get("val","")))
+    contagem['cofre'] = len(_ler_blob(cur, "cofre"))
+
+    # Histórico: o mais antigo entra primeiro, para que os IDs cresçam
+    # na mesma ordem cronológica da lista antiga.
+    hist = _ler_blob(cur, "historico")
+    for h in reversed(hist):
+        snap = h.get("snap") or {}
+        cur.execute("""INSERT INTO atendimentos
+            (criado,data,nome,placa,modelo,vendedor_nome,chassi,contratante_nome,contratante_cpf,
+             contratante_tipo,ct_pgto,valor_cobrado,status_pgto,obs,obs_fin,
+             user_id,user_nome,perfil,empresa_id,snap)
+            VALUES (COALESCE(%s, NOW()),%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            (_data_br(h.get("data")),
+             h.get("data",""), h.get("nome",""), h.get("placa",""), h.get("modelo",""),
+             snap.get("v_nome",""), snap.get("ve_chassi",""),
+             h.get("contratante_nome",""), h.get("contratante_cpf",""),
+             h.get("contratante_tipo",""), h.get("ct_pgto",""),
+             h.get("valor_cobrado",""), h.get("status_pgto","pendente"),
+             h.get("obs",""), h.get("obs_fin",""),
+             str(h.get("user_id") or ""), h.get("user_nome",""), h.get("perfil",""),
+             h.get("empresa_id"), Json(snap)))
+    contagem['atendimentos'] = len(hist)
+
+    cur.execute("INSERT INTO migracoes (nome) VALUES ('normalizacao_v1')")
+    return contagem
+
+def init_db():
+    with db(commit=True) as cur:
+        # O Render pode subir vários processos ao mesmo tempo. Este cadeado
+        # garante que só um crie as tabelas e migre; os outros esperam e,
+        # ao entrar, já encontram a migração marcada como feita.
+        cur.execute("SELECT pg_advisory_xact_lock(918273645)")
+        cur.execute(SCHEMA)
+        resultado = migrar_do_blob(cur)
+        if resultado:
+            print("Migração normalizacao_v1 concluída:", resultado)
+        # Admin padrão, só se não houver nenhum usuário
+        cur.execute("SELECT COUNT(*) AS n FROM usuarios")
+        if cur.fetchone()['n'] == 0:
+            senha_inicial = os.environ.get('ADMIN_SENHA_INICIAL', 'diego2670')
+            cur.execute("""INSERT INTO usuarios (id,nome,login,senha,perfil,ativo,criado)
+                           VALUES ('1','Diego Caetano','diego',%s,'admin',TRUE,%s)""",
+                        (generate_password_hash(senha_inicial),
+                         datetime.now().strftime("%d/%m/%Y %H:%M")))
+            print("Usuário admin criado.")
+
 try:
-    init_db()
-    print("Banco de dados inicializado!")
+    if DATABASE_URL:
+        init_db()
+        print("Banco de dados pronto.")
+    else:
+        print("DATABASE_URL não configurada — banco não inicializado.")
 except Exception as e:
-    print(f"Erro ao inicializar banco: {e}")
+    print("Erro ao inicializar banco: %s" % e)
+
+def agora():
+    return datetime.now().strftime("%d/%m/%Y %H:%M")
 
 # ── AUTENTICAÇÃO ─────────────────────────────────────────────
 def login_required(f):
@@ -121,11 +330,8 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated
 
-def get_user():
-    uid = session.get('user_id')
-    if not uid: return None
-    users = ler(USERS_FILE)
-    return next((u for u in users if u['id']==uid), None)
+def so_admin():
+    return session.get('perfil') == 'admin'
 
 # ── EXTRAÇÃO POR REGEX ────────────────────────────────────────
 def extrair_campos(texto):
@@ -294,469 +500,514 @@ def login_page():
 
 @app.route("/api/login", methods=["POST"])
 def api_login():
-    data = request.get_json()
-    login = data.get("login","").strip().lower()
-    senha = data.get("senha","")
-    users = ler(USERS_FILE)
-    user = next((u for u in users if u['login'].lower()==login and u.get('ativo',True)), None)
+    data = request.get_json() or {}
+    login = (data.get("login") or "").strip().lower()
+    senha = data.get("senha") or ""
+    with db() as cur:
+        cur.execute("SELECT * FROM usuarios WHERE lower(login) = %s AND ativo = TRUE", (login,))
+        user = cur.fetchone()
     if not user or not check_password_hash(user['senha'], senha):
         return jsonify({"erro": "Login ou senha incorretos"}), 401
     session.permanent = True
-    session['user_id']  = user['id']
-    session['user_nome']= user['nome']
-    session['perfil']   = user['perfil']
+    session['user_id']    = user['id']
+    session['user_nome']  = user['nome']
+    session['perfil']     = user['perfil']
     session['empresa_id'] = user.get('empresa_id')
-    return jsonify({"ok":True, "perfil":user['perfil'], "nome":user['nome']})
+    return jsonify({"ok": True, "perfil": user['perfil'], "nome": user['nome']})
 
 @app.route("/api/logout", methods=["POST"])
 def api_logout():
     session.clear()
-    return jsonify({"ok":True})
+    return jsonify({"ok": True})
 
 @app.route("/api/me")
 def api_me():
     if 'user_id' not in session:
         return jsonify({"logado": False})
-    return jsonify({"logado":True,"nome":session.get('user_nome'),"perfil":session.get('perfil'),
-                    "empresa_id":session.get('empresa_id')})
+    return jsonify({"logado": True, "nome": session.get('user_nome'),
+                    "perfil": session.get('perfil'), "empresa_id": session.get('empresa_id')})
 
-# ── ROTAS PRINCIPAIS ──────────────────────────────────────────
+# ── EXTRAÇÃO ──────────────────────────────────────────────────
 @app.route("/api/extrair", methods=["POST"])
 @login_required
 def api_extrair():
-    data = request.get_json()
-    campos = extrair_campos(data.get("texto",""))
-    return jsonify({"campos":campos,"total":len(campos)})
+    data = request.get_json() or {}
+    campos = extrair_campos(data.get("texto", ""))
+    return jsonify({"campos": campos, "total": len(campos)})
 
-# ── HISTÓRICO ─────────────────────────────────────────────────
+# ── HISTÓRICO / ATENDIMENTOS ──────────────────────────────────
+CAMPOS_LISTA = ("id, data, nome, placa, modelo, valor_cobrado, status_pgto, obs_fin, "
+                "user_nome, empresa_id, assinatura_url, assinatura_token")
+
+def _escopo_empresa():
+    """Empresa só enxerga os próprios atendimentos."""
+    if session.get('perfil') == 'empresa':
+        return " AND empresa_id = %s", [session.get('empresa_id')]
+    return "", []
+
 @app.route("/api/historico", methods=["GET"])
 @login_required
 def api_hist_get():
-    hist = ler(HIST_FILE)
-    perfil = session.get('perfil')
-    empresa_id = session.get('empresa_id')
-    # Empresa só vê o próprio histórico
-    if perfil == 'empresa':
-        hist = [h for h in hist if h.get('empresa_id') == empresa_id]
-    return jsonify(hist)
+    q = (request.args.get("q") or "").strip().lower()
+    try:
+        limite = int(request.args.get("limite", HIST_PAGINA))
+    except ValueError:
+        limite = HIST_PAGINA
+    limite = max(1, min(limite, 1000))
+
+    base, base_params = _escopo_empresa()
+    cond, params = base, list(base_params)
+    if q:
+        cond += " AND (lower(nome) LIKE %s OR lower(placa) LIKE %s)"
+        params += ['%' + q + '%', '%' + q + '%']
+
+    with db() as cur:
+        # total geral (o contador da tela nao muda quando o usuario busca)
+        cur.execute("SELECT COUNT(*) AS n FROM atendimentos WHERE TRUE" + base, base_params)
+        total = cur.fetchone()['n']
+        cur.execute("SELECT COUNT(*) AS n FROM atendimentos WHERE TRUE" + cond, params)
+        encontrados = cur.fetchone()['n']
+        cur.execute("SELECT " + CAMPOS_LISTA + " FROM atendimentos WHERE TRUE" + cond +
+                    " ORDER BY id DESC LIMIT %s", params + [limite])
+        itens = [dict(r) for r in cur.fetchall()]
+    return jsonify({"total": total, "encontrados": encontrados, "itens": itens})
 
 @app.route("/api/historico", methods=["POST"])
 @login_required
 def api_hist_post():
-    data = request.get_json()
-    hist = ler(HIST_FILE)
-    data["data"]        = datetime.now().strftime("%d/%m/%Y %H:%M")
-    data["user_id"]     = session.get('user_id')
-    data["user_nome"]   = session.get('user_nome')
-    data["perfil"]      = session.get('perfil')
-    data["empresa_id"]  = session.get('empresa_id')
-    hist.insert(0,data); hist = hist[:500]
-    gravar(HIST_FILE, hist)
-    return jsonify({"ok":True})
+    data = request.get_json() or {}
+    snap = data.get("snap") or {}
+    with db(commit=True) as cur:
+        cur.execute("""INSERT INTO atendimentos
+            (data,nome,placa,modelo,vendedor_nome,chassi,contratante_nome,contratante_cpf,
+             contratante_tipo,ct_pgto,valor_cobrado,status_pgto,obs,
+             user_id,user_nome,perfil,empresa_id,snap)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+            (agora(), data.get("nome", ""), data.get("placa", ""), data.get("modelo", ""),
+             snap.get("v_nome", ""), snap.get("ve_chassi", ""),
+             data.get("contratante_nome", ""), data.get("contratante_cpf", ""),
+             data.get("contratante_tipo", ""), data.get("ct_pgto", ""),
+             data.get("valor_cobrado", ""), data.get("status_pgto") or "pendente",
+             data.get("obs", ""),
+             str(session.get('user_id') or ""), session.get('user_nome') or "",
+             session.get('perfil') or "", session.get('empresa_id'), Json(snap)))
+        novo = cur.fetchone()['id']
+    return jsonify({"ok": True, "id": novo})
 
-@app.route("/api/historico/<int:idx>", methods=["DELETE"])
+@app.route("/api/historico/<int:aid>", methods=["DELETE"])
 @login_required
-def api_hist_del(idx):
-    hist = ler(HIST_FILE)
-    perfil = session.get('perfil')
-    empresa_id = session.get('empresa_id')
-    if perfil == 'empresa':
-        # empresa só apaga os próprios
-        visivel = [h for h in hist if h.get('empresa_id')==empresa_id]
-        if 0<=idx<len(visivel):
-            real_idx = hist.index(visivel[idx])
-            hist.pop(real_idx)
-    elif 0<=idx<len(hist):
-        hist.pop(idx)
-    gravar(HIST_FILE, hist)
-    return jsonify({"ok":True})
+def api_hist_del(aid):
+    cond, params = _escopo_empresa()
+    with db(commit=True) as cur:
+        cur.execute("DELETE FROM atendimentos WHERE id = %s" + cond, [aid] + params)
+        apagou = cur.rowcount
+    if not apagou:
+        return jsonify({"erro": "Não encontrado"}), 404
+    return jsonify({"ok": True})
+
+@app.route("/api/historico/<int:aid>/snap", methods=["GET"])
+@login_required
+def api_hist_snap(aid):
+    cond, params = _escopo_empresa()
+    with db() as cur:
+        cur.execute("SELECT snap FROM atendimentos WHERE id = %s" + cond, [aid] + params)
+        row = cur.fetchone()
+    if not row:
+        return jsonify({"erro": "Não encontrado"}), 404
+    return jsonify({"ok": True, "snap": row['snap'] or {}})
+
+@app.route("/api/historico/<int:aid>/financeiro", methods=["PUT"])
+@login_required
+def api_fin_put(aid):
+    data = request.get_json() or {}
+    cond, params = _escopo_empresa()
+    with db(commit=True) as cur:
+        cur.execute("""UPDATE atendimentos SET
+                       valor_cobrado = COALESCE(%s, valor_cobrado),
+                       status_pgto   = COALESCE(%s, status_pgto),
+                       obs_fin       = COALESCE(%s, obs_fin)
+                       WHERE id = %s""" + cond,
+                    [data.get('valor_cobrado'), data.get('status_pgto'),
+                     data.get('obs_fin'), aid] + params)
+        ok = cur.rowcount
+    if not ok:
+        return jsonify({"erro": "Não encontrado"}), 404
+    return jsonify({"ok": True})
 
 # ── PESSOAS ───────────────────────────────────────────────────
+def _pessoa_saida(r):
+    """Mantém o nome 'end' que o frontend já usa."""
+    d = dict(r)
+    d['end'] = d.pop('endereco', '')
+    return d
+
 @app.route("/api/pessoas", methods=["GET"])
 @login_required
 def api_pessoas_get():
-    q = request.args.get("q","").lower()
-    pessoas = ler(PESSOAS_FILE)
-    if q:
-        pessoas = [p for p in pessoas if q in (p.get("nome","")+"  "+p.get("cpf","")).lower()]
-    return jsonify(pessoas[:20])
+    q = (request.args.get("q") or "").strip().lower()
+    with db() as cur:
+        if q:
+            cur.execute("""SELECT * FROM pessoas
+                           WHERE lower(nome) LIKE %s OR cpf LIKE %s
+                           ORDER BY id DESC LIMIT 20""", ('%'+q+'%', '%'+q+'%'))
+        else:
+            cur.execute("SELECT * FROM pessoas ORDER BY id DESC LIMIT 20")
+        return jsonify([_pessoa_saida(r) for r in cur.fetchall()])
 
 @app.route("/api/pessoas", methods=["POST"])
 @login_required
 def api_pessoas_post():
-    data = request.get_json()
-    if not data.get("nome") and not data.get("cpf"):
-        return jsonify({"erro":"Informe nome ou CPF"}), 400
-    pessoas = ler(PESSOAS_FILE)
-    cpf = data.get("cpf","").strip()
-    idx = next((i for i,p in enumerate(pessoas) if cpf and p.get("cpf")==cpf), None)
-    data["atualizado"] = datetime.now().strftime("%d/%m/%Y %H:%M")
-    if idx is not None: pessoas[idx] = data
-    else: pessoas.insert(0, data)
-    gravar(PESSOAS_FILE, pessoas[:500])
-    return jsonify({"ok":True})
+    d = request.get_json() or {}
+    if not d.get("nome") and not d.get("cpf"):
+        return jsonify({"erro": "Informe nome ou CPF"}), 400
+    cpf = (d.get("cpf") or "").strip()
+    vals = (d.get("nome",""), cpf, d.get("rg",""), d.get("rg_org",""), d.get("nasc",""),
+            d.get("ecivil",""), d.get("end",""), d.get("bairro",""), d.get("cidade",""),
+            d.get("cep",""), d.get("cel",""), d.get("email",""), agora())
+    with db(commit=True) as cur:
+        if cpf:
+            cur.execute("""INSERT INTO pessoas
+                (nome,cpf,rg,rg_org,nasc,ecivil,endereco,bairro,cidade,cep,cel,email,atualizado)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (cpf) WHERE cpf <> '' DO UPDATE SET
+                    nome=EXCLUDED.nome, rg=EXCLUDED.rg, rg_org=EXCLUDED.rg_org,
+                    nasc=EXCLUDED.nasc, ecivil=EXCLUDED.ecivil, endereco=EXCLUDED.endereco,
+                    bairro=EXCLUDED.bairro, cidade=EXCLUDED.cidade, cep=EXCLUDED.cep,
+                    cel=EXCLUDED.cel, email=EXCLUDED.email, atualizado=EXCLUDED.atualizado""", vals)
+        else:
+            cur.execute("""INSERT INTO pessoas
+                (nome,cpf,rg,rg_org,nasc,ecivil,endereco,bairro,cidade,cep,cel,email,atualizado)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""", vals)
+    return jsonify({"ok": True})
 
 # ── VEÍCULOS ──────────────────────────────────────────────────
 @app.route("/api/veiculos", methods=["GET"])
 @login_required
 def api_veiculos_get():
-    q = request.args.get("q","").lower()
-    veiculos = ler(VEICULOS_FILE)
-    if q:
-        veiculos = [v for v in veiculos if q in (v.get("placa","")+"  "+v.get("modelo","")).lower()]
-    return jsonify(veiculos[:20])
+    q = (request.args.get("q") or "").strip().lower()
+    with db() as cur:
+        if q:
+            cur.execute("""SELECT * FROM veiculos
+                           WHERE lower(placa) LIKE %s OR lower(modelo) LIKE %s
+                           ORDER BY id DESC LIMIT 20""", ('%'+q+'%', '%'+q+'%'))
+        else:
+            cur.execute("SELECT * FROM veiculos ORDER BY id DESC LIMIT 20")
+        return jsonify([dict(r) for r in cur.fetchall()])
 
 @app.route("/api/veiculos", methods=["POST"])
 @login_required
 def api_veiculos_post():
-    data = request.get_json()
-    placa = data.get("placa","").strip().upper()
-    if not placa: return jsonify({"erro":"Informe a placa"}), 400
-    veiculos = ler(VEICULOS_FILE)
-    idx = next((i for i,v in enumerate(veiculos) if v.get("placa")==placa), None)
-    data["placa"] = placa
-    data["atualizado"] = datetime.now().strftime("%d/%m/%Y %H:%M")
-    if idx is not None: veiculos[idx] = data
-    else: veiculos.insert(0, data)
-    gravar(VEICULOS_FILE, veiculos[:500])
-    return jsonify({"ok":True})
+    d = request.get_json() or {}
+    placa = (d.get("placa") or "").strip().upper()
+    if not placa:
+        return jsonify({"erro": "Informe a placa"}), 400
+    with db(commit=True) as cur:
+        cur.execute("""INSERT INTO veiculos (placa,chassi,modelo,ano,atualizado)
+                       VALUES (%s,%s,%s,%s,%s)
+                       ON CONFLICT (placa) DO UPDATE SET
+                         chassi=EXCLUDED.chassi, modelo=EXCLUDED.modelo,
+                         ano=EXCLUDED.ano, atualizado=EXCLUDED.atualizado""",
+                    (placa, d.get("chassi",""), d.get("modelo",""), d.get("ano",""), agora()))
+    return jsonify({"ok": True})
+
+# ── CONTRATANTES ──────────────────────────────────────────────
+@app.route("/api/contratantes", methods=["GET"])
+@login_required
+def api_contrat_get():
+    q = (request.args.get("q") or "").strip().lower()
+    with db() as cur:
+        if q:
+            cur.execute("""SELECT * FROM contratantes
+                           WHERE lower(nome) LIKE %s OR cpf LIKE %s
+                           ORDER BY id DESC LIMIT 20""", ('%'+q+'%', '%'+q+'%'))
+        else:
+            cur.execute("SELECT * FROM contratantes ORDER BY id DESC LIMIT 20")
+        return jsonify([dict(r) for r in cur.fetchall()])
+
+@app.route("/api/contratantes", methods=["POST"])
+@login_required
+def api_contrat_post():
+    d = request.get_json() or {}
+    if not d.get("nome"):
+        return jsonify({"erro": "Nome obrigatório"}), 400
+    cpf = (d.get("cpf") or "").strip()
+    vals = (d.get("nome"), cpf, d.get("tipo",""), d.get("tel",""), d.get("pgto",""), agora())
+    with db(commit=True) as cur:
+        if cpf:
+            cur.execute("""INSERT INTO contratantes (nome,cpf,tipo,tel,pgto,atualizado)
+                           VALUES (%s,%s,%s,%s,%s,%s)
+                           ON CONFLICT (cpf) WHERE cpf <> '' DO UPDATE SET
+                             nome=EXCLUDED.nome, tipo=EXCLUDED.tipo, tel=EXCLUDED.tel,
+                             pgto=EXCLUDED.pgto, atualizado=EXCLUDED.atualizado""", vals)
+        else:
+            cur.execute("""INSERT INTO contratantes (nome,cpf,tipo,tel,pgto,atualizado)
+                           VALUES (%s,%s,%s,%s,%s,%s)""", vals)
+    return jsonify({"ok": True})
 
 # ── USUÁRIOS (só admin) ───────────────────────────────────────
 @app.route("/api/usuarios", methods=["GET"])
 @login_required
 def api_usuarios_get():
-    if session.get('perfil') != 'admin':
-        return jsonify({"erro":"Sem permissão"}), 403
-    users = ler(USERS_FILE)
-    # Remove senhas da resposta
-    return jsonify([{k:v for k,v in u.items() if k!='senha'} for u in users])
+    if not so_admin():
+        return jsonify({"erro": "Sem permissão"}), 403
+    with db() as cur:
+        cur.execute("""SELECT id,nome,login,perfil,empresa_id,ativo,ver_relatorio,criado
+                       FROM usuarios ORDER BY criado""")
+        return jsonify([dict(r) for r in cur.fetchall()])
 
 @app.route("/api/usuarios", methods=["POST"])
 @login_required
 def api_usuarios_post():
-    if session.get('perfil') != 'admin':
-        return jsonify({"erro":"Sem permissão"}), 403
-    data = request.get_json()
-    users = ler(USERS_FILE)
-    login = data.get("login","").strip().lower()
-    if not login or not data.get("senha"):
-        return jsonify({"erro":"Login e senha são obrigatórios"}), 400
-    if any(u['login'].lower()==login for u in users):
-        return jsonify({"erro":"Login já existe"}), 400
-    novo = {
-        "id": str(int(datetime.now().timestamp()*1000)),
-        "nome": data.get("nome",""),
-        "login": login,
-        "senha": generate_password_hash(data.get("senha","")),
-        "perfil": data.get("perfil","funcionario"),
-        "empresa_id": data.get("empresa_id"),
-        "ativo": True,
-        "criado": datetime.now().strftime("%d/%m/%Y %H:%M")
-    }
-    users.append(novo)
-    gravar(USERS_FILE, users)
-    return jsonify({"ok":True})
+    if not so_admin():
+        return jsonify({"erro": "Sem permissão"}), 403
+    d = request.get_json() or {}
+    login = (d.get("login") or "").strip().lower()
+    if not login or not d.get("senha"):
+        return jsonify({"erro": "Login e senha são obrigatórios"}), 400
+    with db(commit=True) as cur:
+        cur.execute("SELECT 1 FROM usuarios WHERE lower(login) = %s", (login,))
+        if cur.fetchone():
+            return jsonify({"erro": "Login já existe"}), 400
+        cur.execute("""INSERT INTO usuarios (id,nome,login,senha,perfil,empresa_id,ativo,criado)
+                       VALUES (%s,%s,%s,%s,%s,%s,TRUE,%s)""",
+                    (str(int(datetime.now().timestamp()*1000)), d.get("nome",""), login,
+                     generate_password_hash(d.get("senha","")),
+                     d.get("perfil","funcionario"), d.get("empresa_id"), agora()))
+    return jsonify({"ok": True})
 
 @app.route("/api/usuarios/<uid>", methods=["PUT"])
 @login_required
 def api_usuarios_put(uid):
-    if session.get('perfil') != 'admin':
-        return jsonify({"erro":"Sem permissão"}), 403
-    data = request.get_json()
-    users = ler(USERS_FILE)
-    idx = next((i for i,u in enumerate(users) if u['id']==uid), None)
-    if idx is None: return jsonify({"erro":"Não encontrado"}), 404
-    users[idx]['nome']   = data.get("nome", users[idx]['nome'])
-    users[idx]['perfil'] = data.get("perfil", users[idx]['perfil'])
-    users[idx]['ativo']  = data.get("ativo", users[idx]['ativo'])
-    users[idx]['empresa_id'] = data.get("empresa_id", users[idx].get('empresa_id'))
-    if data.get("senha"):
-        users[idx]['senha'] = generate_password_hash(data["senha"])
-    gravar(USERS_FILE, users)
-    return jsonify({"ok":True})
+    if not so_admin():
+        return jsonify({"erro": "Sem permissão"}), 403
+    d = request.get_json() or {}
+    with db(commit=True) as cur:
+        cur.execute("""UPDATE usuarios SET
+                       nome       = COALESCE(%s, nome),
+                       perfil     = COALESCE(%s, perfil),
+                       ativo      = COALESCE(%s, ativo),
+                       empresa_id = COALESCE(%s, empresa_id)
+                       WHERE id = %s""",
+                    (d.get("nome"), d.get("perfil"), d.get("ativo"), d.get("empresa_id"), uid))
+        if cur.rowcount == 0:
+            return jsonify({"erro": "Não encontrado"}), 404
+        if d.get("senha"):
+            cur.execute("UPDATE usuarios SET senha = %s WHERE id = %s",
+                        (generate_password_hash(d["senha"]), uid))
+    return jsonify({"ok": True})
 
 @app.route("/api/usuarios/<uid>", methods=["DELETE"])
 @login_required
 def api_usuarios_del(uid):
-    if session.get('perfil') != 'admin':
-        return jsonify({"erro":"Sem permissão"}), 403
+    if not so_admin():
+        return jsonify({"erro": "Sem permissão"}), 403
     if uid == session.get('user_id'):
-        return jsonify({"erro":"Não pode excluir a si mesmo"}), 400
-    users = ler(USERS_FILE)
-    users = [u for u in users if u['id']!=uid]
-    gravar(USERS_FILE, users)
-    return jsonify({"ok":True})
+        return jsonify({"erro": "Não pode excluir a si mesmo"}), 400
+    with db(commit=True) as cur:
+        cur.execute("DELETE FROM usuarios WHERE id = %s", (uid,))
+    return jsonify({"ok": True})
 
-# ── EMPRESAS (só admin) ───────────────────────────────────────
+@app.route("/api/usuarios/<uid>/permissoes", methods=["PUT"])
+@login_required
+def api_permissoes(uid):
+    if not so_admin():
+        return jsonify({"erro": "Sem permissão"}), 403
+    d = request.get_json() or {}
+    with db(commit=True) as cur:
+        cur.execute("UPDATE usuarios SET ver_relatorio = %s WHERE id = %s",
+                    (bool(d.get('ver_relatorio', False)), uid))
+        if cur.rowcount == 0:
+            return jsonify({"erro": "Não encontrado"}), 404
+    return jsonify({"ok": True})
+
+# ── EMPRESAS ──────────────────────────────────────────────────
 @app.route("/api/empresas", methods=["GET"])
 @login_required
 def api_empresas_get():
-    if session.get('perfil') not in ['admin','funcionario']:
-        return jsonify({"erro":"Sem permissão"}), 403
-    return jsonify(ler(EMPRESAS_FILE))
+    if session.get('perfil') not in ['admin', 'funcionario']:
+        return jsonify({"erro": "Sem permissão"}), 403
+    with db() as cur:
+        cur.execute("SELECT * FROM empresas ORDER BY nome")
+        return jsonify([dict(r) for r in cur.fetchall()])
 
 @app.route("/api/empresas", methods=["POST"])
 @login_required
 def api_empresas_post():
-    if session.get('perfil') != 'admin':
-        return jsonify({"erro":"Sem permissão"}), 403
-    data = request.get_json()
-    if not data.get("nome"):
-        return jsonify({"erro":"Nome é obrigatório"}), 400
-    empresas = ler(EMPRESAS_FILE)
-    data["id"] = str(int(datetime.now().timestamp()*1000))
-    data["criado"] = datetime.now().strftime("%d/%m/%Y %H:%M")
-    empresas.append(data)
-    gravar(EMPRESAS_FILE, empresas)
-    return jsonify({"ok":True, "id":data["id"]})
+    if not so_admin():
+        return jsonify({"erro": "Sem permissão"}), 403
+    d = request.get_json() or {}
+    if not d.get("nome"):
+        return jsonify({"erro": "Nome é obrigatório"}), 400
+    eid = str(int(datetime.now().timestamp()*1000))
+    with db(commit=True) as cur:
+        cur.execute("""INSERT INTO empresas (id,nome,cnpj,contato,tel,email,criado)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+                    (eid, d.get("nome"), d.get("cnpj",""), d.get("contato",""),
+                     d.get("tel",""), d.get("email",""), agora()))
+    return jsonify({"ok": True, "id": eid})
 
 @app.route("/api/empresas/<eid>", methods=["DELETE"])
 @login_required
 def api_empresas_del(eid):
-    if session.get('perfil') != 'admin':
-        return jsonify({"erro":"Sem permissão"}), 403
-    empresas = [e for e in ler(EMPRESAS_FILE) if e['id']!=eid]
-    gravar(EMPRESAS_FILE, empresas)
-    return jsonify({"ok":True})
+    if not so_admin():
+        return jsonify({"erro": "Sem permissão"}), 403
+    with db(commit=True) as cur:
+        cur.execute("DELETE FROM empresas WHERE id = %s", (eid,))
+    return jsonify({"ok": True})
 
-# ── LIMPEZA ───────────────────────────────────────────────────
+# ── LIMPEZA (só admin) ────────────────────────────────────────
+def _limpar(tabelas):
+    if not so_admin():
+        return jsonify({"erro": "Sem permissão"}), 403
+    with db(commit=True) as cur:
+        for t in tabelas:
+            cur.execute("DELETE FROM " + t)
+    return jsonify({"ok": True})
+
 @app.route("/api/limpar-tudo", methods=["POST"])
 @login_required
 def api_limpar_tudo():
-    if session.get('perfil') != 'admin':
-        return jsonify({"erro":"Sem permissão"}), 403
-    gravar(HIST_FILE, []); gravar(PESSOAS_FILE, []); gravar(VEICULOS_FILE, [])
-    return jsonify({"ok":True})
+    return _limpar(["atendimentos", "pessoas", "veiculos"])
 
 @app.route("/api/historico-limpar", methods=["POST"])
 @login_required
 def api_hist_limpar():
-    if session.get('perfil') != 'admin': return jsonify({"erro":"Sem permissão"}), 403
-    gravar(HIST_FILE, []); return jsonify({"ok":True})
+    return _limpar(["atendimentos"])
 
 @app.route("/api/pessoas-limpar", methods=["POST"])
 @login_required
 def api_pessoas_limpar():
-    if session.get('perfil') != 'admin': return jsonify({"erro":"Sem permissão"}), 403
-    gravar(PESSOAS_FILE, []); return jsonify({"ok":True})
+    return _limpar(["pessoas"])
 
 @app.route("/api/veiculos-limpar", methods=["POST"])
 @login_required
 def api_veiculos_limpar():
-    if session.get('perfil') != 'admin': return jsonify({"erro":"Sem permissão"}), 403
-    gravar(VEICULOS_FILE, []); return jsonify({"ok":True})
-
-# ── FINANCEIRO — atualizar valor/status de um atendimento ─────
-@app.route("/api/historico/<int:idx>/financeiro", methods=["PUT"])
-@login_required
-def api_fin_put(idx):
-    data = request.get_json()
-    hist = ler(HIST_FILE)
-    perfil = session.get('perfil')
-    empresa_id = session.get('empresa_id')
-    # Empresa só edita seus próprios
-    if perfil == 'empresa':
-        visivel = [h for h in hist if h.get('empresa_id')==empresa_id]
-        if idx < 0 or idx >= len(visivel): return jsonify({"erro":"Não encontrado"}), 404
-        real_idx = hist.index(visivel[idx])
-    else:
-        if idx < 0 or idx >= len(hist): return jsonify({"erro":"Não encontrado"}), 404
-        real_idx = idx
-    hist[real_idx]['valor_cobrado'] = data.get('valor_cobrado', hist[real_idx].get('valor_cobrado',''))
-    hist[real_idx]['status_pgto']   = data.get('status_pgto', hist[real_idx].get('status_pgto','pendente'))
-    hist[real_idx]['obs_fin']       = data.get('obs_fin', hist[real_idx].get('obs_fin',''))
-    gravar(HIST_FILE, hist)
-    return jsonify({"ok":True})
+    return _limpar(["veiculos"])
 
 # ── RELATÓRIOS ────────────────────────────────────────────────
+def _valor(v):
+    if not v:
+        return 0.0
+    try:
+        return float(str(v).replace('R$', '').replace('.', '').replace(',', '.').strip() or 0)
+    except ValueError:
+        return 0.0
+
 @app.route("/api/relatorios")
 @login_required
 def api_relatorios():
-    perfil      = session.get('perfil')
-    empresa_id  = session.get('empresa_id')
-    user_id     = session.get('user_id')
+    perfil = session.get('perfil')
+    if perfil == 'funcionario':
+        with db() as cur:
+            cur.execute("SELECT ver_relatorio FROM usuarios WHERE id = %s", (session.get('user_id'),))
+            row = cur.fetchone()
+        if not row or not row['ver_relatorio']:
+            return jsonify({"erro": "Sem permissão para relatórios"}), 403
 
-    # Filtros
-    de   = request.args.get('de','')    # DD/MM/AAAA
-    ate  = request.args.get('ate','')
-    func = request.args.get('func','')  # user_id filtro
-    emp  = request.args.get('emp','')   # empresa_id filtro
-
-    hist = ler(HIST_FILE)
-
-    # Restrição por perfil
-    if perfil == 'empresa':
-        hist = [h for h in hist if h.get('empresa_id') == empresa_id]
-    elif perfil == 'funcionario':
-        # Verifica se tem permissão de relatório
-        users = ler(USERS_FILE)
-        me = next((u for u in users if u['id']==user_id), {})
-        if not me.get('ver_relatorio', False):
-            return jsonify({"erro":"Sem permissão para relatórios"}), 403
-
-    # Filtro de datas
-    def parse_data(s):
-        try:
-            d,m,a = s.split('/')
-            return datetime(int(a),int(m),int(d))
-        except: return None
+    cond, params = _escopo_empresa()
+    de   = _data_br(request.args.get('de', ''))
+    ate  = _data_br(request.args.get('ate', ''))
+    func = request.args.get('func', '')
+    emp  = request.args.get('emp', '')
 
     if de:
-        dt_de = parse_data(de)
-        if dt_de:
-            hist = [h for h in hist if parse_data(h.get('data','').split(' ')[0]) and parse_data(h.get('data','').split(' ')[0]) >= dt_de]
+        cond += " AND criado >= %s"; params.append(de)
     if ate:
-        dt_ate = parse_data(ate)
-        if dt_ate:
-            hist = [h for h in hist if parse_data(h.get('data','').split(' ')[0]) and parse_data(h.get('data','').split(' ')[0]) <= dt_ate]
+        cond += " AND criado < %s + INTERVAL '1 day'"; params.append(ate)
     if func and perfil == 'admin':
-        hist = [h for h in hist if h.get('user_id') == func]
-    if emp and perfil in ['admin','funcionario']:
-        hist = [h for h in hist if h.get('empresa_id') == emp]
+        cond += " AND user_id = %s"; params.append(func)
+    if emp and perfil in ['admin', 'funcionario']:
+        cond += " AND empresa_id = %s"; params.append(emp)
 
-    # Totais
-    total     = len(hist)
-    recebidos = sum(1 for h in hist if h.get('status_pgto')=='pago')
-    pendentes = total - recebidos
+    with db() as cur:
+        cur.execute("""SELECT id,data,nome,placa,modelo,vendedor_nome,chassi,valor_cobrado,
+                              status_pgto,user_id,user_nome,empresa_id,
+                              COALESCE(snap->>'c_nome','') AS comprador_nome
+                       FROM atendimentos WHERE TRUE""" + cond + " ORDER BY id DESC", params)
+        linhas = [dict(r) for r in cur.fetchall()]
+        cur.execute("SELECT id,nome FROM empresas")
+        empresas_map = {e['id']: e['nome'] for e in cur.fetchall()}
 
-    def parse_val(v):
-        if not v: return 0.0
-        return float(str(v).replace('R$','').replace('.','').replace(',','.').strip() or 0)
+    total     = len(linhas)
+    recebidos = sum(1 for h in linhas if h['status_pgto'] == 'pago')
+    val_total    = sum(_valor(h['valor_cobrado']) for h in linhas)
+    val_recebido = sum(_valor(h['valor_cobrado']) for h in linhas if h['status_pgto'] == 'pago')
 
-    val_total    = sum(parse_val(h.get('valor_cobrado','')) for h in hist)
-    val_recebido = sum(parse_val(h.get('valor_cobrado','')) for h in hist if h.get('status_pgto')=='pago')
-    val_pendente = val_total - val_recebido
+    por_func, por_emp, por_mes = {}, {}, {}
+    for h in linhas:
+        v = _valor(h['valor_cobrado'])
+        pago = h['status_pgto'] == 'pago'
 
-    # Agrupamento por funcionário
-    por_func = {}
-    for h in hist:
-        uid  = h.get('user_id','?')
-        nome = h.get('user_nome','Desconhecido')
-        if uid not in por_func:
-            por_func[uid] = {'nome':nome,'total':0,'recebidos':0,'val_total':0,'val_recebido':0}
-        por_func[uid]['total']       += 1
-        por_func[uid]['val_total']   += parse_val(h.get('valor_cobrado',''))
-        if h.get('status_pgto')=='pago':
-            por_func[uid]['recebidos']    += 1
-            por_func[uid]['val_recebido'] += parse_val(h.get('valor_cobrado',''))
+        uid = h['user_id'] or '?'
+        f = por_func.setdefault(uid, {'nome': h['user_nome'] or 'Desconhecido', 'total': 0,
+                                      'recebidos': 0, 'val_total': 0, 'val_recebido': 0})
+        f['total'] += 1; f['val_total'] += v
+        if pago: f['recebidos'] += 1; f['val_recebido'] += v
 
-    # Agrupamento por empresa
-    empresas_map = {e['id']:e['nome'] for e in ler(EMPRESAS_FILE)}
-    por_emp = {}
-    for h in hist:
-        eid  = h.get('empresa_id') or 'escritorio'
-        nome = empresas_map.get(eid,'Escritório') if eid!='escritorio' else 'Escritório'
-        if eid not in por_emp:
-            por_emp[eid] = {'nome':nome,'total':0,'recebidos':0,'val_total':0,'val_recebido':0,'atendimentos':[]}
-        por_emp[eid]['total']       += 1
-        por_emp[eid]['val_total']   += parse_val(h.get('valor_cobrado',''))
-        if h.get('status_pgto')=='pago':
-            por_emp[eid]['recebidos']    += 1
-            por_emp[eid]['val_recebido'] += parse_val(h.get('valor_cobrado',''))
-        por_emp[eid]['atendimentos'].append({
-            'placa':   h.get('placa',''),
-            'modelo':  h.get('modelo',''),
-            'chassi':  h.get('snap',{}).get('ve_chassi','') if h.get('snap') else '',
-            'vendedor':h.get('snap',{}).get('v_nome','') if h.get('snap') else '',
-            'data':    h.get('data',''),
-            'valor':   h.get('valor_cobrado',''),
-            'status':  h.get('status_pgto','pendente'),
-        })
+        eid = h['empresa_id'] or 'escritorio'
+        e = por_emp.setdefault(eid, {'nome': empresas_map.get(eid, 'Escritório'), 'total': 0,
+                                     'recebidos': 0, 'val_total': 0, 'val_recebido': 0,
+                                     'atendimentos': []})
+        e['total'] += 1; e['val_total'] += v
+        if pago: e['recebidos'] += 1; e['val_recebido'] += v
+        e['atendimentos'].append({'placa': h['placa'], 'modelo': h['modelo'],
+                                  'chassi': h['chassi'], 'vendedor': h['vendedor_nome'],
+                                  'data': h['data'], 'valor': h['valor_cobrado'],
+                                  'status': h['status_pgto']})
 
-    # Agrupamento por mês
-    por_mes = {}
-    for h in hist:
-        dt_str = h.get('data','')
-        mes = dt_str[3:10] if len(dt_str)>=10 else '?'
-        if mes not in por_mes: por_mes[mes]={'total':0,'recebidos':0,'val_total':0}
-        por_mes[mes]['total'] += 1
-        por_mes[mes]['val_total'] += parse_val(h.get('valor_cobrado',''))
-        if h.get('status_pgto')=='pago': por_mes[mes]['recebidos'] += 1
+        mes = (h['data'] or '')[3:10] or '?'
+        m = por_mes.setdefault(mes, {'total': 0, 'recebidos': 0, 'val_total': 0})
+        m['total'] += 1; m['val_total'] += v
+        if pago: m['recebidos'] += 1
 
     return jsonify({
-        'total':total,'recebidos':recebidos,'pendentes':pendentes,
-        'val_total':round(val_total,2),'val_recebido':round(val_recebido,2),'val_pendente':round(val_pendente,2),
-        'por_func':list(por_func.values()),
-        'por_emp':list(por_emp.values()),
-        'por_mes':[ {'mes':k,'total':v['total'],'recebidos':v['recebidos'],'val_total':round(v['val_total'],2)} for k,v in sorted(por_mes.items(),reverse=True) ],
-        'atendimentos': [{
-            'idx':i,'data':h.get('data',''),'placa':h.get('placa',''),'modelo':h.get('modelo',''),
-            'vendedor':h.get('snap',{}).get('v_nome','') if h.get('snap') else '',
-            'chassi':h.get('snap',{}).get('ve_chassi','') if h.get('snap') else '',
-            'func':h.get('user_nome',''),'empresa':empresas_map.get(h.get('empresa_id',''),'Escritório'),
-            'valor':h.get('valor_cobrado',''),'status':h.get('status_pgto','pendente'),
-        } for i,h in enumerate(hist)]
+        'total': total, 'recebidos': recebidos, 'pendentes': total - recebidos,
+        'val_total': round(val_total, 2), 'val_recebido': round(val_recebido, 2),
+        'val_pendente': round(val_total - val_recebido, 2),
+        'por_func': list(por_func.values()),
+        'por_emp': list(por_emp.values()),
+        'por_mes': [{'mes': k, 'total': v['total'], 'recebidos': v['recebidos'],
+                     'val_total': round(v['val_total'], 2)}
+                    for k, v in sorted(por_mes.items(), reverse=True)],
+        'atendimentos': [{'idx': h['id'], 'id': h['id'], 'data': h['data'], 'placa': h['placa'],
+                          'modelo': h['modelo'], 'vendedor': h['vendedor_nome'],
+                          'chassi': h['chassi'], 'func': h['user_nome'],
+                          'comprador': h['comprador_nome'],
+                          'empresa': empresas_map.get(h['empresa_id'], 'Escritório'),
+                          'valor': h['valor_cobrado'], 'status': h['status_pgto']}
+                         for h in linhas]
     })
 
-# ── PERMISSÕES DE RELATÓRIO ───────────────────────────────────
-@app.route("/api/usuarios/<uid>/permissoes", methods=["PUT"])
-@login_required
-def api_permissoes(uid):
-    if session.get('perfil') != 'admin':
-        return jsonify({"erro":"Sem permissão"}), 403
-    data  = request.get_json()
-    users = ler(USERS_FILE)
-    idx   = next((i for i,u in enumerate(users) if u['id']==uid), None)
-    if idx is None: return jsonify({"erro":"Não encontrado"}), 404
-    users[idx]['ver_relatorio'] = data.get('ver_relatorio', False)
-    gravar(USERS_FILE, users)
-    return jsonify({"ok":True})
-
-# ── COFRE SECRETO — só admin ─────────────────────────────────
+# ── COFRE (só admin) ──────────────────────────────────────────
 @app.route("/api/cofre", methods=["GET"])
 @login_required
 def api_cofre_get():
-    if session.get('perfil') != 'admin':
-        return jsonify({"erro":"Sem permissão"}), 403
-    return jsonify(ler("cofre"))
+    if not so_admin():
+        return jsonify({"erro": "Sem permissão"}), 403
+    with db() as cur:
+        cur.execute("SELECT id, descricao AS desc, valor AS val FROM cofre ORDER BY id")
+        return jsonify([dict(r) for r in cur.fetchall()])
 
 @app.route("/api/cofre", methods=["POST"])
 @login_required
 def api_cofre_post():
-    if session.get('perfil') != 'admin':
-        return jsonify({"erro":"Sem permissão"}), 403
-    data = request.get_json()
-    if not data.get("desc") or not data.get("val"):
-        return jsonify({"erro":"Preencha todos os campos"}), 400
-    cofre = ler("cofre")
-    cofre.append({"desc": data["desc"], "val": data["val"]})
-    gravar("cofre", cofre)
-    return jsonify({"ok":True})
+    if not so_admin():
+        return jsonify({"erro": "Sem permissão"}), 403
+    d = request.get_json() or {}
+    if not d.get("desc") or not d.get("val"):
+        return jsonify({"erro": "Preencha todos os campos"}), 400
+    with db(commit=True) as cur:
+        cur.execute("INSERT INTO cofre (descricao,valor) VALUES (%s,%s)", (d["desc"], d["val"]))
+    return jsonify({"ok": True})
 
-@app.route("/api/cofre/<int:idx>", methods=["DELETE"])
+@app.route("/api/cofre/<int:cid>", methods=["DELETE"])
 @login_required
-def api_cofre_del(idx):
-    if session.get('perfil') != 'admin':
-        return jsonify({"erro":"Sem permissão"}), 403
-    cofre = ler("cofre")
-    if 0 <= idx < len(cofre):
-        cofre.pop(idx)
-        gravar("cofre", cofre)
-    return jsonify({"ok":True})
-
-# ── CONTRATANTES ─────────────────────────────────────────────
-@app.route("/api/contratantes", methods=["GET"])
-@login_required
-def api_contrat_get():
-    q = request.args.get("q","").lower()
-    lista = ler(CONTRAT_FILE)
-    if q:
-        lista = [c for c in lista if q in (c.get("nome","")+"  "+c.get("cpf","")).lower()]
-    return jsonify(lista[:20])
-
-@app.route("/api/contratantes", methods=["POST"])
-@login_required
-def api_contrat_post():
-    data = request.get_json()
-    if not data.get("nome"): return jsonify({"erro":"Nome obrigatório"}), 400
-    lista = ler(CONTRAT_FILE)
-    cpf = data.get("cpf","").strip()
-    idx = next((i for i,c in enumerate(lista) if cpf and c.get("cpf")==cpf), None)
-    data["atualizado"] = datetime.now().strftime("%d/%m/%Y %H:%M")
-    if idx is not None: lista[idx] = data
-    else: lista.insert(0, data)
-    gravar(CONTRAT_FILE, lista[:500])
-    return jsonify({"ok":True})
+def api_cofre_del(cid):
+    if not so_admin():
+        return jsonify({"erro": "Sem permissão"}), 403
+    with db(commit=True) as cur:
+        cur.execute("DELETE FROM cofre WHERE id = %s", (cid,))
+    return jsonify({"ok": True})
 
 # ── ASSINATURA ELETRÔNICA (ZapSign) ───────────────────────────
 def _zapsign(caminho, payload=None, metodo="GET"):
@@ -794,15 +1045,11 @@ def api_assinatura():
         return jsonify({"erro": "PDF não recebido."}), 400
     if not nome:
         return jsonify({"erro": "Preencha o nome do vendedor antes de enviar para assinatura."}), 400
-    if "," in pdf[:120] and pdf.startswith("data:"):
+    if pdf.startswith("data:") and "," in pdf[:120]:
         pdf = pdf.split(",", 1)[1]
 
-    signer = {
-        "name": nome,
-        "auth_mode": "assinaturaTela",
-        "send_automatic_email": False,
-        "send_automatic_whatsapp": False,
-    }
+    signer = {"name": nome, "auth_mode": "assinaturaTela",
+              "send_automatic_email": False, "send_automatic_whatsapp": False}
     email = (data.get("email") or "").strip()
     if email:
         signer["email"] = email
@@ -811,24 +1058,30 @@ def api_assinatura():
         signer["phone_country"] = "55"
         signer["phone_number"]  = fone[-11:]
 
-    payload = {
+    resp, erro = _zapsign("/docs/", {
         "name": (data.get("titulo") or "Procuração ATPV-e")[:255],
-        "base64_pdf": pdf,
-        "lang": "pt-br",
-        "signers": [signer],
-    }
-    resp, erro = _zapsign("/docs/", payload, "POST")
+        "base64_pdf": pdf, "lang": "pt-br", "signers": [signer],
+    }, "POST")
     if erro:
         return jsonify({"erro": erro}), 502
 
-    signers = resp.get("signers") or [{}]
-    return jsonify({
-        "ok": True,
-        "doc_token": resp.get("token", ""),
-        "status": resp.get("status", ""),
-        "sign_url": signers[0].get("sign_url", ""),
-        "signer_nome": signers[0].get("name", nome),
-    })
+    signers   = resp.get("signers") or [{}]
+    doc_token = resp.get("token", "")
+    sign_url  = signers[0].get("sign_url", "")
+
+    # Guarda o link no atendimento, quando informado — assim dá para
+    # reabrir depois sem gastar outro documento do plano.
+    aid = data.get("atendimento_id")
+    if aid and sign_url:
+        try:
+            with db(commit=True) as cur:
+                cur.execute("""UPDATE atendimentos SET assinatura_token=%s, assinatura_url=%s
+                               WHERE id = %s""", (doc_token, sign_url, int(aid)))
+        except Exception:
+            pass
+
+    return jsonify({"ok": True, "doc_token": doc_token, "status": resp.get("status", ""),
+                    "sign_url": sign_url, "signer_nome": signers[0].get("name", nome)})
 
 @app.route("/api/assinatura/<doc_token>", methods=["GET"])
 @login_required
@@ -842,10 +1095,10 @@ def api_assinatura_status(doc_token):
         "ok": True,
         "status": resp.get("status", ""),
         "signed_file": resp.get("signed_file", "") or "",
-        "signers": [{"nome": s.get("name",""), "status": s.get("status",""),
-                     "sign_url": s.get("sign_url","")} for s in (resp.get("signers") or [])],
+        "signers": [{"nome": s.get("name", ""), "status": s.get("status", ""),
+                     "sign_url": s.get("sign_url", "")} for s in (resp.get("signers") or [])],
     })
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT",5000))
+    port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
