@@ -1040,7 +1040,8 @@ function enviarAssinatura(){
   var placa=g('ve_placa');
   fetch('/api/assinatura',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({pdf_base64:b64,nome:nome,email:g('v_email'),telefone:g('v_cel'),
-      titulo:'Procuração ATPV-e'+(placa?' — '+placa:'')})})
+      titulo:'Procuração ATPV-e'+(placa?' — '+placa:''),
+      atendimento_id:ATEND_ATUAL})})
   .then(function(r){ return r.json(); })
   .then(function(d){
     restaurar();
@@ -1097,18 +1098,22 @@ function conferirAssin(){
 }
 
 // ═══ HISTÓRICO ═══════════════════════════════════════════════
+var HIST_BUSCA='', _histT=null, ATEND_ATUAL=null;
+
 function carregarHist(){
-  fetch('/api/historico').then(function(r){return r.json();}).then(function(data){
-    todosHist=data;
-    document.getElementById('st-total').textContent=data.length;
-    renderHist(data);
-  });
+  var url='/api/historico?limite=100'+(HIST_BUSCA?'&q='+encodeURIComponent(HIST_BUSCA):'');
+  fetch(url).then(function(r){return r.json();}).then(function(d){
+    var itens=(d&&d.itens)?d.itens:[];
+    todosHist=itens;
+    document.getElementById('st-total').textContent=(d&&typeof d.total==='number')?d.total:itens.length;
+    renderHist(itens);
+  }).catch(function(){});
 }
 function renderHist(lista){
   var el=document.getElementById('hist-list');
   if(!lista||!lista.length){el.innerHTML='<div class="hist-empty">Nenhum atendimento salvo</div>';return;}
   el.innerHTML=lista.map(function(h,i){
-    var idx=todosHist.indexOf(h);
+    var idx=h.id;
     var status = h.status_pgto||'pendente';
     var tagCls = status==='pago'?'tag-pago':'tag-pendente';
     var tagTxt = status==='pago'?'Pago':'Pendente';
@@ -1121,23 +1126,28 @@ function renderHist(lista){
       '<div style="margin-top:5px;display:flex;align-items:center;gap:6px">'+
       '<span class="'+tagCls+'">'+tagTxt+'</span>'+
       (h.valor_cobrado?'<span style="font-size:11px;color:var(--mut);font-family:var(--mono)">'+h.valor_cobrado+'</span>':'')+
-      '<button class="btn-fin" onclick="abrirFin('+idx+',event)">R$ Editar</button>'+
+      '<button class="btn-fin" onclick="abrirFin('+idx+',event,'+JSON.stringify(h.valor_cobrado||'')+')">R$ Editar</button>'+
       '</div>'+
       '</div>';
   }).join('');
 }
 
 // Modal financeiro inline
-function abrirFin(idx, e){
-  e.stopPropagation();
-  var h = todosHist[idx];
-  var val = prompt('Valor cobrado (ex: 50.00):', h.valor_cobrado||'');
+function abrirFin(id, e, valorAtual){
+  if(e) e.stopPropagation();
+  var val = prompt('Valor cobrado (ex: 50.00):', valorAtual||'');
   if(val===null) return;
   var status = confirm('Já foi pago?\nOK = Pago | Cancelar = Pendente') ? 'pago' : 'pendente';
-  fetch('/api/historico/'+idx+'/financeiro',{
+  fetch('/api/historico/'+id+'/financeiro',{
     method:'PUT', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({valor_cobrado: val, status_pgto: status})
-  }).then(function(){ carregarHist(); showAlert('✓ Financeiro atualizado!','ok'); });
+  }).then(function(r){ return r.json(); })
+  .then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    carregarHist();
+    if(tabAtual==='relatorios') carregarRelatorio();
+    showAlert('✓ Financeiro atualizado!','ok');
+  });
 }
 
 // ═══ RELATÓRIOS ══════════════════════════════════════════════
@@ -1200,9 +1210,7 @@ function filtrarTabela(){
     if(chassi   && !(a.chassi||'').toLowerCase().includes(chassi))  return false;
     if(vendedor && !(a.vendedor||'').toLowerCase().includes(vendedor)) return false;
     if(comprador){
-      var snap = (relDados._snaps&&relDados._snaps[a.idx])||{};
-      var cNome = (snap.c_nome||'').toLowerCase();
-      if(!cNome.includes(comprador)) return false;
+      if(!(a.comprador||'').toLowerCase().includes(comprador)) return false;
     }
     return true;
   });
@@ -1226,7 +1234,7 @@ function filtrarTabela(){
       '<td style="font-size:12px">'+a.empresa+'</td>'+
       '<td style="font-family:var(--mono);font-size:12px">'+(a.valor||'—')+'</td>'+
       '<td><span class="'+tagCls+'">'+a.status+'</span></td>'+
-      '<td><button class="btn-fin" onclick="abrirFin('+a.idx+',event)">Editar</button></td>'+
+      '<td><button class="btn-fin" onclick="abrirFin('+a.id+',event,'+JSON.stringify(a.valor||'')+')">Editar</button></td>'+
       '</tr>';
   }).join('');
 }
@@ -1396,17 +1404,19 @@ function carregarFiltrosRelatorio(){
   });
 }
 function filtrarHist(q){
-  if(!q){renderHist(todosHist);return;}
-  var f=q.toLowerCase();
-  renderHist(todosHist.filter(function(h){
-    return (h.nome||'').toLowerCase().includes(f)||(h.placa||'').toLowerCase().includes(f);
-  }));
+  HIST_BUSCA=(q||'').trim();
+  clearTimeout(_histT);
+  _histT=setTimeout(carregarHist,350);
 }
 function carregarItem(i){
-  var h=todosHist[i];
-  CAMPOS_TODOS.forEach(function(k){var el=document.getElementById(k);if(el)el.value=h.snap&&h.snap[k]?h.snap[k]:'';});
-  atualizarContadores();gerarPreview();ftab('vendedor');
-  showAlert('Atendimento carregado!','ok');
+  ATEND_ATUAL=i;
+  fetch('/api/historico/'+i+'/snap').then(function(r){return r.json();}).then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    var snap=d.snap||{};
+    CAMPOS_TODOS.forEach(function(k){var el=document.getElementById(k);if(el)el.value=snap[k]||'';});
+    atualizarContadores();gerarPreview();ftab('vendedor');
+    showAlert('Atendimento carregado!','ok');
+  }).catch(function(){ showAlert('Falha ao abrir o atendimento.','err'); });
 }
 function delHist(i,e){
   e.stopPropagation();
@@ -1426,7 +1436,9 @@ function salvar(){
       contratante_tipo:g('ct_tipo'),ct_pgto:g('ct_pgto'),
       valor_cobrado:g('ct_valor_servico'),status_pgto:g('ct_status_pgto'),obs:g('ct_obs'),
     })
-  }).then(function(){
+  }).then(function(r){ return r.json(); })
+  .then(function(d){
+    if(d && d.id) ATEND_ATUAL=d.id;
     carregarHist();showAlert('✓ Atendimento salvo!','ok');
     salvarCadastros();
     if(g('ct_nome')) salvarContratanteAtual();
@@ -1455,6 +1467,7 @@ function limparAba(){
   showAlert('Campos da aba "'+tabAtual+'" limpos!','ok');
 }
 function limparTudo(){
+  ATEND_ATUAL=null;
   CAMPOS_TODOS.forEach(function(k){var el=document.getElementById(k);if(el){el.value='';el.classList.remove('ia');}});
   document.getElementById('paste-txt').value='';
   atualizarContadores();gerarPreview();
@@ -1770,7 +1783,7 @@ document.getElementById('user-badge') && (document.getElementById('user-badge').
 carregarMe();
 carregarHist();
 gerarPreview();
-setInterval(carregarHist,30000);
+setInterval(carregarHist,300000);
 </script>
 </body>
 </html>
