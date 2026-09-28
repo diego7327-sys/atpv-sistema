@@ -683,6 +683,46 @@ tr:hover td{background:var(--surf2)}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
+<!-- MODAL: CONFIRMAR ENVIO PARA ASSINATURA -->
+<div class="modal-overlay" id="modal-nivel">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-title">
+      <span>✍ Enviar para assinatura</span>
+      <button class="modal-close" onclick="fecharNivel()">✕</button>
+    </div>
+
+    <div style="background:var(--surf2);border:1px solid var(--bord);border-radius:10px;padding:14px;margin-bottom:16px">
+      <div style="font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em">Vai assinar</div>
+      <div id="niv-cliente" style="font-size:15px;font-weight:600;margin-top:4px"></div>
+      <div id="niv-dados" style="font-size:12px;color:var(--mut);margin-top:6px;line-height:1.7"></div>
+    </div>
+
+    <div class="fg">
+      <label>Como o cliente vai comprovar que é ele</label>
+      <select id="niv-escolha" onchange="avaliarNivel()">
+        <option value="simples">Apenas assinatura na tela — sem conferência de identidade</option>
+        <option value="email">Código por e-mail + CPF conferido na Receita</option>
+        <option value="sms">Código por SMS + CPF conferido na Receita</option>
+        <option value="whatsapp">Código por WhatsApp + CPF conferido na Receita</option>
+        <option value="documento" selected>WhatsApp + CPF + foto do documento e selfie</option>
+        <option value="biometria">WhatsApp + CPF + biometria facial validada no governo</option>
+      </select>
+    </div>
+
+    <div id="niv-explica" style="font-size:12px;line-height:1.7;margin-top:12px;padding:12px;
+         border-radius:9px;border:1px solid var(--bord)"></div>
+
+    <div style="display:flex;gap:8px;margin-top:18px">
+      <button class="btn-main" id="niv-confirmar" onclick="confirmarEnvio()">Enviar agora</button>
+      <button class="btn-sec" onclick="fecharNivel()">Cancelar</button>
+    </div>
+    <div style="font-size:11px;color:var(--mut);margin-top:12px;line-height:1.6">
+      Cada envio consome um documento do seu plano. Se o cliente perder o link,
+      reabra em <b>Assinaturas</b> — não clique de novo aqui.
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: CADASTRO / EDIÇÃO DE RECURSO -->
 <div class="modal-overlay" id="modal-recurso">
   <div class="modal" style="max-width:720px">
@@ -1268,6 +1308,24 @@ function montarPDF(){
   lnC();y+=4;
   doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(50,50,50);doc.text(cfg.cidade+', '+dt,ML,y);y+=18;
   doc.setDrawColor(120,120,120);doc.line(W/2+8,y,ML+TW,y);
+
+  // Marca invisível que diz à ZapSign onde colocar a assinatura do cliente.
+  // Texto branco sobre fundo branco: não aparece no documento impresso.
+  var assX1=W/2+8, assX2=ML+TW, assY=y, H=297;
+  doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(255,255,255);
+  var anc='<<signer1>>', ancW=doc.getTextWidth(anc);
+  doc.text(anc, assX1+((assX2-assX1)-ancW)/2, assY-2.5);
+  doc.setTextColor(0,0,0);
+
+  // Guarda onde a linha ficou, em porcentagem da página, para mandar à ZapSign.
+  ASSIN_POS = {
+    page: 0,
+    relative_position_left:   +((assX1 / W) * 100).toFixed(2),
+    relative_position_bottom: +(((H - assY) / H) * 100).toFixed(2),
+    relative_size_x: +((((assX2-assX1) * 0.62) / W) * 100).toFixed(2),
+    relative_size_y: 9.42
+  };
+
   doc.setFontSize(7.5);doc.setTextColor(100,100,100);doc.text('Assinatura do Outorgante (Proprietário Vendedor)',W/2+8,y+4);
   y=285;doc.setDrawColor(190,190,190);doc.line(ML,y,ML+TW,y);y+=4;
   doc.setFont('helvetica','oblique');doc.setFontSize(7);doc.setTextColor(150,150,150);
@@ -1283,11 +1341,76 @@ function gerarPDF(){
 }
 
 // ═══ ASSINATURA ELETRÔNICA (ZapSign) ═════════════════════════
-var ASSIN_TOKEN='';
+var ASSIN_TOKEN='', ASSIN_POS=null;
 
 function enviarAssinatura(){
   var nome=g('v_nome');
   if(!nome){ showAlert('Preencha o nome do vendedor antes de enviar para assinatura.','warn'); ftab('vendedor'); return; }
+  abrirNivel(nome);
+}
+
+// ── confirmacao e escolha do nivel ──
+function abrirNivel(nome){
+  document.getElementById('niv-cliente').textContent=nome;
+  var cpf=g('v_cpf'), cel=g('v_cel'), email=g('v_email');
+  document.getElementById('niv-dados').innerHTML=
+    'CPF: '+(cpf||'<span style="color:var(--red)">não preenchido</span>')+'<br>'+
+    'Celular: '+(cel||'<span style="color:var(--red)">não preenchido</span>')+'<br>'+
+    'E-mail: '+(email||'<span style="color:var(--red)">não preenchido</span>');
+  var sel=document.getElementById('niv-escolha');
+  try{ sel.value=localStorage.getItem('nivel_assin')||'documento'; }catch(e){ sel.value='documento'; }
+  avaliarNivel();
+  document.getElementById('modal-nivel').classList.add('open');
+}
+
+function fecharNivel(){ document.getElementById('modal-nivel').classList.remove('open'); }
+
+function avaliarNivel(){
+  var n=document.getElementById('niv-escolha').value;
+  var cpf=(g('v_cpf')||'').replace(/\D/g,''), cel=(g('v_cel')||'').replace(/\D/g,''), email=g('v_email');
+  var regras={
+    simples:   {fone:false, email:false, cpf:false, custo:'Sem custo além do documento.',
+                nota:'Não confere identidade: quem receber o link consegue assinar.', cor:'var(--warn)'},
+    email:     {fone:false, email:true,  cpf:true,  custo:'Sem custo de envio.',
+                nota:'Prova que o cliente tem acesso ao e-mail informado.', cor:'var(--acc2)'},
+    sms:       {fone:true,  email:false, cpf:true,  custo:'Custo de SMS por envio.',
+                nota:'Prova que o cliente estava com o celular dele.', cor:'var(--acc2)'},
+    whatsapp:  {fone:true,  email:false, cpf:true,  custo:'Cerca de R$ 0,50 por envio.',
+                nota:'Prova que o cliente estava com o celular dele. Bom equilíbrio.', cor:'var(--acc)'},
+    documento: {fone:true,  email:false, cpf:true,  custo:'R$ 0,50 do WhatsApp + custo da verificação.',
+                nota:'Guarda foto do documento e selfie no comprovante.', cor:'var(--acc)'},
+    biometria: {fone:true,  email:false, cpf:true,  custo:'O mais caro por assinatura.',
+                nota:'Compara a selfie com a base oficial do governo. Prova mais forte.', cor:'var(--acc)'}
+  };
+  var r=regras[n]||regras.whatsapp, faltas=[];
+  if(r.fone  && cel.length<10) faltas.push('Celular');
+  if(r.email && !email)        faltas.push('E-mail');
+  if(r.cpf   && cpf.length!==11) faltas.push('CPF do vendedor (11 dígitos)');
+
+  var box=document.getElementById('niv-explica');
+  var btn=document.getElementById('niv-confirmar');
+  if(faltas.length){
+    box.style.borderColor='rgba(255,71,87,.4)';
+    box.innerHTML='<b style="color:var(--red)">Faltam dados para este nível:</b><br>'+faltas.join('<br>')+
+      '<br><br><span style="color:var(--mut)">Preencha na aba Vendedor ou escolha outro nível.</span>';
+    btn.disabled=true; btn.style.opacity=.4;
+  } else {
+    box.style.borderColor='var(--bord)';
+    box.innerHTML='<b style="color:'+r.cor+'">'+r.nota+'</b><br>'+
+      '<span style="color:var(--mut)">'+r.custo+'</span>';
+    btn.disabled=false; btn.style.opacity=1;
+  }
+}
+
+function confirmarEnvio(){
+  var nivel=document.getElementById('niv-escolha').value;
+  try{ localStorage.setItem('nivel_assin', nivel); }catch(e){}
+  fecharNivel();
+  dispararAssinatura(nivel);
+}
+
+function dispararAssinatura(nivel){
+  var nome=g('v_nome');
   var btn=document.getElementById('btn-assin');
   var txtOrig=btn?btn.textContent:'';
   if(btn){ btn.disabled=true; btn.textContent='Enviando...'; }
@@ -1301,14 +1424,15 @@ function enviarAssinatura(){
   fetch('/api/assinatura',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({pdf_base64:b64,nome:nome,email:g('v_email'),telefone:g('v_cel'),
       titulo:'Procuração ATPV-e'+(placa?' — '+placa:''),
-      atendimento_id:ATEND_ATUAL})})
+      cpf:g('v_cpf'), nivel:nivel, atendimento_id:ATEND_ATUAL,
+      posicao_assinatura:ASSIN_POS})})
   .then(function(r){ return r.json(); })
   .then(function(d){
     restaurar();
     if(d.erro){ showAlert(d.erro,'err'); return; }
     if(!d.sign_url){ showAlert('A ZapSign não devolveu o link de assinatura.','err'); return; }
     abrirModalAssin(d.sign_url,nome,g('v_cel'),d.doc_token);
-    showAlert('✓ Documento enviado para assinatura!','ok');
+    showAlert('✓ Enviado! '+(d.nivel_rotulo||''),'ok');
   })
   .catch(function(){ restaurar(); showAlert('Falha de conexão ao enviar para assinatura.','err'); });
 }
