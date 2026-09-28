@@ -622,9 +622,36 @@ tr:hover td{background:var(--surf2)}
         <div class="fg"><label>Código DETRAN</label><input id="cfg_cod" value="2670"></div>
       </div>
       <div class="g1"><div class="fg"><label>Endereço completo</label><input id="cfg_end" value="AVENIDA BRASIL N.464 VILA JUSSARA ANAPOLIS-GO"></div></div>
-      <div class="g2">
+      <div class="g3">
         <div class="fg"><label>CEP</label><input id="cfg_cep" value="75123-115"></div>
         <div class="fg"><label>Cidade (para data)</label><input id="cfg_cidade" value="ANÁPOLIS/GO"></div>
+        <div class="fg"><label>CNPJ (opcional)</label><input id="cfg_cnpj" placeholder="00.000.000/0000-00"></div>
+      </div>
+
+      <div style="border-top:1px solid var(--bord);margin-top:16px;padding-top:16px">
+        <div class="sec-l">Sua assinatura no carimbo</div>
+        <p class="cfg-note">Sai no carimbo da procuração, junto do atesto de que a assinatura do
+          cliente foi colhida conforme o procedimento. Use uma foto da assinatura em papel branco,
+          bem iluminada e sem sombra.</p>
+        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+          <div id="cfg-assin-previa" style="background:#fff;border:1px solid var(--bord);border-radius:8px;
+               padding:8px;min-width:150px;min-height:56px;display:flex;align-items:center;justify-content:center">
+            <span style="font-size:11px;color:#888">sem assinatura</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <input type="file" id="cfg-assin-arq" accept="image/*" style="display:none"
+                   onchange="carregarAssinaturaArquivo(this)">
+            <button class="btn-sec" onclick="document.getElementById('cfg-assin-arq').click()">
+              📎 Escolher imagem</button>
+            <button class="btn-sec" style="border-color:rgba(255,71,87,.35);color:var(--red)"
+                    onclick="removerAssinaturaCarimbo()">Remover</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:18px;align-items:center">
+        <button class="btn-main" onclick="salvarConfig()">Salvar configurações</button>
+        <span id="cfg-status" style="font-size:12px;color:var(--mut)"></span>
       </div>
     </div>
     <div class="fb">
@@ -704,7 +731,8 @@ tr:hover td{background:var(--surf2)}
         <option value="email">Código por e-mail + CPF conferido na Receita</option>
         <option value="sms">Código por SMS + CPF conferido na Receita</option>
         <option value="whatsapp">Código por WhatsApp + CPF conferido na Receita</option>
-        <option value="documento" selected>WhatsApp + CPF + foto do documento e selfie</option>
+        <option value="selfie" selected>WhatsApp + CPF + selfie (arquivo menor)</option>
+        <option value="documento">WhatsApp + CPF + foto do documento e selfie</option>
         <option value="biometria">WhatsApp + CPF + biometria facial validada no governo</option>
       </select>
     </div>
@@ -1284,30 +1312,45 @@ function montarPDF(){
   var W=210,ML=20,TW=170,y=20;
   function lnE(){doc.setDrawColor(26,26,46);doc.setLineWidth(0.8);doc.line(ML,y,ML+TW,y);doc.setLineWidth(0.3);y+=5;}
   function lnC(){doc.setDrawColor(190,190,190);doc.setLineWidth(0.3);doc.line(ML,y,ML+TW,y);y+=4;}
-  function bar(t){doc.setFillColor(26,26,46);doc.roundedRect(ML,y,TW,6.5,1.5,1.5,'F');doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(255,255,255);doc.text(t,W/2,y+4.4,{align:'center'});doc.setTextColor(30,30,30);y+=10;}
+  function bar(t){doc.setFillColor(26,26,46);doc.roundedRect(ML,y,TW,5.8,1.5,1.5,'F');doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(255,255,255);doc.text(t,W/2,y+4.1,{align:'center'});doc.setTextColor(30,30,30);y+=8.6;}
   function cam(lb,val,x,cy,w){doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(120,120,120);doc.text(lb,x,cy);doc.setFontSize(9.5);doc.setTextColor(25,25,25);doc.text((val&&val.trim())?val:'_'.repeat(Math.max(4,Math.floor(w/2.2))),x,cy+4.5,{maxWidth:w});return cy+9;}
-  function par(txt,x,cy,w,sz){doc.setFont('helvetica','normal');doc.setFontSize(sz||8.5);doc.setTextColor(40,40,40);var lines=doc.splitTextToSize(txt,w);doc.text(lines,x,cy);return cy+lines.length*4.2+2;}
-  doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(26,26,46);doc.text('PROCURAÇÃO',W/2,y,{align:'center'});y+=6;
-  doc.setFontSize(9);doc.setTextColor(80,80,80);doc.text('INTENÇÃO DE VENDA E EMISSÃO ATPV-E',W/2,y,{align:'center'});y+=7;lnE();
+  function par(txt,x,cy,w,sz){doc.setFont('helvetica','normal');doc.setFontSize(sz||8.5);doc.setTextColor(40,40,40);var lines=doc.splitTextToSize(txt,w);doc.text(lines,x,cy);return cy+lines.length*3.9+1.5;}
+  doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(26,26,46);doc.text('PROCURAÇÃO',W/2,y,{align:'center'});y+=5.4;
+  doc.setFontSize(9);doc.setTextColor(80,80,80);doc.text('INTENÇÃO DE VENDA E EMISSÃO ATPV-E',W/2,y,{align:'center'});y+=6;lnE();
   bar('DADOS DO PROPRIETÁRIO / VENDEDOR (OUTORGANTE)');
-  cam('Nome completo',g('v_nome'),ML,y,108);cam('CPF / CNPJ',g('v_cpf'),ML+112,y,58);y+=11;
-  cam('RG',g('v_rg'),ML,y,38);cam('Órgão exp.',g('v_rg_org'),ML+42,y,35);cam('Estado civil',g('v_ecivil'),ML+81,y,89);y+=11;
-  cam('Endereço',g('v_end'),ML,y,108);cam('Bairro',g('v_bairro'),ML+112,y,58);y+=11;
-  cam('Município / UF',g('v_cidade'),ML,y,58);cam('CEP',g('v_cep'),ML+62,y,34);cam('Celular',g('v_cel'),ML+100,y,70);y+=11;
-  cam('E-mail',g('v_email'),ML,y,TW);y+=12;lnC();
-  y=par('Nomeia como procurador: '+cfg.nome+', código '+cfg.cod+', sito à '+cfg.end+' — CEP: '+cfg.cep+', para representá-lo junto ao DETRAN/GO para INCLUSÃO DE INTENÇÃO DE VENDA ou CANCELAMENTO ATPV e/ou EMISSÃO DA ATPV-E do veículo abaixo, podendo para tanto praticar quaisquer atos necessários para o fiel cumprimento deste Mandato, o que desde já fica dado por firme e valioso.',ML,y,TW,8.5);y+=4;
+  cam('Nome completo',g('v_nome'),ML,y,108);cam('CPF / CNPJ',g('v_cpf'),ML+112,y,58);y+=9.6;
+  cam('RG',g('v_rg'),ML,y,38);cam('Órgão exp.',g('v_rg_org'),ML+42,y,35);cam('Estado civil',g('v_ecivil'),ML+81,y,89);y+=9.6;
+  cam('Endereço',g('v_end'),ML,y,108);cam('Bairro',g('v_bairro'),ML+112,y,58);y+=9.6;
+  cam('Município / UF',g('v_cidade'),ML,y,58);cam('CEP',g('v_cep'),ML+62,y,34);cam('Celular',g('v_cel'),ML+100,y,70);y+=9.6;
+  cam('E-mail',g('v_email'),ML,y,TW);y+=10;lnC();
+  y=par('Nomeia como procurador: '+cfg.nome+', código '+cfg.cod+', sito à '+cfg.end+' — CEP: '+cfg.cep+', para representá-lo junto ao DETRAN/GO para INCLUSÃO DE INTENÇÃO DE VENDA ou CANCELAMENTO ATPV e/ou EMISSÃO DA ATPV-E do veículo abaixo, podendo para tanto praticar quaisquer atos necessários para o fiel cumprimento deste Mandato, o que desde já fica dado por firme e valioso.',ML,y,TW,8.5);y+=2.5;
   bar('DADOS DO VEÍCULO');
-  cam('Marca / Modelo',g('ve_modelo'),ML,y,108);cam('Ano fabricação / Modelo',g('ve_ano'),ML+112,y,58);y+=11;
-  cam('Placa',g('ve_placa'),ML,y,52);cam('Chassi',g('ve_chassi'),ML+56,y,TW-56);y+=14;
+  cam('Marca / Modelo',g('ve_modelo'),ML,y,108);cam('Ano fabricação / Modelo',g('ve_ano'),ML+112,y,58);y+=9.6;
+  cam('Placa',g('ve_placa'),ML,y,52);cam('Chassi',g('ve_chassi'),ML+56,y,TW-56);y+=11;
   bar('DADOS DO COMPRADOR');
-  y=par('Declaro que os dados abaixo são verdadeiros, assumindo inteira responsabilidade, isentando o despachante de qualquer infortúnio.',ML,y,TW,8);y+=3;
-  cam('Nome completo do comprador',g('c_nome'),ML,y,108);cam('CPF / CNPJ',g('c_cpf'),ML+112,y,58);y+=11;
-  cam('RG',g('c_rg'),ML,y,52);cam('Valor da venda',g('c_valor'),ML+56,y,114);y+=11;
-  cam('Endereço completo',g('c_end'),ML,y,108);cam('Bairro',g('c_bairro'),ML+112,y,58);y+=11;
-  cam('Cidade / UF',g('c_cidade'),ML,y,58);cam('CEP',g('c_cep'),ML+62,y,34);cam('E-mail',g('c_email'),ML+100,y,70);y+=14;
+  y=par('Declaro que os dados abaixo são verdadeiros, assumindo inteira responsabilidade, isentando o despachante de qualquer infortúnio.',ML,y,TW,8);y+=2;
+  cam('Nome completo do comprador',g('c_nome'),ML,y,108);cam('CPF / CNPJ',g('c_cpf'),ML+112,y,58);y+=9.6;
+  cam('RG',g('c_rg'),ML,y,52);cam('Valor da venda',g('c_valor'),ML+56,y,114);y+=9.6;
+  cam('Endereço completo',g('c_end'),ML,y,108);cam('Bairro',g('c_bairro'),ML+112,y,58);y+=9.6;
+  cam('Cidade / UF',g('c_cidade'),ML,y,58);cam('CEP',g('c_cep'),ML+62,y,34);cam('E-mail',g('c_email'),ML+100,y,70);y+=11;
   lnC();y+=4;
-  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(50,50,50);doc.text(cfg.cidade+', '+dt,ML,y);y+=18;
-  doc.setDrawColor(120,120,120);doc.line(W/2+8,y,ML+TW,y);
+  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(50,50,50);doc.text(cfg.cidade+', '+dt,ML,y);
+
+  // ── Mede o bloco de encerramento antes de desenhar e encaixa acima do rodapé ──
+  // Assim a declaração e o carimbo nunca invadem o rodapé, e o espaço que sobra
+  // vira folga para a assinatura do cliente.
+  var decTxt='Declaro, sob as penas da lei, que a assinatura aposta neste instrumento foi colhida em '+
+             'conformidade com o procedimento adotado, assumindo a responsabilidade civil e criminal '+
+             'pelas informações e atos declaratórios aqui consignados, nos limites da atuação profissional.';
+  doc.setFont('helvetica','normal');doc.setFontSize(7.2);
+  var decLin=doc.splitTextToSize(decTxt,TW-10);
+  var decH=7+decLin.length*3.1;
+  var cbW=70, cbH=21, cbX=(W-cbW)/2;
+  var fimH=4+5+decH+3.5+cbH+3+10.4;        // rótulo + folga + declaração + carimbo + assinatura
+  var TOPO_RODAPE=281.5;                   // o rodapé do documento começa em 285
+  y=Math.max(y+8, TOPO_RODAPE-fimH);       // a linha do outorgante fica aqui
+
+  doc.setDrawColor(120,120,120);doc.setLineWidth(0.3);doc.line(W/2+8,y,ML+TW,y);
 
   // Marca invisível que diz à ZapSign onde colocar a assinatura do cliente.
   // Texto branco sobre fundo branco: não aparece no documento impresso.
@@ -1327,9 +1370,61 @@ function montarPDF(){
   };
 
   doc.setFontSize(7.5);doc.setTextColor(100,100,100);doc.text('Assinatura do Outorgante (Proprietário Vendedor)',W/2+8,y+4);
-  y=285;doc.setDrawColor(190,190,190);doc.line(ML,y,ML+TW,y);y+=4;
-  doc.setFont('helvetica','oblique');doc.setFontSize(7);doc.setTextColor(150,150,150);
-  doc.text(cfg.nome+' — Código DETRAN '+cfg.cod+' — '+cfg.end+' — CEP '+cfg.cep,W/2,y,{align:'center'});
+  y+=9;
+
+  // ── BLOCO DO DESPACHANTE (declaração + carimbo + assinatura) ──
+  // Escreve o texto centralizado encolhendo a fonte até caber na largura pedida.
+  function txtFit(t,cx,cy,maxW,sz,min){
+    t=(t||'').toString();
+    doc.setFontSize(sz);
+    while(sz>(min||4) && doc.getTextWidth(t)>maxW){ sz-=0.2; doc.setFontSize(sz); }
+    doc.text(t,cx,cy,{align:'center'});
+  }
+
+  // Declaração
+  doc.setDrawColor(190,190,190);doc.setLineWidth(0.3);
+  doc.roundedRect(ML,y,TW,decH,1.5,1.5,'D');
+  doc.setFont('helvetica','bold');doc.setFontSize(7);doc.setTextColor(40,40,40);
+  doc.text('DECLARAÇÃO DO DESPACHANTE',ML+5,y+4.6);
+  doc.setFont('helvetica','normal');doc.setFontSize(7.2);doc.setTextColor(50,50,50);
+  doc.text(decLin,ML+5,y+8.4);
+  y+=decH+3.5;
+
+  // Carimbo: atesto em cima, assinatura no meio, nome e código embaixo da linha
+  doc.setDrawColor(70,70,70);doc.setLineWidth(0.4);
+  doc.rect(cbX,y,cbW,cbH,'D');
+  doc.setFont('helvetica','normal');doc.setFontSize(4.6);doc.setTextColor(30,30,30);
+  var atesto=['ATESTO SOB AS PENAS DA LEI CIVIL E CRIMINAL',
+              'QUE A ASSINATURA NA PROCURAÇÃO É',
+              'DE PRÓPRIO PUNHO DO OUTORGANTE.'];
+  atesto.forEach(function(l,i){ doc.text(l,W/2,y+3.4+i*2.5,{align:'center'}); });
+  if(cfg.assinatura){
+    // 'FAST' comprime a imagem dentro do PDF: o arquivo final fica pequeno
+    // o bastante para subir no sistema do DETRAN.
+    try{ doc.addImage(cfg.assinatura,'PNG',cbX+21,y+8.9,28,7,'assinDesp','FAST'); }
+    catch(e){ try{ doc.addImage(cfg.assinatura,'PNG',cbX+21,y+8.9,28,7); }catch(e2){} }
+  }
+  doc.setDrawColor(70,70,70);doc.setLineWidth(0.25);
+  doc.line(cbX+6,y+16.2,cbX+cbW-6,y+16.2);
+  doc.setFont('helvetica','bold');
+  txtFit((cfg.nome||'').toUpperCase(),W/2,y+18.5,cbW-10,5.2,3.4);
+  doc.setFont('helvetica','normal');doc.setFontSize(4.8);
+  doc.text('CÓD.: '+(cfg.cod||'—'),W/2,y+20.4,{align:'center'});
+  y+=cbH+3;
+
+  // Linha de assinatura do despachante
+  doc.setDrawColor(110,110,110);doc.setLineWidth(0.3);
+  doc.line(W/2-38,y,W/2+38,y);y+=3.2;
+  doc.setFont('helvetica','normal');doc.setFontSize(6.2);doc.setTextColor(110,110,110);
+  doc.text('ASSINATURA DO DESPACHANTE',W/2,y,{align:'center'});y+=3.6;
+  doc.setFont('helvetica','bold');doc.setTextColor(30,30,30);
+  txtFit((cfg.nome||'')+(cfg.cnpj?', CNPJ: '+cfg.cnpj:''),W/2,y,TW,7.6,5);y+=3.4;
+  doc.setFont('helvetica','normal');doc.setFontSize(6.5);doc.setTextColor(90,90,90);
+  doc.text('Cód. interno: '+(cfg.cod||'—'),W/2,y,{align:'center'});
+
+  y=285;doc.setDrawColor(190,190,190);doc.setLineWidth(0.3);doc.line(ML,y,ML+TW,y);y+=4;
+  doc.setFont('helvetica','oblique');doc.setTextColor(150,150,150);
+  txtFit(cfg.nome+' — Código DETRAN '+cfg.cod+' — '+cfg.end+' — CEP '+cfg.cep,W/2,y,TW,7,4.2);
   return doc;
 }
 
@@ -1358,7 +1453,7 @@ function abrirNivel(nome){
     'Celular: '+(cel||'<span style="color:var(--red)">não preenchido</span>')+'<br>'+
     'E-mail: '+(email||'<span style="color:var(--red)">não preenchido</span>');
   var sel=document.getElementById('niv-escolha');
-  try{ sel.value=localStorage.getItem('nivel_assin')||'documento'; }catch(e){ sel.value='documento'; }
+  try{ sel.value=localStorage.getItem('nivel_assin')||'selfie'; }catch(e){ sel.value='selfie'; }
   avaliarNivel();
   document.getElementById('modal-nivel').classList.add('open');
 }
@@ -1377,15 +1472,20 @@ function avaliarNivel(){
                 nota:'Prova que o cliente estava com o celular dele.', cor:'var(--acc2)'},
     whatsapp:  {fone:true,  email:false, cpf:true,  custo:'Cerca de R$ 0,50 por envio.',
                 nota:'Prova que o cliente estava com o celular dele. Bom equilíbrio.', cor:'var(--acc)'},
+    selfie:    {fone:true,  email:false, cpf:true,  custo:'R$ 0,50 do WhatsApp + custo da selfie.',
+                nota:'Selfie do rosto no comprovante. Arquivo menor, cabe no sistema do DETRAN.', cor:'var(--acc)'},
     documento: {fone:true,  email:false, cpf:true,  custo:'R$ 0,50 do WhatsApp + custo da verificação.',
-                nota:'Guarda foto do documento e selfie no comprovante.', cor:'var(--acc)'},
+                nota:'Selfie e foto do documento. Arquivo fica maior.', cor:'var(--acc)'},
     biometria: {fone:true,  email:false, cpf:true,  custo:'O mais caro por assinatura.',
                 nota:'Compara a selfie com a base oficial do governo. Prova mais forte.', cor:'var(--acc)'}
   };
+  // Vendedor pessoa jurídica: quem assina é o sócio ou representante legal.
+  // A ZapSign não tem campo de CNPJ, então ela pede o CPF de quem assinar.
+  var pj = cpf.length===14;
   var r=regras[n]||regras.whatsapp, faltas=[];
   if(r.fone  && cel.length<10) faltas.push('Celular');
   if(r.email && !email)        faltas.push('E-mail');
-  if(r.cpf   && cpf.length!==11) faltas.push('CPF do vendedor (11 dígitos)');
+  if(r.cpf   && !pj && cpf.length!==11) faltas.push('CPF do vendedor (11 dígitos)');
 
   var box=document.getElementById('niv-explica');
   var btn=document.getElementById('niv-confirmar');
@@ -1397,7 +1497,11 @@ function avaliarNivel(){
   } else {
     box.style.borderColor='var(--bord)';
     box.innerHTML='<b style="color:'+r.cor+'">'+r.nota+'</b><br>'+
-      '<span style="color:var(--mut)">'+r.custo+'</span>';
+      '<span style="color:var(--mut)">'+r.custo+'</span>'+
+      (pj && r.cpf ? '<br><br><b style="color:var(--acc2)">Vendedor é empresa (CNPJ).</b>'+
+        '<br><span style="color:var(--mut)">A ZapSign vai pedir o CPF de quem assinar pela empresa '+
+        '(sócio ou representante legal) e registrar no comprovante. A conferência na Receita '+
+        'fica desligada, porque ela cruza CPF com nome de pessoa física.</span>' : '');
     btn.disabled=false; btn.style.opacity=1;
   }
 }
@@ -1859,9 +1963,86 @@ function limparTudo(){
 }
 
 // ═══ CONFIG ══════════════════════════════════════════════════
+var CFG_ASSINATURA='';
+
+function carregarConfig(){
+  fetch('/api/config').then(function(r){return r.json();}).then(function(c){
+    [['cfg_nome','nome'],['cfg_cod','cod'],['cfg_end','end'],['cfg_cep','cep'],
+     ['cfg_cidade','cidade'],['cfg_cnpj','cnpj']].forEach(function(par){
+      var el=document.getElementById(par[0]);
+      if(el) el.value=(c[par[1]]!==undefined&&c[par[1]]!==null)?c[par[1]]:'';
+    });
+    CFG_ASSINATURA=c.assinatura||'';
+    mostrarPreviaAssinatura();
+  }).catch(function(){});
+}
+
+function mostrarPreviaAssinatura(){
+  var box=document.getElementById('cfg-assin-previa');
+  if(!box) return;
+  box.innerHTML = CFG_ASSINATURA
+    ? '<img src="'+CFG_ASSINATURA+'" style="max-width:190px;max-height:56px">'
+    : '<span style="font-size:11px;color:#888">sem assinatura</span>';
+}
+
+function carregarAssinaturaArquivo(input){
+  var f=input.files && input.files[0];
+  if(!f) return;
+  if(f.size > 4*1024*1024){ showAlert('Imagem muito grande. Use uma foto menor.','warn'); return; }
+  var fr=new FileReader();
+  fr.onload=function(){
+    // Reduz e joga o fundo claro fora, para o carimbo sair limpo.
+    var img=new Image();
+    img.onload=function(){
+      var maxL=420, esc=Math.min(1, maxL/img.width, maxL/img.height);
+      var cv=document.createElement('canvas');
+      cv.width=Math.round(img.width*esc); cv.height=Math.round(img.height*esc);
+      var cx=cv.getContext('2d');
+      cx.drawImage(img,0,0,cv.width,cv.height);
+      try{
+        var d=cx.getImageData(0,0,cv.width,cv.height), p=d.data;
+        for(var i=0;i<p.length;i+=4){
+          var lum=p[i]*0.299+p[i+1]*0.587+p[i+2]*0.114;
+          if(lum>170){ p[i+3]=0; }                       // fundo claro vira transparente
+          else { p[i]=15; p[i+1]=20; p[i+2]=75;          // traço em azul-escuro
+                 p[i+3]=Math.min(255, Math.round((190-lum)*3)); }
+        }
+        cx.putImageData(d,0,0);
+      }catch(e){}
+      CFG_ASSINATURA=cv.toDataURL('image/png');
+      mostrarPreviaAssinatura();
+      showAlert('Assinatura carregada. Clique em Salvar configurações.','ok');
+    };
+    img.src=fr.result;
+  };
+  fr.readAsDataURL(f);
+  input.value='';
+}
+
+function removerAssinaturaCarimbo(){
+  CFG_ASSINATURA='';
+  mostrarPreviaAssinatura();
+  showAlert('Assinatura removida. Clique em Salvar configurações.','warn');
+}
+
+function salvarConfig(){
+  var st=document.getElementById('cfg-status');
+  if(st) st.textContent='Salvando...';
+  fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      nome:g('cfg_nome'), cod:g('cfg_cod'), end:g('cfg_end'), cep:g('cfg_cep'),
+      cidade:g('cfg_cidade'), cnpj:g('cfg_cnpj'), assinatura:CFG_ASSINATURA })})
+  .then(function(r){return r.json();}).then(function(d){
+    if(st) st.textContent='';
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    showAlert('✓ Configurações salvas!','ok');
+  }).catch(function(){ if(st) st.textContent=''; showAlert('Falha ao salvar.','err'); });
+}
+
 function getCfg(){return{nome:g('cfg_nome')||'DIEGO DESPACHANTE',cod:g('cfg_cod')||'2670',
   end:g('cfg_end')||'AVENIDA BRASIL N.464 VILA JUSSARA ANAPOLIS-GO',
-  cep:g('cfg_cep')||'75123-115',cidade:g('cfg_cidade')||'ANÁPOLIS/GO'};}
+  cep:g('cfg_cep')||'75123-115',cidade:g('cfg_cidade')||'ANÁPOLIS/GO',
+  cnpj:g('cfg_cnpj')||'', assinatura:CFG_ASSINATURA||''};}
 
 // ═══ ALERTA ══════════════════════════════════════════════════
 function showAlert(msg,tipo){
@@ -2616,6 +2797,7 @@ carregarMe();
 carregarHist();
 gerarPreview();
 carregarPrazos();
+carregarConfig();
 modulo('atpv');
 setInterval(carregarHist,300000);
 </script>
