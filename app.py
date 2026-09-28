@@ -16,14 +16,19 @@ app.config['SESSION_COOKIE_SECURE'] = False
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 
+def _env(nome, padrao=''):
+    """Le a variavel ja sem espacos, aspas ou quebras de linha — colar o
+    valor no painel costuma trazer esse lixo junto e derruba a requisicao."""
+    return (os.environ.get(nome, padrao) or '').strip().strip('"').strip("'").strip()
+
 # ── ZAPSIGN (assinatura eletrônica) ───────────────────────────
-ZAPSIGN_TOKEN = os.environ.get('ZAPSIGN_TOKEN', '')
-ZAPSIGN_API   = os.environ.get('ZAPSIGN_API', 'https://api.zapsign.com.br/api/v1')
+ZAPSIGN_TOKEN = _env('ZAPSIGN_TOKEN')
+ZAPSIGN_API   = _env('ZAPSIGN_API', 'https://api.zapsign.com.br/api/v1')
 
 # ── ALERTAS (Telegram) ────────────────────────────────────────
-TELEGRAM_TOKEN   = os.environ.get('TELEGRAM_TOKEN', '')
-TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
-ALERTA_CHAVE     = os.environ.get('ALERTA_CHAVE', '')
+TELEGRAM_TOKEN   = _env('TELEGRAM_TOKEN')
+TELEGRAM_CHAT_ID = _env('TELEGRAM_CHAT_ID')
+ALERTA_CHAVE     = _env('ALERTA_CHAVE')
 
 # ── BANCO DE DADOS ────────────────────────────────────────────
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
@@ -1076,6 +1081,9 @@ def _zapsign(caminho, payload=None, metodo="GET"):
         if e.code in (401, 403):
             return None, "Token da ZapSign inválido ou sem permissão para usar a API."
         return None, "ZapSign respondeu erro %s. %s" % (e.code, detalhe)
+    except ValueError as e:
+        return None, ("O token da ZapSign parece ter espaços ou quebras de linha. "
+                      "Refaça o cadastro da variável ZAPSIGN_TOKEN no Render. (%s)" % e)
     except Exception as e:
         return None, "Não foi possível falar com a ZapSign: %s" % e
 
