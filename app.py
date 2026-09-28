@@ -214,6 +214,12 @@ CREATE TABLE IF NOT EXISTS processo_andamentos (
 );
 CREATE INDEX IF NOT EXISTS andam_proc_idx ON processo_andamentos (processo_id, id);
 
+CREATE TABLE IF NOT EXISTS config (
+    chave      TEXT PRIMARY KEY,
+    valor      TEXT DEFAULT '',
+    atualizado TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS migracoes (
     nome     TEXT PRIMARY KEY,
     aplicada TIMESTAMPTZ DEFAULT NOW()
@@ -1120,6 +1126,13 @@ NIVEIS_ASSIN = {
         "exige_fone": True, "exige_cpf": True,
         "extras": {"require_cpf": True, "validate_cpf": True},
     },
+    "selfie": {
+        "rotulo": "WhatsApp + CPF + selfie (arquivo menor)",
+        "auth_mode": "assinaturaTela-tokenWhatsApp",
+        "exige_fone": True, "exige_cpf": True,
+        "extras": {"require_cpf": True, "validate_cpf": True,
+                   "require_selfie_photo": True},
+    },
     "documento": {
         "rotulo": "WhatsApp + CPF + foto do documento e selfie",
         "auth_mode": "assinaturaTela-tokenWhatsApp",
@@ -1136,6 +1149,51 @@ NIVEIS_ASSIN = {
                    "selfie_validation_type": "face-match-and-datavalid"},
     },
 }
+
+CONFIG_PADRAO = {
+    "nome":   "DIEGO DESPACHANTE",
+    "cod":    "2670",
+    "cnpj":   "",
+    "end":    "AVENIDA BRASIL N.464 VILA JUSSARA ANAPOLIS-GO",
+    "cep":    "75123-115",
+    "cidade": "ANÁPOLIS/GO",
+    "assinatura": "",
+}
+
+@app.route("/api/config", methods=["GET"])
+@login_required
+def api_config_get():
+    cfg = dict(CONFIG_PADRAO)
+    try:
+        with db() as cur:
+            cur.execute("SELECT chave, valor FROM config")
+            for r in cur.fetchall():
+                cfg[r['chave']] = r['valor'] or ''
+    except Exception:
+        pass
+    return jsonify(cfg)
+
+@app.route("/api/config", methods=["POST"])
+@login_required
+def api_config_post():
+    if not so_admin():
+        return jsonify({"erro": "Sem permissão"}), 403
+    d = request.get_json() or {}
+    permitidas = set(CONFIG_PADRAO.keys())
+    with db(commit=True) as cur:
+        for chave, valor in d.items():
+            if chave not in permitidas:
+                continue
+            valor = valor if isinstance(valor, str) else ""
+            if chave == "assinatura" and len(valor) > 400000:
+                return jsonify({"erro": "A imagem da assinatura está grande demais. "
+                                        "Use uma foto menor."}), 400
+            cur.execute("""INSERT INTO config (chave, valor, atualizado)
+                           VALUES (%s,%s,NOW())
+                           ON CONFLICT (chave) DO UPDATE
+                             SET valor = EXCLUDED.valor, atualizado = NOW()""",
+                        (chave, valor))
+    return jsonify({"ok": True})
 
 @app.route("/api/assinatura/niveis", methods=["GET"])
 @login_required
@@ -1163,9 +1221,9 @@ def api_assinatura():
         pdf = pdf.split(",", 1)[1]
 
     # ── nível de autenticação exigido do cliente ──────────────
-    nivel = (data.get("nivel") or "whatsapp").strip()
+    nivel = (data.get("nivel") or "selfie").strip()
     if nivel not in NIVEIS_ASSIN:
-        nivel = "whatsapp"
+        nivel = "selfie"
     regra = NIVEIS_ASSIN[nivel]
 
     email = (data.get("email") or "").strip()
@@ -1177,9 +1235,14 @@ def api_assinatura():
                                 "Preencha o campo Celular e tente de novo."}), 400
     if regra.get("exige_email") and not email:
         return jsonify({"erro": "Para este nível o e-mail do cliente é obrigatório."}), 400
-    if regra.get("exige_cpf") and len(cpf) != 11:
-        return jsonify({"erro": "Para este nível o CPF do cliente é obrigatório "
-                                "(e precisa ser CPF, não CNPJ)."}), 400
+    # Vendedor pessoa jurídica: quem assina pela empresa é sempre uma pessoa
+    # física (sócio ou representante legal). A ZapSign não tem campo de CNPJ,
+    # então o documento sai com o CPF em branco e ela pede o CPF de quem
+    # estiver assinando, na hora da assinatura.
+    pj = len(cpf) == 14
+    if regra.get("exige_cpf") and not pj and len(cpf) != 11:
+        return jsonify({"erro": "Para este nível o CPF do cliente é obrigatório. "
+                                "Preencha o campo CPF / CNPJ na aba Vendedor."}), 400
 
     signer = {"name": nome, "auth_mode": regra["auth_mode"],
               "send_automatic_email": False, "send_automatic_whatsapp": False}
@@ -1192,6 +1255,13 @@ def api_assinatura():
         signer["cpf"] = cpf
     for chave, valor in regra.get("extras", {}).items():
         signer[chave] = valor
+    if pj:
+        # A consulta à Receita cruza CPF + nome + nascimento. Com o nome da
+        # empresa no documento ela reprovaria sempre, então fica desligada;
+        # o CPF continua sendo pedido e registrado no comprovante.
+        signer.pop("validate_cpf", None)
+        signer.pop("selfie_validation_type", None)
+        signer["require_cpf"] = True
 
     resp, erro = _zapsign("/docs/", {
         "name": (data.get("titulo") or "Procuração ATPV-e")[:255],
