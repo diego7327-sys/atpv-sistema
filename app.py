@@ -166,6 +166,12 @@ CREATE TABLE IF NOT EXISTS cofre (
     criado    TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE IF EXISTS atendimentos ADD COLUMN IF NOT EXISTS assinatura_status  TEXT DEFAULT '';
+ALTER TABLE IF EXISTS atendimentos ADD COLUMN IF NOT EXISTS assinatura_arquivo TEXT DEFAULT '';
+ALTER TABLE IF EXISTS atendimentos ADD COLUMN IF NOT EXISTS assinatura_em      TIMESTAMPTZ;
+ALTER TABLE IF EXISTS atendimentos ADD COLUMN IF NOT EXISTS assinatura_nome    TEXT DEFAULT '';
+CREATE INDEX IF NOT EXISTS atend_assin_idx ON atendimentos (assinatura_token) WHERE assinatura_token <> '';
+
 CREATE TABLE IF NOT EXISTS processos (
     id               BIGSERIAL PRIMARY KEY,
     criado           TIMESTAMPTZ DEFAULT NOW(),
@@ -1129,8 +1135,11 @@ def api_assinatura():
     if aid and sign_url:
         try:
             with db(commit=True) as cur:
-                cur.execute("""UPDATE atendimentos SET assinatura_token=%s, assinatura_url=%s
-                               WHERE id = %s""", (doc_token, sign_url, int(aid)))
+                cur.execute("""UPDATE atendimentos SET assinatura_token=%s, assinatura_url=%s,
+                                 assinatura_status=%s, assinatura_nome=%s, assinatura_em=NULL
+                               WHERE id = %s""",
+                            (doc_token, sign_url, resp.get("status","pending") or "pending",
+                             signers[0].get("name", nome), int(aid)))
         except Exception:
             pass
 
@@ -1152,6 +1161,172 @@ def api_assinatura_status(doc_token):
         "signers": [{"nome": s.get("name", ""), "status": s.get("status", ""),
                      "sign_url": s.get("sign_url", "")} for s in (resp.get("signers") or [])],
     })
+
+# ══════════════════════════════════════════════════════════════
+# ACOMPANHAMENTO DAS ASSINATURAS
+# ══════════════════════════════════════════════════════════════
+STATUS_ASSIN = {
+    'pending':  'Aguardando assinatura',
+    'signed':   'Assinado',
+    'refused':  'Recusado pelo cliente',
+    'deleted':  'Removido na ZapSign',
+    'expired':  'Expirado',
+}
+
+def _assin_saida(r):
+    d = dict(r)
+    if d.get('assinatura_em'):
+        d['assinatura_em'] = d['assinatura_em'].strftime('%d/%m/%Y %H:%M')
+    d['status_label'] = STATUS_ASSIN.get(d.get('assinatura_status'),
+                                         d.get('assinatura_status') or 'Aguardando assinatura')
+    return d
+
+def _atualizar_assinatura(cur, doc_token):
+    """Consulta a ZapSign e grava o estado atual do documento.
+    Devolve o status, ou None se não deu para consultar."""
+    resp, erro = _zapsign("/docs/%s/" % doc_token)
+    if erro:
+        return None
+    status   = resp.get("status", "") or ""
+    arquivo  = resp.get("signed_file", "") or ""
+    signers  = resp.get("signers") or [{}]
+    quem     = signers[0].get("name", "") or ""
+    assinado = (status == 'signed')
+    cur.execute("""UPDATE atendimentos SET
+                     assinatura_status  = %s,
+                     assinatura_arquivo = %s,
+                     assinatura_nome    = %s,
+                     assinatura_em      = CASE WHEN %s THEN COALESCE(assinatura_em, NOW()) ELSE assinatura_em END
+                   WHERE assinatura_token = %s""",
+                (status, arquivo, quem, assinado, doc_token))
+    return status
+
+@app.route("/api/assinaturas", methods=["GET"])
+@login_required
+def api_assinaturas():
+    """Documentos enviados para assinatura, mais recentes primeiro."""
+    filtro = (request.args.get("status") or "").strip()
+    q      = (request.args.get("q") or "").strip().lower()
+    cond, params = _escopo_empresa()
+    if filtro == 'pendentes':
+        cond += " AND COALESCE(assinatura_status,'') <> 'signed'"
+    elif filtro == 'assinados':
+        cond += " AND assinatura_status = 'signed'"
+    if q:
+        cond += " AND (lower(nome) LIKE %s OR lower(placa) LIKE %s)"
+        params += ['%'+q+'%', '%'+q+'%']
+
+    with db() as cur:
+        cur.execute("""SELECT id, data, nome, placa, modelo, assinatura_token, assinatura_url,
+                              assinatura_status, assinatura_arquivo, assinatura_nome, assinatura_em
+                       FROM atendimentos
+                       WHERE COALESCE(assinatura_token,'') <> ''""" + cond +
+                    " ORDER BY id DESC LIMIT 200", params)
+        itens = [_assin_saida(r) for r in cur.fetchall()]
+        cur.execute("""SELECT
+              COUNT(*) FILTER (WHERE assinatura_status = 'signed')                  AS assinados,
+              COUNT(*) FILTER (WHERE COALESCE(assinatura_status,'') NOT IN ('signed','refused','expired','deleted')) AS aguardando,
+              COUNT(*) AS total
+            FROM atendimentos WHERE COALESCE(assinatura_token,'') <> ''""" + cond, params)
+        resumo = dict(cur.fetchone())
+    return jsonify({"itens": itens, "resumo": resumo})
+
+@app.route("/api/assinaturas/sincronizar", methods=["POST"])
+@login_required
+def api_assin_sincronizar():
+    """Pergunta à ZapSign o estado dos documentos que ainda não foram assinados."""
+    if not ZAPSIGN_TOKEN:
+        return jsonify({"erro": "Token da ZapSign não configurado."}), 400
+    cond, params = _escopo_empresa()
+    with db(commit=True) as cur:
+        cur.execute("""SELECT assinatura_token FROM atendimentos
+                       WHERE COALESCE(assinatura_token,'') <> ''
+                         AND COALESCE(assinatura_status,'') NOT IN ('signed','refused','deleted','expired')
+                    """ + cond + " ORDER BY id DESC LIMIT 60", params)
+        tokens = [r['assinatura_token'] for r in cur.fetchall()]
+        novos = 0
+        for t in tokens:
+            if _atualizar_assinatura(cur, t) == 'signed':
+                novos += 1
+    return jsonify({"ok": True, "consultados": len(tokens), "assinados_agora": novos})
+
+@app.route("/api/assinaturas/<int:aid>/atualizar", methods=["POST"])
+@login_required
+def api_assin_um(aid):
+    """Atualiza um documento específico."""
+    if not ZAPSIGN_TOKEN:
+        return jsonify({"erro": "Token da ZapSign não configurado."}), 400
+    cond, params = _escopo_empresa()
+    with db(commit=True) as cur:
+        cur.execute("SELECT assinatura_token FROM atendimentos WHERE id = %s" + cond,
+                    [aid] + params)
+        row = cur.fetchone()
+        if not row or not row['assinatura_token']:
+            return jsonify({"erro": "Este atendimento não tem documento enviado."}), 404
+        status = _atualizar_assinatura(cur, row['assinatura_token'])
+    if status is None:
+        return jsonify({"erro": "Não foi possível consultar a ZapSign agora."}), 502
+    return jsonify({"ok": True, "status": status,
+                    "status_label": STATUS_ASSIN.get(status, status)})
+
+@app.route("/api/zapsign-webhook", methods=["POST"])
+def api_zapsign_webhook():
+    """A ZapSign chama esta URL quando o documento muda de estado.
+    Protegido pela mesma chave do alerta, passada na URL."""
+    if ALERTA_CHAVE and (request.args.get("chave") or "") != ALERTA_CHAVE:
+        return jsonify({"erro": "Chave inválida"}), 403
+    dados = request.get_json(silent=True) or {}
+    # O token do documento pode vir em nomes diferentes conforme o evento;
+    # por isso procuramos em todos e usamos o webhook apenas como gatilho.
+    token = ""
+    for chave in ("token", "doc_token", "document_token", "external_id"):
+        v = dados.get(chave)
+        if isinstance(v, str) and v.strip():
+            token = v.strip()
+            break
+    if not token and isinstance(dados.get("doc"), dict):
+        token = (dados["doc"].get("token") or "").strip()
+    if not token and isinstance(dados.get("document"), dict):
+        token = (dados["document"].get("token") or "").strip()
+    if not token:
+        return jsonify({"ok": True, "ignorado": "sem token no aviso"}), 200
+    try:
+        with db(commit=True) as cur:
+            # só mexe em documento que é nosso
+            cur.execute("SELECT 1 FROM atendimentos WHERE assinatura_token = %s", (token,))
+            if not cur.fetchone():
+                return jsonify({"ok": True, "ignorado": "documento não é deste sistema"}), 200
+            status = _atualizar_assinatura(cur, token)
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+    return jsonify({"ok": True, "status": status})
+
+@app.route("/api/zapsign-webhook/registrar", methods=["POST"])
+@login_required
+def api_zapsign_registrar():
+    """Cadastra o aviso automático na ZapSign, apontando para este sistema."""
+    if not so_admin():
+        return jsonify({"erro": "Sem permissão"}), 403
+    if not ZAPSIGN_TOKEN:
+        return jsonify({"erro": "Token da ZapSign não configurado."}), 400
+    base = (request.host_url or "").rstrip("/")
+    if base.startswith("http://") and "localhost" not in base and "127.0.0.1" not in base:
+        base = "https://" + base[len("http://"):]
+    destino = base + "/api/zapsign-webhook"
+    if ALERTA_CHAVE:
+        destino += "?chave=" + ALERTA_CHAVE
+    criados, erros = [], []
+    for evento in ("doc_signed", "doc_refused"):
+        resp, erro = _zapsign("/user/company/webhook/", {"url": destino, "type": evento}, "POST")
+        if erro:
+            erros.append("%s: %s" % (evento, erro))
+        else:
+            criados.append(evento)
+    if not criados:
+        return jsonify({"erro": " | ".join(erros) or "Não foi possível cadastrar."}), 502
+    return jsonify({"ok": True, "eventos": criados, "url": destino,
+                    "aviso": " | ".join(erros) if erros else ""})
+
 
 # ══════════════════════════════════════════════════════════════
 # RECURSOS DE MULTA E SUSPENSÃO DE CNH
