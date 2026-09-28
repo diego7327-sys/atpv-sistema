@@ -170,6 +170,7 @@ ALTER TABLE IF EXISTS atendimentos ADD COLUMN IF NOT EXISTS assinatura_status  T
 ALTER TABLE IF EXISTS atendimentos ADD COLUMN IF NOT EXISTS assinatura_arquivo TEXT DEFAULT '';
 ALTER TABLE IF EXISTS atendimentos ADD COLUMN IF NOT EXISTS assinatura_em      TIMESTAMPTZ;
 ALTER TABLE IF EXISTS atendimentos ADD COLUMN IF NOT EXISTS assinatura_nome    TEXT DEFAULT '';
+ALTER TABLE IF EXISTS atendimentos ADD COLUMN IF NOT EXISTS assinatura_nivel   TEXT DEFAULT '';
 CREATE INDEX IF NOT EXISTS atend_assin_idx ON atendimentos (assinatura_token) WHERE assinatura_token <> '';
 
 CREATE TABLE IF NOT EXISTS processos (
@@ -1093,6 +1094,59 @@ def _zapsign(caminho, payload=None, metodo="GET"):
     except Exception as e:
         return None, "Não foi possível falar com a ZapSign: %s" % e
 
+# Níveis de autenticação oferecidos ao cliente, do mais leve ao mais forte.
+# 'extras' são os campos que a ZapSign usa para exigir cada verificação.
+NIVEIS_ASSIN = {
+    "simples": {
+        "rotulo": "Apenas assinatura na tela",
+        "auth_mode": "assinaturaTela",
+        "extras": {},
+    },
+    "email": {
+        "rotulo": "Código por e-mail + CPF conferido na Receita",
+        "auth_mode": "assinaturaTela-tokenEmail",
+        "exige_email": True, "exige_cpf": True,
+        "extras": {"require_cpf": True, "validate_cpf": True},
+    },
+    "sms": {
+        "rotulo": "Código por SMS + CPF conferido na Receita",
+        "auth_mode": "assinaturaTela-tokenSms",
+        "exige_fone": True, "exige_cpf": True,
+        "extras": {"require_cpf": True, "validate_cpf": True},
+    },
+    "whatsapp": {
+        "rotulo": "Código por WhatsApp + CPF conferido na Receita",
+        "auth_mode": "assinaturaTela-tokenWhatsApp",
+        "exige_fone": True, "exige_cpf": True,
+        "extras": {"require_cpf": True, "validate_cpf": True},
+    },
+    "documento": {
+        "rotulo": "WhatsApp + CPF + foto do documento e selfie",
+        "auth_mode": "assinaturaTela-tokenWhatsApp",
+        "exige_fone": True, "exige_cpf": True,
+        "extras": {"require_cpf": True, "validate_cpf": True,
+                   "require_document_photo": True, "require_selfie_photo": True},
+    },
+    "biometria": {
+        "rotulo": "WhatsApp + CPF + biometria facial validada no governo",
+        "auth_mode": "assinaturaTela-tokenWhatsApp",
+        "exige_fone": True, "exige_cpf": True,
+        "extras": {"require_cpf": True, "validate_cpf": True,
+                   "require_document_photo": True, "require_selfie_photo": True,
+                   "selfie_validation_type": "face-match-and-datavalid"},
+    },
+}
+
+@app.route("/api/assinatura/niveis", methods=["GET"])
+@login_required
+def api_assin_niveis():
+    return jsonify({"niveis": [
+        {"id": k, "rotulo": v["rotulo"],
+         "exige_fone": bool(v.get("exige_fone")),
+         "exige_email": bool(v.get("exige_email")),
+         "exige_cpf": bool(v.get("exige_cpf"))}
+        for k, v in NIVEIS_ASSIN.items()]})
+
 @app.route("/api/assinatura", methods=["POST"])
 @login_required
 def api_assinatura():
@@ -1108,15 +1162,36 @@ def api_assinatura():
     if pdf.startswith("data:") and "," in pdf[:120]:
         pdf = pdf.split(",", 1)[1]
 
-    signer = {"name": nome, "auth_mode": "assinaturaTela",
-              "send_automatic_email": False, "send_automatic_whatsapp": False}
+    # ── nível de autenticação exigido do cliente ──────────────
+    nivel = (data.get("nivel") or "whatsapp").strip()
+    if nivel not in NIVEIS_ASSIN:
+        nivel = "whatsapp"
+    regra = NIVEIS_ASSIN[nivel]
+
     email = (data.get("email") or "").strip()
+    fone  = re.sub(r"\D", "", data.get("telefone") or "")
+    cpf   = re.sub(r"\D", "", data.get("cpf") or "")
+
+    if regra.get("exige_fone") and len(fone) < 10:
+        return jsonify({"erro": "Para este nível o celular do cliente é obrigatório. "
+                                "Preencha o campo Celular e tente de novo."}), 400
+    if regra.get("exige_email") and not email:
+        return jsonify({"erro": "Para este nível o e-mail do cliente é obrigatório."}), 400
+    if regra.get("exige_cpf") and len(cpf) != 11:
+        return jsonify({"erro": "Para este nível o CPF do cliente é obrigatório "
+                                "(e precisa ser CPF, não CNPJ)."}), 400
+
+    signer = {"name": nome, "auth_mode": regra["auth_mode"],
+              "send_automatic_email": False, "send_automatic_whatsapp": False}
     if email:
         signer["email"] = email
-    fone = re.sub(r"\D", "", data.get("telefone") or "")
     if len(fone) >= 10:
         signer["phone_country"] = "55"
         signer["phone_number"]  = fone[-11:]
+    if len(cpf) == 11:
+        signer["cpf"] = cpf
+    for chave, valor in regra.get("extras", {}).items():
+        signer[chave] = valor
 
     resp, erro = _zapsign("/docs/", {
         "name": (data.get("titulo") or "Procuração ATPV-e")[:255],
@@ -1129,6 +1204,32 @@ def api_assinatura():
     doc_token = resp.get("token", "")
     sign_url  = signers[0].get("sign_url", "")
 
+    # Posiciona a assinatura exatamente sobre a linha do documento.
+    # O PDF já leva uma marca invisível; isto reforça com as coordenadas.
+    pos = data.get("posicao_assinatura") or {}
+    signer_token = signers[0].get("token", "")
+    aviso_posicao = ""
+    if doc_token and signer_token and pos.get("relative_position_bottom") is not None:
+        try:
+            rubrica = {
+                "page": int(pos.get("page", 0)),
+                "relative_position_bottom": float(pos["relative_position_bottom"]),
+                "relative_position_left":   float(pos.get("relative_position_left", 55)),
+                "relative_size_x":          float(pos.get("relative_size_x", 19.55)),
+                "relative_size_y":          float(pos.get("relative_size_y", 9.42)),
+                "signer_token": signer_token,
+                "type": "signature",
+            }
+            _, erro_pos = _zapsign("/docs/%s/place-signatures/" % doc_token,
+                                   {"rubricas": [rubrica]}, "POST")
+            if erro_pos:
+                # Não é motivo para falhar o envio: a marca invisível no PDF
+                # já orienta a ZapSign, e o cliente assina de qualquer forma.
+                aviso_posicao = "Documento criado, mas não deu para fixar a posição da assinatura."
+        except (TypeError, ValueError):
+            aviso_posicao = "Posição da assinatura não pôde ser calculada."
+
+
     # Guarda o link no atendimento, quando informado — assim dá para
     # reabrir depois sem gastar outro documento do plano.
     aid = data.get("atendimento_id")
@@ -1136,15 +1237,18 @@ def api_assinatura():
         try:
             with db(commit=True) as cur:
                 cur.execute("""UPDATE atendimentos SET assinatura_token=%s, assinatura_url=%s,
-                                 assinatura_status=%s, assinatura_nome=%s, assinatura_em=NULL
+                                 assinatura_status=%s, assinatura_nome=%s,
+                                 assinatura_nivel=%s, assinatura_em=NULL
                                WHERE id = %s""",
                             (doc_token, sign_url, resp.get("status","pending") or "pending",
-                             signers[0].get("name", nome), int(aid)))
+                             signers[0].get("name", nome), nivel, int(aid)))
         except Exception:
             pass
 
     return jsonify({"ok": True, "doc_token": doc_token, "status": resp.get("status", ""),
-                    "sign_url": sign_url, "signer_nome": signers[0].get("name", nome)})
+                    "sign_url": sign_url, "signer_nome": signers[0].get("name", nome),
+                    "nivel": nivel, "nivel_rotulo": regra["rotulo"],
+                    "aviso": aviso_posicao})
 
 @app.route("/api/assinatura/<doc_token>", methods=["GET"])
 @login_required
