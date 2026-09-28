@@ -1,0 +1,2798 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ATPV-E | Diego Despachante</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root{
+  --bg:#0d0f14;--surf:#161920;--surf2:#1e2229;--bord:#2a2f3a;
+  --acc:#00d4aa;--acc2:#0099ff;--txt:#e8eaf0;--mut:#6b7280;
+  --red:#ff4757;--warn:#ffa502;
+  --font:'IBM Plex Sans',sans-serif;--mono:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--txt);min-height:100vh;display:flex;flex-direction:column}
+header{display:flex;align-items:center;justify-content:space-between;padding:12px 24px;border-bottom:1px solid var(--bord);background:var(--surf);position:sticky;top:0;z-index:100}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-ico{width:32px;height:32px;background:var(--acc);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#000;font-family:var(--mono)}
+.logo-txt{font-size:14px;font-weight:600}
+.logo-sub{font-size:10px;color:var(--mut);font-family:var(--mono)}
+.hstats{display:flex;gap:18px}
+.hstat{text-align:center}
+.hstat-v{font-size:17px;font-weight:600;font-family:var(--mono);color:var(--acc)}
+.hstat-l{font-size:9px;color:var(--mut);text-transform:uppercase;letter-spacing:.08em}
+.user-badge{font-size:11px;background:var(--surf2);border:1px solid var(--bord);border-radius:6px;padding:4px 10px;color:var(--mut);font-family:var(--mono)}
+.user-info{display:flex;align-items:center;gap:10px}
+.perfil-badge{font-size:10px;padding:3px 8px;border-radius:5px;font-weight:600;font-family:var(--mono)}
+.perfil-admin{background:rgba(0,212,170,.15);color:var(--acc)}
+.perfil-funcionario{background:rgba(0,153,255,.15);color:var(--acc2)}
+.perfil-empresa{background:rgba(255,165,2,.15);color:var(--warn)}
+.btn-logout{background:none;border:1px solid var(--bord);color:var(--mut);border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:var(--font)}
+.btn-logout:hover{border-color:var(--red);color:var(--red)}
+/* MODAL */
+.badge-alerta{background:var(--red);color:#fff;border-radius:9px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px;font-family:var(--mono)}
+.btn-novo-rec{float:right;padding:7px 14px;font-size:12px;font-weight:600;background:var(--acc);color:#04231c;border:none;border-radius:7px;cursor:pointer;font-family:var(--font)}
+.prazo-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:10px;margin-top:14px}
+.pcard{border:1px solid var(--bord);border-radius:10px;padding:13px 10px;text-align:center;background:var(--surf2);transition:border-color .15s}
+.pcard[onclick]{cursor:pointer}
+.pcard[onclick]:hover{border-color:var(--acc)}
+.pcard-v{font-size:23px;font-weight:700;font-family:var(--mono);line-height:1.1}
+.pcard-l{font-size:9.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin-top:4px}
+#tbl-recursos tr.lin-vencido td:first-child{box-shadow:inset 3px 0 0 var(--red)}
+#tbl-recursos tr.lin-hoje td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
+#tbl-recursos tr.lin-prox td:first-child{box-shadow:inset 3px 0 0 var(--acc2)}
+.tag-prazo{font-size:10px;padding:3px 8px;border-radius:5px;font-weight:600;white-space:nowrap;font-family:var(--mono)}
+.proc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;background:var(--surf2);border:1px solid var(--bord);border-radius:10px;padding:14px}
+.proc-lb{font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+.proc-vl{font-size:13px;margin-top:2px}
+.andam{border-left:2px solid var(--bord);padding:6px 0 6px 12px;margin-bottom:8px;font-size:12.5px}
+.andam-d{font-size:10.5px;color:var(--mut);font-family:var(--mono);margin-bottom:2px}
+.modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:var(--surf);border:1px solid var(--bord);border-radius:14px;padding:28px;width:100%;max-width:560px;max-height:85vh;overflow-y:auto}
+.modal-title{font-size:16px;font-weight:600;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}
+.modal-close{background:none;border:none;color:var(--mut);font-size:20px;cursor:pointer;line-height:1}
+.modal-close:hover{color:var(--txt)}
+.table-wrap{overflow-x:auto;margin-bottom:16px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:8px 10px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);border-bottom:1px solid var(--bord)}
+td{padding:9px 10px;border-bottom:1px solid var(--bord)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--surf2)}
+.tag{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;font-family:var(--mono)}
+.tag-admin{background:rgba(0,212,170,.15);color:var(--acc)}
+.tag-func{background:rgba(0,153,255,.15);color:var(--acc2)}
+.tag-emp{background:rgba(255,165,2,.15);color:var(--warn)}
+.tag-ok{background:rgba(0,212,170,.1);color:var(--acc)}
+.tag-off{background:rgba(255,71,87,.1);color:var(--red)}
+.modbar{display:flex;gap:4px;padding:0 24px;background:var(--surf2);border-bottom:1px solid var(--bord);overflow-x:auto}
+.modbtn{display:flex;align-items:center;gap:7px;padding:14px 20px;font-size:13px;font-weight:600;cursor:pointer;
+  border:none;border-bottom:3px solid transparent;background:none;color:var(--mut);font-family:var(--font);
+  white-space:nowrap;transition:all .15s}
+.modbtn:hover{color:var(--txt)}
+.modbtn.active{color:var(--acc);border-bottom-color:var(--acc);background:rgba(0,212,170,.05)}
+.modbtn .mod-ico{font-size:15px}
+.app{display:grid;grid-template-columns:320px 1fr;flex:1}
+.app.full{grid-template-columns:1fr}
+.left{border-right:1px solid var(--bord);display:flex;flex-direction:column;background:var(--surf);overflow-y:auto;max-height:calc(100vh - 57px);position:sticky;top:57px}
+.psec{padding:16px;border-bottom:1px solid var(--bord)}
+.psec:last-child{border-bottom:none;flex:1}
+.sec-l{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.12em;color:var(--mut);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.sec-l::after{content:'';flex:1;height:1px;background:var(--bord)}
+.paste-label{font-size:11px;color:var(--mut);line-height:1.5;margin-bottom:8px}
+.paste-wrap{position:relative}
+.paste-area{width:100%;min-height:130px;background:var(--surf2);border:1px solid var(--bord);border-radius:9px;padding:10px;padding-top:28px;font-size:12px;color:var(--txt);font-family:var(--mono);resize:vertical;line-height:1.7;transition:border-color .15s}
+.paste-area:focus{outline:none;border-color:var(--acc)}
+.paste-area::placeholder{color:var(--mut)}
+.btn-limpar-txt{position:absolute;top:6px;right:8px;background:rgba(255,71,87,.15);border:1px solid rgba(255,71,87,.3);color:var(--red);border-radius:5px;padding:2px 8px;font-size:10px;cursor:pointer;font-family:var(--font)}
+.btn-ext{width:100%;padding:11px;background:var(--acc);color:#000;border:none;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font);margin-top:10px}
+.btn-ext:hover{opacity:.85}
+.load-wrap{display:none;margin-top:8px}
+.load-msg{font-size:11px;color:var(--mut);font-family:var(--mono);margin-bottom:4px}
+.load-track{height:3px;background:var(--bord);border-radius:2px;overflow:hidden}
+.load-fill{height:100%;background:var(--acc);border-radius:2px;width:0;transition:width .3s}
+.hist-search{width:100%;background:var(--surf2);border:1px solid var(--bord);border-radius:7px;padding:7px 10px;font-size:12px;color:var(--txt);font-family:var(--font);margin-bottom:8px}
+.hist-search:focus{outline:none;border-color:var(--acc)}
+.hist-list{display:flex;flex-direction:column;gap:2px;max-height:260px;overflow-y:auto}
+.hist-item{padding:8px 10px;border-radius:7px;cursor:pointer;transition:background .1s;border:1px solid transparent}
+.hist-item:hover{background:var(--surf2);border-color:var(--bord)}
+.hist-nome{font-size:13px;font-weight:500}
+.hist-meta{font-size:10px;color:var(--mut);font-family:var(--mono);margin-top:2px}
+.hist-del{float:right;background:none;border:none;color:var(--mut);cursor:pointer;font-size:12px;padding:0 2px}
+.hist-del:hover{color:var(--red)}
+.hist-empty{font-size:12px;color:var(--mut);text-align:center;padding:16px 0}
+.right{display:flex;flex-direction:column}
+.ftabs{display:flex;padding:0 24px;border-bottom:1px solid var(--bord);background:var(--surf);overflow-x:auto}
+.ftab{padding:13px 16px;font-size:12px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;color:var(--mut);background:none;border-top:none;border-left:none;border-right:none;font-family:var(--font);transition:all .15s;white-space:nowrap}
+.ftab.active{color:var(--acc);border-bottom-color:var(--acc)}
+.ftc{display:none}.ftc.active{display:block}
+.fields{padding:20px 24px}
+.alert{margin:0 24px 10px;padding:9px 14px;border-radius:8px;font-size:13px;display:none}
+.alert.ok{background:rgba(0,212,170,.1);color:var(--acc);border:1px solid rgba(0,212,170,.3)}
+.alert.err{background:rgba(255,71,87,.1);color:var(--red);border:1px solid rgba(255,71,87,.3)}
+.alert.warn{background:rgba(255,165,2,.1);color:var(--warn);border:1px solid rgba(255,165,2,.3)}
+.fb{margin-bottom:20px}
+.fb-title{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--acc);font-family:var(--mono);margin-bottom:12px;padding-bottom:7px;border-bottom:1px solid var(--bord)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.g1{display:grid;grid-template-columns:1fr;gap:10px}
+.fg{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;position:relative}
+.fg label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--mut)}
+.fg input,.fg select{background:var(--surf);border:1px solid var(--bord);border-radius:7px;padding:8px 11px;font-size:13px;color:var(--txt);font-family:var(--font);transition:border-color .15s;width:100%}
+.fg input:focus,.fg select:focus{outline:none;border-color:var(--acc)}
+.fg select option{background:var(--surf2)}
+.fg input.ia{border-color:var(--acc);background:rgba(0,212,170,.04)}
+/* AUTOCOMPLETE */
+.ac-drop{display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;z-index:9999;background:var(--surf2);border:1px solid var(--acc);border-radius:0 0 8px 8px;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.ac-drop.open{display:block}
+.ac-item{padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--bord)}
+.ac-item:last-child{border-bottom:none}
+.ac-item:hover{background:rgba(0,212,170,.12)}
+.ac-nome{font-size:13px;font-weight:500;color:var(--txt)}
+.ac-meta{font-size:11px;color:var(--mut);font-family:var(--mono);margin-top:2px}
+.ac-salvar{padding:8px 12px;cursor:pointer;border-top:1px solid var(--bord);text-align:center;font-size:11px;color:var(--acc);background:none}
+.ac-salvar:hover{background:rgba(0,212,170,.08)}
+.btn-cpf-consulta{float:right;background:none;border:1px solid rgba(0,153,255,.4);color:var(--acc2);border-radius:5px;padding:1px 7px;font-size:10px;cursor:pointer;font-family:var(--font);margin-left:6px}
+.btn-cpf-consulta:hover{background:rgba(0,153,255,.12)}
+.prev-doc{background:var(--surf);border:1px solid var(--bord);border-radius:9px;padding:18px;font-family:var(--mono);font-size:11px;line-height:1.9;white-space:pre-wrap;color:#b0b8c8;max-height:420px;overflow-y:auto}
+.action-bar{display:flex;gap:8px;flex-wrap:wrap;padding:14px 24px;border-top:1px solid var(--bord);background:var(--surf);position:sticky;bottom:0}
+.btn-main{padding:10px 20px;background:var(--acc);color:#000;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font);transition:opacity .15s}
+.btn-main:hover{opacity:.85}
+.btn-sec{padding:10px 18px;background:none;border:1px solid var(--bord);color:var(--txt);border-radius:8px;font-size:13px;cursor:pointer;font-family:var(--font)}
+.btn-sec:hover{background:var(--surf2)}
+.btn-danger{padding:10px 18px;background:none;border:1px solid rgba(255,71,87,.35);color:var(--red);border-radius:8px;font-size:13px;cursor:pointer;font-family:var(--font)}
+.cfg-note{font-size:12px;color:var(--mut);line-height:1.6;margin-bottom:14px}
+.link-det{display:inline-flex;align-items:center;gap:6px;color:var(--acc2);font-size:13px;text-decoration:none;border:1px solid rgba(0,153,255,.3);padding:8px 14px;border-radius:8px}
+.link-det:hover{background:rgba(0,153,255,.07)}
+.tag-pago{background:rgba(0,212,170,.15);color:var(--acc);display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+.tag-pendente{background:rgba(255,71,87,.15);color:var(--red);display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+.btn-fin{background:none;border:1px solid var(--bord);color:var(--mut);border-radius:5px;padding:2px 7px;font-size:11px;cursor:pointer;font-family:var(--font)}
+.btn-fin:hover{border-color:var(--acc);color:var(--acc)}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bord);border-radius:3px}
+@media(max-width:900px){.app{grid-template-columns:1fr}.modbtn{padding:12px 13px;font-size:12px}.left{max-height:none;position:static;border-right:none;border-bottom:1px solid var(--bord)}.g2,.g3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <div class="logo-ico">D</div>
+    <div><div class="logo-txt">Diego Despachante</div><div class="logo-sub">Sistema ATPV-E · Cód. 2670</div></div>
+  </div>
+  <div class="hstats">
+    <div class="hstat"><div class="hstat-v" id="st-hoje">0</div><div class="hstat-l">Hoje</div></div>
+    <div class="hstat"><div class="hstat-v" id="st-total">0</div><div class="hstat-l">Histórico</div></div>
+  </div>
+  <div class="user-info">
+    <span id="user-nome" style="font-size:13px;font-weight:500"></span>
+    <span class="perfil-badge" id="perfil-badge"></span>
+    <button class="btn-logout" id="btn-admin" onclick="abrirAdmin()" style="display:none">⚙ Admin</button>
+    <button class="btn-logout" onclick="logout()">Sair</button>
+  </div>
+</header>
+<nav class="modbar">
+  <button class="modbtn active" data-mod="atpv" onclick="modulo('atpv')">
+    <span class="mod-ico">📄</span> ATPV-e</button>
+  <button class="modbtn" data-mod="recursos" onclick="modulo('recursos')">
+    <span class="mod-ico">⚖</span> Recursos de Multa e Suspensão de CNH
+    <span id="badge-prazos" class="badge-alerta" style="display:none">0</span></button>
+  <button class="modbtn" data-mod="relatorios" onclick="modulo('relatorios')">
+    <span class="mod-ico">📊</span> Relatórios</button>
+  <button class="modbtn" data-mod="config" onclick="modulo('config')">
+    <span class="mod-ico">⚙</span> Configurações</button>
+</nav>
+
+<div class="app">
+<div class="left">
+  <div class="psec">
+    <div class="sec-l">Colar dados do documento</div>
+    <p class="paste-label">Copie o texto do PDF do DETRAN ou qualquer documento e cole abaixo:</p>
+    <div class="paste-wrap">
+      <textarea class="paste-area" id="paste-txt" placeholder="Cole aqui...&#10;• PDF sistema DETRAN-GO&#10;• CRV / CRLV&#10;• Qualquer texto com placa, chassi, nome, CPF..."></textarea>
+      <button class="btn-limpar-txt" onclick="document.getElementById('paste-txt').value='';document.getElementById('paste-txt').focus()">✕ Limpar</button>
+    </div>
+    <button class="btn-ext" onclick="extrair()">✦ Extrair e preencher campos</button>
+    <div class="load-wrap" id="load-wrap">
+      <div class="load-msg" id="load-msg">Processando...</div>
+      <div class="load-track"><div class="load-fill" id="load-fill"></div></div>
+    </div>
+  </div>
+  <div class="psec" style="flex:1">
+    <div class="sec-l">Histórico compartilhado</div>
+    <input class="hist-search" placeholder="Buscar por nome ou placa..." oninput="filtrarHist(this.value)">
+    <div class="hist-list" id="hist-list"><div class="hist-empty">Carregando...</div></div>
+  </div>
+</div>
+<div class="right">
+  <div class="ftabs">
+    <button class="ftab active" data-tab="vendedor" onclick="ftab('vendedor')">Vendedor</button>
+    <button class="ftab" data-tab="veiculo" onclick="ftab('veiculo')">Veículo</button>
+    <button class="ftab" data-tab="comprador" onclick="ftab('comprador')">Comprador</button>
+    <button class="ftab" data-tab="contratante" onclick="ftab('contratante')" style="color:var(--warn)">★ Contratante</button>
+    <button class="ftab" data-tab="preview" onclick="ftab('preview')">Pré-visualização</button>
+    <button class="ftab" data-tab="assinaturas" onclick="ftab('assinaturas')">✍ Assinaturas</button>
+  </div>
+  <div id="alert-box" class="alert"></div>
+
+  <!-- VENDEDOR -->
+  <div id="fc-vendedor" class="ftc active fields">
+    <div class="fb">
+      <div class="fb-title">Proprietário / Vendedor (outorgante) <span class="fill-count" id="cnt-vendedor">0 campos</span></div>
+      <div class="g2">
+        <div class="fg">
+          <label>Nome completo</label>
+          <input id="v_nome" oninput="atualizar();acBuscar('v_nome','pessoa','v')" autocomplete="off" placeholder="Digite para buscar...">
+          <div class="ac-drop" id="ac-v_nome"></div>
+        </div>
+        <div class="fg">
+          <label>CPF / CNPJ <button class="btn-cpf-consulta" onclick="consultarCPF('v')">🔍 Receita</button></label>
+          <input id="v_cpf" oninput="atualizar();acBuscar('v_cpf','pessoa','v');checarCNPJ(this,'v')" autocomplete="off" placeholder="CPF ou CNPJ">
+          <div class="ac-drop" id="ac-v_cpf"></div>
+        </div>
+      </div>
+      <div class="g3">
+        <div class="fg"><label>RG</label><input id="v_rg" oninput="atualizar()"></div>
+        <div class="fg"><label>Órgão exp.</label><input id="v_rg_org" oninput="atualizar()"></div>
+        <div class="fg"><label>Estado civil</label>
+          <select id="v_ecivil" onchange="atualizar()">
+            <option value="">Selecione</option>
+            <option>Solteiro(a)</option><option>Casado(a)</option>
+            <option>Divorciado(a)</option><option>Viúvo(a)</option><option>União estável</option>
+          </select>
+        </div>
+      </div>
+      <div class="g2">
+        <div class="fg"><label>Data de nascimento</label><input id="v_nasc" placeholder="DD/MM/AAAA" oninput="atualizar()"></div>
+        <div class="fg"><label>Celular</label><input id="v_cel" oninput="atualizar()"></div>
+      </div>
+      <div class="g2">
+        <div class="fg"><label>Endereço (Rua/Av., nº)</label><input id="v_end" oninput="atualizar()"></div>
+        <div class="fg"><label>Bairro</label><input id="v_bairro" oninput="atualizar()"></div>
+      </div>
+      <div class="g3">
+        <div class="fg"><label>Município / UF</label><input id="v_cidade" oninput="atualizar()"></div>
+        <div class="fg"><label>CEP <span id="v_cep_spin" style="display:none;color:var(--acc);font-size:10px">buscando...</span></label><input id="v_cep" oninput="maskCep(this,'v');atualizar()" placeholder="00000-000"></div>
+        <div class="fg"><label>E-mail</label><input id="v_email" oninput="atualizar()"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VEÍCULO -->
+  <div id="fc-veiculo" class="ftc fields">
+    <div class="fb">
+      <div class="fb-title">Dados do veículo <span class="fill-count" id="cnt-veiculo">0 campos</span></div>
+      <div class="g2">
+        <div class="fg"><label>Marca / Modelo</label><input id="ve_modelo" oninput="atualizar()"></div>
+        <div class="fg"><label>Ano fabricação / Modelo</label><input id="ve_ano" oninput="atualizar()"></div>
+      </div>
+      <div class="g2">
+        <div class="fg">
+          <label>Placa</label>
+          <input id="ve_placa" oninput="this.value=this.value.toUpperCase();atualizar();acBuscar('ve_placa','veiculo','')" autocomplete="off" placeholder="Digite para buscar...">
+          <div class="ac-drop" id="ac-ve_placa"></div>
+        </div>
+        <div class="fg"><label>Chassi</label><input id="ve_chassi" oninput="this.value=this.value.toUpperCase();atualizar()"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COMPRADOR -->
+  <div id="fc-comprador" class="ftc fields">
+    <div class="fb">
+      <div class="fb-title">Dados do comprador <span class="fill-count" id="cnt-comprador">0 campos</span></div>
+      <div class="g2">
+        <div class="fg">
+          <label>Nome completo</label>
+          <input id="c_nome" oninput="atualizar();acBuscar('c_nome','pessoa','c')" autocomplete="off" placeholder="Digite para buscar...">
+          <div class="ac-drop" id="ac-c_nome"></div>
+        </div>
+        <div class="fg">
+          <label>CPF / CNPJ <button class="btn-cpf-consulta" onclick="consultarCPF('c')">🔍 Receita</button></label>
+          <input id="c_cpf" oninput="atualizar();acBuscar('c_cpf','pessoa','c');checarCNPJ(this,'c')" autocomplete="off" placeholder="CPF ou CNPJ">
+          <div class="ac-drop" id="ac-c_cpf"></div>
+        </div>
+      </div>
+      <div class="g2">
+        <div class="fg"><label>RG</label><input id="c_rg" oninput="atualizar()"></div>
+        <div class="fg"><label>Data de nascimento</label><input id="c_nasc" placeholder="DD/MM/AAAA" oninput="atualizar()"></div>
+      </div>
+      <div class="g3">
+        <div class="fg"><label>Valor da venda (R$) ★</label><input id="c_valor" placeholder="R$ 0,00" oninput="atualizar()" style="border-color:rgba(0,212,170,.4)"></div>
+        <div class="fg"><label>Cidade / UF</label><input id="c_cidade" oninput="atualizar()"></div>
+        <div class="fg"><label>CEP <span id="c_cep_spin" style="display:none;color:var(--acc);font-size:10px">buscando...</span></label><input id="c_cep" oninput="maskCep(this,'c');atualizar()" placeholder="00000-000"></div>
+      </div>
+      <div class="g3">
+        <div class="fg"><label>Endereço completo</label><input id="c_end" oninput="atualizar()"></div>
+        <div class="fg"><label>Bairro</label><input id="c_bairro" oninput="atualizar()"></div>
+        <div class="fg"><label>E-mail</label><input id="c_email" oninput="atualizar()"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTRATANTE -->
+  <div id="fc-contratante" class="ftc fields">
+    <div class="fb">
+      <div class="fb-title">Contratante / Responsável pelo processo
+        <span style="font-size:11px;font-weight:400;color:var(--mut);margin-left:8px">Quem contratou o serviço (pode ser diferente do vendedor/comprador)</span>
+      </div>
+
+      <!-- Busca rápida -->
+      <div style="background:rgba(0,212,170,.06);border:1px solid rgba(0,212,170,.2);border-radius:9px;padding:14px;margin-bottom:16px">
+        <div style="font-size:11px;color:var(--acc);font-weight:600;margin-bottom:8px">BUSCAR CONTRATANTE CADASTRADO</div>
+        <div class="fg" style="margin:0;position:relative">
+          <input id="ct_busca" oninput="acBuscarContratante(this)" autocomplete="off" placeholder="Digite nome, CPF ou CNPJ para buscar...">
+          <div class="ac-drop" id="ac-ct_busca"></div>
+        </div>
+      </div>
+
+      <div class="g2">
+        <div class="fg">
+          <label>Nome / Razão Social ★</label>
+          <input id="ct_nome" oninput="atualizar()" placeholder="Nome do contratante">
+        </div>
+        <div class="fg">
+          <label>CPF / CNPJ</label>
+          <input id="ct_cpf" oninput="atualizar();checarCNPJ(this,'ct')" placeholder="CPF ou CNPJ">
+        </div>
+      </div>
+      <div class="g3">
+        <div class="fg">
+          <label>Tipo</label>
+          <select id="ct_tipo" onchange="atualizar()">
+            <option value="pessoa_fisica">Pessoa Física</option>
+            <option value="empresa">Empresa / Garagem</option>
+            <option value="concessionaria">Concessionária</option>
+            <option value="despachante">Outro Despachante</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label>Forma de pagamento</label>
+          <select id="ct_pgto" onchange="atualizar()">
+            <option value="por_processo">Por processo</option>
+            <option value="mensalidade">Mensalidade fixa</option>
+            <option value="combinado">A combinar</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label>Telefone / WhatsApp</label>
+          <input id="ct_tel" oninput="atualizar()" placeholder="(62) 9...">
+        </div>
+      </div>
+      <div class="g2">
+        <div class="fg">
+          <label>Valor do serviço (R$) ★</label>
+          <input id="ct_valor_servico" oninput="atualizar()" placeholder="R$ 0,00" style="border-color:rgba(0,212,170,.4)">
+        </div>
+        <div class="fg">
+          <label>Status pagamento</label>
+          <select id="ct_status_pgto" onchange="atualizar()">
+            <option value="pendente">Pendente</option>
+            <option value="pago">Pago</option>
+            <option value="mensalidade">Na mensalidade</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg">
+        <label>Observação</label>
+        <input id="ct_obs" oninput="atualizar()" placeholder="Observações sobre este processo...">
+      </div>
+
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button class="btn-sec" style="padding:8px 16px;font-size:12px" onclick="salvarContratanteAtual()">💾 Salvar contratante no cadastro</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRÉ-VIZ -->
+  <div id="fc-preview" class="ftc fields">
+    <div class="fb">
+      <div class="fb-title">Documento — pré-visualização</div>
+      <div class="prev-doc" id="prev-box">Preencha os dados para visualizar...</div>
+    </div>
+  </div>
+
+  <!-- RELATÓRIOS -->
+  <div id="fc-relatorios" class="ftc fields">
+    <div class="fb">
+      <div class="fb-title">📊 Relatórios e Financeiro</div>
+
+      <!-- FILTROS -->
+      <div style="background:var(--surf2);border:1px solid var(--bord);border-radius:10px;padding:16px;margin-bottom:20px">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);margin-bottom:12px">Filtrar período e busca</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+          <div class="fg" style="margin:0;min-width:130px">
+            <label>De</label>
+            <input id="rel-de" type="date" oninput="carregarRelatorio()">
+          </div>
+          <div class="fg" style="margin:0;min-width:130px">
+            <label>Até</label>
+            <input id="rel-ate" type="date" oninput="carregarRelatorio()">
+          </div>
+          <div class="fg" style="margin:0;min-width:140px" id="fg-rel-func">
+            <label>Funcionário</label>
+            <select id="rel-func" onchange="carregarRelatorio()">
+              <option value="">Todos</option>
+            </select>
+          </div>
+          <div class="fg" style="margin:0;min-width:160px" id="fg-rel-emp">
+            <label>Empresa</label>
+            <select id="rel-emp" onchange="carregarRelatorio()">
+              <option value="">Todas</option>
+            </select>
+          </div>
+          <button class="btn-sec" style="padding:8px 14px;font-size:12px" onclick="limparFiltros()">Limpar filtros</button>
+          <button class="btn-sec" style="padding:8px 14px;font-size:12px" onclick="filtroRapido('hoje')">Hoje</button>
+          <button class="btn-sec" style="padding:8px 14px;font-size:12px" onclick="filtroRapido('mes')">Este mês</button>
+          <button class="btn-sec" style="padding:8px 14px;font-size:12px" onclick="filtroRapido('ano')">Este ano</button>
+        </div>
+        <!-- Busca textual -->
+        <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+          <div class="fg" style="margin:0;flex:1;min-width:150px">
+            <label>Placa</label>
+            <input id="rel-placa" placeholder="Buscar placa..." oninput="filtrarTabela()">
+          </div>
+          <div class="fg" style="margin:0;flex:1;min-width:150px">
+            <label>Modelo / Marca</label>
+            <input id="rel-modelo" placeholder="Buscar modelo..." oninput="filtrarTabela()">
+          </div>
+          <div class="fg" style="margin:0;flex:1;min-width:150px">
+            <label>Chassi</label>
+            <input id="rel-chassi" placeholder="Buscar chassi..." oninput="filtrarTabela()">
+          </div>
+          <div class="fg" style="margin:0;flex:1;min-width:150px">
+            <label>Vendedor</label>
+            <input id="rel-vendedor" placeholder="Nome do vendedor..." oninput="filtrarTabela()">
+          </div>
+          <div class="fg" style="margin:0;flex:1;min-width:150px">
+            <label>Comprador</label>
+            <input id="rel-comprador" placeholder="Nome do comprador..." oninput="filtrarTabela()">
+          </div>
+        </div>
+      </div>
+
+      <!-- CARDS RESUMO — clicáveis para filtrar -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px" id="rel-cards">
+        <div onclick="filtrarStatus('')" style="background:var(--surf2);border-radius:10px;padding:16px;text-align:center;cursor:pointer;border:2px solid transparent;transition:border-color .15s" id="card-total">
+          <div style="font-size:11px;color:var(--mut);margin-bottom:6px">TOTAL DE PROCESSOS</div>
+          <div style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--txt)" id="rc-total">—</div>
+          <div style="font-size:10px;color:var(--mut);margin-top:4px">Clique para ver todos</div>
+        </div>
+        <div onclick="filtrarStatus('pago')" style="background:rgba(0,212,170,.08);border:2px solid rgba(0,212,170,.2);border-radius:10px;padding:16px;text-align:center;cursor:pointer;transition:border-color .15s" id="card-rec">
+          <div style="font-size:11px;color:var(--mut);margin-bottom:6px">RECEBIDOS</div>
+          <div style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--acc)" id="rc-rec">—</div>
+          <div style="font-size:12px;color:var(--acc);margin-top:4px" id="rc-val-rec">R$ —</div>
+          <div style="font-size:10px;color:var(--mut);margin-top:4px">Clique para ver só recebidos</div>
+        </div>
+        <div onclick="filtrarStatus('pendente')" style="background:rgba(255,71,87,.08);border:2px solid rgba(255,71,87,.2);border-radius:10px;padding:16px;text-align:center;cursor:pointer;transition:border-color .15s" id="card-pend">
+          <div style="font-size:11px;color:var(--mut);margin-bottom:6px">PENDENTES</div>
+          <div style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--red)" id="rc-pend">—</div>
+          <div style="font-size:12px;color:var(--red);margin-top:4px" id="rc-val-pend">R$ —</div>
+          <div style="font-size:10px;color:var(--mut);margin-top:4px">Clique para ver só pendentes</div>
+        </div>
+      </div>
+
+      <!-- ABAS DE RELATÓRIO -->
+      <div style="display:flex;gap:4px;border-bottom:1px solid var(--bord);margin-bottom:16px">
+        <button class="ftab active" onclick="relTab('atendimentos')" id="rtab-atendimentos" style="padding:8px 14px;font-size:12px">Atendimentos</button>
+        <button class="ftab" onclick="relTab('func')" id="rtab-func" style="padding:8px 14px;font-size:12px">Por Funcionário</button>
+        <button class="ftab" onclick="relTab('emp')" id="rtab-emp" style="padding:8px 14px;font-size:12px">Por Empresa</button>
+        <button class="ftab" onclick="relTab('mes')" id="rtab-mes" style="padding:8px 14px;font-size:12px">Por Mês</button>
+      </div>
+
+      <!-- TABELA ATENDIMENTOS -->
+      <div id="rpanel-atendimentos">
+        <div style="font-size:12px;color:var(--mut);margin-bottom:8px" id="rel-count-label"></div>
+        <div style="overflow-x:auto">
+          <table id="tbl-atend">
+            <thead><tr>
+              <th>Data</th><th>Placa</th><th>Modelo</th><th>Vendedor</th>
+              <th>Funcionário</th><th>Empresa</th><th>Valor</th><th>Status</th><th></th>
+            </tr></thead>
+            <tbody id="tbody-atend"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TABELA POR FUNCIONÁRIO -->
+      <div id="rpanel-func" style="display:none">
+        <div style="overflow-x:auto">
+          <table id="tbl-func">
+            <thead><tr><th>Funcionário</th><th>Total</th><th>Recebidos</th><th>Pendentes</th><th>Valor Total</th><th>Valor Recebido</th></tr></thead>
+            <tbody id="tbody-func"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TABELA POR EMPRESA -->
+      <div id="rpanel-emp" style="display:none">
+        <div style="overflow-x:auto">
+          <table id="tbl-emp">
+            <thead><tr><th>Empresa</th><th>Total</th><th>Recebidos</th><th>Pendentes</th><th>Valor Total</th><th>Valor Recebido</th><th></th></tr></thead>
+            <tbody id="tbody-emp"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TABELA POR MÊS -->
+      <div id="rpanel-mes" style="display:none">
+        <div style="overflow-x:auto">
+          <table id="tbl-mes">
+            <thead><tr><th>Mês/Ano</th><th>Total</th><th>Recebidos</th><th>Pendentes</th><th>Valor Total</th></tr></thead>
+            <tbody id="tbody-mes"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ASSINATURAS -->
+  <div id="fc-assinaturas" class="ftc fields">
+    <div class="fb">
+      <div class="fb-title">
+        ✍ Documentos enviados para assinatura
+        <button class="btn-novo-rec" onclick="sincronizarAssinaturas()" id="btn-sinc">🔄 Atualizar status</button>
+      </div>
+
+      <div class="prazo-cards" id="assin-cards"></div>
+
+      <div class="g3" style="margin-top:18px">
+        <div class="fg"><label>Buscar</label>
+          <input id="assin-busca" placeholder="Nome do cliente ou placa" oninput="filtrarAssin()"></div>
+        <div class="fg"><label>Situação</label>
+          <select id="assin-filtro" onchange="carregarAssinaturas()">
+            <option value="">Todos</option>
+            <option value="pendentes">Aguardando assinatura</option>
+            <option value="assinados">Assinados</option>
+          </select></div>
+        <div class="fg"><label>&nbsp;</label>
+          <div style="font-size:11px;color:var(--mut);line-height:1.5;padding-top:8px">
+            O sistema é avisado automaticamente quando o cliente assina.
+            Use "Atualizar status" se quiser conferir na hora.
+          </div></div>
+      </div>
+
+      <div class="table-wrap" style="margin-top:14px">
+        <table id="tbl-assin">
+          <thead><tr>
+            <th>Cliente</th><th>Veículo</th><th>Enviado em</th>
+            <th>Situação</th><th>Assinado em</th><th></th>
+          </tr></thead>
+          <tbody><tr><td colspan="6" style="text-align:center;color:var(--mut);padding:20px">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- RECURSOS DE MULTA / CNH -->
+  <div id="fc-recursos" class="ftc fields">
+    <div class="fb">
+      <div class="fb-title">
+        ⚖ Recursos de multa e suspensão de CNH
+        <button class="btn-novo-rec" onclick="novoRecurso()">+ Novo recurso</button>
+      </div>
+
+      <div class="prazo-cards" id="prazo-cards"></div>
+
+      <div class="g3" style="margin-top:18px">
+        <div class="fg"><label>Buscar</label>
+          <input id="rec-busca" placeholder="Cliente, placa, AIT ou protocolo" oninput="filtrarRecursos()"></div>
+        <div class="fg"><label>Tipo</label>
+          <select id="rec-tipo" onchange="carregarRecursos()">
+            <option value="">Todos</option>
+            <option value="multa">Recurso de multa</option>
+            <option value="suspensao">Suspensão do direito de dirigir</option>
+            <option value="cassacao">Cassação da CNH</option>
+          </select></div>
+        <div class="fg"><label>Situação</label>
+          <select id="rec-status" onchange="carregarRecursos()">
+            <option value="">Todas</option>
+            <option value="a_protocolar">A protocolar</option>
+            <option value="protocolado">Protocolado — aguardando</option>
+            <option value="deferido">Deferido</option>
+            <option value="indeferido">Indeferido</option>
+            <option value="arquivado">Arquivado</option>
+          </select></div>
+      </div>
+
+      <div id="rec-filtro-ativo" style="display:none;margin-top:10px;font-size:12px;color:var(--warn)"></div>
+
+      <div class="table-wrap" style="margin-top:14px">
+        <table id="tbl-recursos">
+          <thead><tr>
+            <th>Cliente</th><th>Tipo / Fase</th><th>Placa / AIT</th>
+            <th>Prazo</th><th>Situação</th><th></th>
+          </tr></thead>
+          <tbody><tr><td colspan="6" style="text-align:center;color:var(--mut);padding:20px">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIG -->
+  <div id="fc-config" class="ftc fields">
+    <div class="fb">
+      <div class="fb-title">Dados fixos do escritório</div>
+      <p class="cfg-note">Inseridos automaticamente em todas as procurações.</p>
+      <div class="g2">
+        <div class="fg"><label>Nome do escritório</label><input id="cfg_nome" value="DIEGO DESPACHANTE"></div>
+        <div class="fg"><label>Código DETRAN</label><input id="cfg_cod" value="2670"></div>
+      </div>
+      <div class="g1"><div class="fg"><label>Endereço completo</label><input id="cfg_end" value="AVENIDA BRASIL N.464 VILA JUSSARA ANAPOLIS-GO"></div></div>
+      <div class="g3">
+        <div class="fg"><label>CEP</label><input id="cfg_cep" value="75123-115"></div>
+        <div class="fg"><label>Cidade (para data)</label><input id="cfg_cidade" value="ANÁPOLIS/GO"></div>
+        <div class="fg"><label>CNPJ (opcional)</label><input id="cfg_cnpj" placeholder="00.000.000/0000-00"></div>
+      </div>
+
+      <div style="border-top:1px solid var(--bord);margin-top:16px;padding-top:16px">
+        <div class="sec-l">Sua assinatura no carimbo</div>
+        <p class="cfg-note">Sai no carimbo da procuração, junto do atesto de que a assinatura do
+          cliente foi colhida conforme o procedimento. Use uma foto da assinatura em papel branco,
+          bem iluminada e sem sombra.</p>
+        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+          <div id="cfg-assin-previa" style="background:#fff;border:1px solid var(--bord);border-radius:8px;
+               padding:8px;min-width:150px;min-height:56px;display:flex;align-items:center;justify-content:center">
+            <span style="font-size:11px;color:#888">sem assinatura</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <input type="file" id="cfg-assin-arq" accept="image/*" style="display:none"
+                   onchange="carregarAssinaturaArquivo(this)">
+            <button class="btn-sec" onclick="document.getElementById('cfg-assin-arq').click()">
+              📎 Escolher imagem</button>
+            <button class="btn-sec" style="border-color:rgba(255,71,87,.35);color:var(--red)"
+                    onclick="removerAssinaturaCarimbo()">Remover</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:18px;align-items:center">
+        <button class="btn-main" onclick="salvarConfig()">Salvar configurações</button>
+        <span id="cfg-status" style="font-size:12px;color:var(--mut)"></span>
+      </div>
+    </div>
+    <div class="fb">
+      <div class="fb-title">Aviso automático de assinatura (ZapSign)</div>
+      <p class="cfg-note">Com isso ligado, a ZapSign avisa o sistema no instante em que o cliente
+        assina — o documento aparece como assinado sem você precisar conferir. Clique uma vez só.</p>
+      <button class="btn-sec" onclick="registrarWebhookZapsign()">🔔 Ativar aviso automático</button>
+    </div>
+
+    <div class="fb">
+      <div class="fb-title">Alerta de prazos no Telegram</div>
+      <p class="cfg-note">Aviso diário com os recursos que estão vencendo. Configurado pelas variáveis
+        TELEGRAM_TOKEN, TELEGRAM_CHAT_ID e ALERTA_CHAVE no Render.</p>
+      <button class="btn-sec" onclick="testarAlertaTelegram()">📨 Enviar teste agora</button>
+    </div>
+
+    <div class="fb">
+      <div class="fb-title">Portal DETRAN-GO</div>
+      <p class="cfg-note">Acesse após gerar a procuração para registrar a ATPV-E.</p>
+      <a href="https://portal.detran.go.gov.br/sna/" target="_blank" class="link-det">🔗 Abrir portal DETRAN-GO</a>
+    </div>
+
+    <!-- COFRE SECRETO — só admin vê -->
+    <div class="fb" id="cofre-sec" style="display:none">
+      <div class="fb-title" style="color:var(--warn)">🔐 Cofre do Sistema — Somente Admin</div>
+      <p class="cfg-note">Guarde aqui senhas, links e informações importantes. Criptografado e visível apenas para você.</p>
+      <div id="cofre-lista" style="margin-bottom:14px"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end">
+        <div class="fg" style="margin:0"><label>Descrição</label><input id="cofre-desc" placeholder="Ex: Senha Neon, Link GitHub..."></div>
+        <div class="fg" style="margin:0"><label>Valor</label><input id="cofre-val" placeholder="Senha ou link..."></div>
+        <button class="btn-sec" style="padding:9px 14px;font-size:12px" onclick="adicionarCofre()">+ Salvar</button>
+      </div>
+    </div>
+
+    <div class="fb">
+      <div class="fb-title" style="color:var(--red)">Zona de perigo — limpeza de dados</div>
+      <p class="cfg-note">Use para apagar todos os dados de teste (histórico, cadastro de pessoas e veículos). <strong>Essa ação não tem volta!</strong></p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn-danger" onclick="limparHistorico()">🗑 Limpar histórico</button>
+        <button class="btn-danger" onclick="limparPessoas()">🗑 Limpar cadastro de pessoas</button>
+        <button class="btn-danger" onclick="limparVeiculos()">🗑 Limpar cadastro de veículos</button>
+        <button style="padding:10px 18px;background:none;border:2px solid var(--red);color:var(--red);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font)" onclick="limparTodosServidor()">⚠ Limpar TUDO do servidor</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="action-bar" id="action-bar-atpv">
+    <button class="btn-main" onclick="gerarPDF()">⬇ Baixar Procuração PDF</button>
+    <button class="btn-sec" id="btn-assin" onclick="enviarAssinatura()" style="border-color:rgba(0,212,170,.45);color:var(--acc)">✍ Enviar para assinatura</button>
+    <button class="btn-sec" onclick="salvar()">Salvar histórico</button>
+    <button class="btn-sec" onclick="limparTudo()">Próximo atendimento</button>
+    <button class="btn-danger" onclick="limparAba()">Limpar aba</button>
+  </div>
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<!-- MODAL: CONFIRMAR ENVIO PARA ASSINATURA -->
+<div class="modal-overlay" id="modal-nivel">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-title">
+      <span>✍ Enviar para assinatura</span>
+      <button class="modal-close" onclick="fecharNivel()">✕</button>
+    </div>
+
+    <div style="background:var(--surf2);border:1px solid var(--bord);border-radius:10px;padding:14px;margin-bottom:16px">
+      <div style="font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em">Vai assinar</div>
+      <div id="niv-cliente" style="font-size:15px;font-weight:600;margin-top:4px"></div>
+      <div id="niv-dados" style="font-size:12px;color:var(--mut);margin-top:6px;line-height:1.7"></div>
+    </div>
+
+    <div class="fg">
+      <label>Como o cliente vai comprovar que é ele</label>
+      <select id="niv-escolha" onchange="avaliarNivel()">
+        <option value="simples">Apenas assinatura na tela — sem conferência de identidade</option>
+        <option value="email">Código por e-mail + CPF conferido na Receita</option>
+        <option value="sms">Código por SMS + CPF conferido na Receita</option>
+        <option value="whatsapp">Código por WhatsApp + CPF conferido na Receita</option>
+        <option value="selfie" selected>WhatsApp + CPF + selfie (arquivo menor)</option>
+        <option value="documento">WhatsApp + CPF + foto do documento e selfie</option>
+        <option value="biometria">WhatsApp + CPF + biometria facial validada no governo</option>
+      </select>
+    </div>
+
+    <div id="niv-explica" style="font-size:12px;line-height:1.7;margin-top:12px;padding:12px;
+         border-radius:9px;border:1px solid var(--bord)"></div>
+
+    <div style="display:flex;gap:8px;margin-top:18px">
+      <button class="btn-main" id="niv-confirmar" onclick="confirmarEnvio()">Enviar agora</button>
+      <button class="btn-sec" onclick="fecharNivel()">Cancelar</button>
+    </div>
+    <div style="font-size:11px;color:var(--mut);margin-top:12px;line-height:1.6">
+      Cada envio consome um documento do seu plano. Se o cliente perder o link,
+      reabra em <b>Assinaturas</b> — não clique de novo aqui.
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: CADASTRO / EDIÇÃO DE RECURSO -->
+<div class="modal-overlay" id="modal-recurso">
+  <div class="modal" style="max-width:720px">
+    <div class="modal-title">
+      <span id="rec-modal-titulo">Novo recurso</span>
+      <button class="modal-close" onclick="fecharRecurso()">✕</button>
+    </div>
+    <input type="hidden" id="rec-id">
+
+    <div class="g2">
+      <div class="fg"><label>Tipo de processo</label>
+        <select id="rec-f-tipo">
+          <option value="multa">Recurso de multa</option>
+          <option value="suspensao">Suspensão do direito de dirigir</option>
+          <option value="cassacao">Cassação da CNH</option>
+        </select></div>
+      <div class="fg"><label>Fase atual</label>
+        <select id="rec-f-fase">
+          <option value="defesa_previa">Defesa prévia</option>
+          <option value="jari">Recurso à JARI</option>
+          <option value="cetran">Recurso ao CETRAN</option>
+        </select></div>
+    </div>
+
+    <div class="g2">
+      <div class="fg"><label>Nome do cliente ★</label>
+        <input id="rec-f-cliente" placeholder="Digite para buscar..." autocomplete="off"
+               oninput="acBuscarCliente(this.value)">
+        <div class="ac-drop" id="ac-rec-cliente"></div></div>
+      <div class="fg"><label>CPF</label><input id="rec-f-cpf" placeholder="000.000.000-00"></div>
+    </div>
+
+    <div class="g3">
+      <div class="fg"><label>Celular</label><input id="rec-f-tel" placeholder="(62) 9...."></div>
+      <div class="fg"><label>Placa</label><input id="rec-f-placa" placeholder="ABC1D23"
+            oninput="this.value=this.value.toUpperCase()"></div>
+      <div class="fg"><label>Auto de infração (AIT)</label><input id="rec-f-ait"></div>
+    </div>
+
+    <div class="g2">
+      <div class="fg"><label>Órgão autuador</label>
+        <input id="rec-f-orgao" list="lista-orgaos" placeholder="DETRAN-GO, PRF, DNIT...">
+        <datalist id="lista-orgaos">
+          <option value="DETRAN-GO"><option value="PRF"><option value="DNIT">
+          <option value="Prefeitura de Anápolis"><option value="PM-GO"><option value="ANTT">
+        </datalist></div>
+      <div class="fg"><label>Infração / motivo</label><input id="rec-f-infracao" placeholder="Ex.: excesso de velocidade"></div>
+    </div>
+
+    <div style="background:var(--surf2);border:1px solid var(--bord);border-radius:10px;padding:14px;margin:14px 0">
+      <div style="font-size:11px;color:var(--acc);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Prazo</div>
+      <div class="g3">
+        <div class="fg"><label>Data da notificação ★</label>
+          <input type="date" id="rec-f-notif" onchange="recalcPrazo()"></div>
+        <div class="fg"><label>Prazo (dias)</label>
+          <input type="number" id="rec-f-dias" value="30" min="1" max="365" onchange="recalcPrazo()"></div>
+        <div class="fg"><label>Vence em</label>
+          <input type="date" id="rec-f-prazo"></div>
+      </div>
+      <div style="font-size:11px;color:var(--mut);margin-top:6px">
+        O vencimento é calculado sozinho pela data da notificação. Se a notificação trouxer prazo diferente, é só ajustar.
+      </div>
+    </div>
+
+    <div class="g3">
+      <div class="fg"><label>Valor do serviço (R$)</label><input id="rec-f-valor" placeholder="R$ 0,00"></div>
+      <div class="fg"><label>Pagamento</label>
+        <select id="rec-f-pgto"><option value="pendente">Pendente</option><option value="pago">Pago</option></select></div>
+      <div class="fg"><label>Observações</label><input id="rec-f-obs"></div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:18px">
+      <button class="btn-main" onclick="salvarRecurso()">Salvar</button>
+      <button class="btn-sec" onclick="fecharRecurso()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: DETALHE DO PROCESSO -->
+<div class="modal-overlay" id="modal-proc">
+  <div class="modal" style="max-width:720px">
+    <div class="modal-title">
+      <span id="proc-titulo">Processo</span>
+      <button class="modal-close" onclick="fecharProc()">✕</button>
+    </div>
+    <div id="proc-corpo"></div>
+  </div>
+</div>
+
+<!-- MODAL ADMIN -->
+<div class="modal-overlay" id="modal-assin">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-title">
+      <span>✍ Link de assinatura gerado</span>
+      <button class="modal-close" onclick="fecharAssin()">✕</button>
+    </div>
+    <p style="font-size:13px;color:var(--mut);margin:0 0 16px;line-height:1.5">
+      Documento criado na ZapSign para <b id="assin-nome" style="color:var(--txt)"></b>.
+      Envie o link abaixo para o cliente assinar pelo celular.
+    </p>
+    <div class="fg"><label>Link de assinatura</label><input id="assin-url" readonly onclick="this.select()"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">
+      <button class="btn-main" onclick="copiarLinkAssin()">📋 Copiar link</button>
+      <button class="btn-sec" id="assin-wa" onclick="abrirWhatsAssin()">💬 Abrir no WhatsApp</button>
+      <button class="btn-sec" onclick="conferirAssin()">🔄 Conferir status</button>
+    </div>
+    <div id="assin-status" style="margin-top:16px;font-size:12px;color:var(--mut);line-height:1.6"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-admin">
+  <div class="modal">
+    <div class="modal-title">
+      <span>⚙ Administração</span>
+      <button class="modal-close" onclick="fecharAdmin()">✕</button>
+    </div>
+    <!-- Sub-abas admin -->
+    <div style="display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--bord);padding-bottom:0">
+      <button class="ftab active" onclick="adminTab('usuarios')" id="atab-usuarios" style="padding:8px 14px;font-size:12px">Funcionários</button>
+      <button class="ftab" onclick="adminTab('empresas')" id="atab-empresas" style="padding:8px 14px;font-size:12px">Garagens / Concessionárias</button>
+    </div>
+
+    <!-- USUÁRIOS -->
+    <div id="apanel-usuarios">
+      <div class="table-wrap">
+        <table id="tbl-usuarios"><thead><tr><th>Nome</th><th>Login</th><th>Perfil</th><th>Status</th><th></th></tr></thead><tbody></tbody></table>
+      </div>
+      <details style="margin-top:16px">
+        <summary style="cursor:pointer;font-size:13px;color:var(--acc);font-weight:500">+ Novo funcionário / usuário</summary>
+        <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="fg"><label>Nome completo</label><input id="nu_nome" placeholder="Nome"></div>
+          <div class="fg"><label>Login</label><input id="nu_login" placeholder="login.acesso"></div>
+          <div class="fg"><label>Senha</label><input id="nu_senha" type="password" placeholder="Senha"></div>
+          <div class="fg"><label>Perfil</label>
+            <select id="nu_perfil" onchange="toggleEmpresaSelect()">
+              <option value="funcionario">Funcionário</option>
+              <option value="admin">Administrador</option>
+              <option value="empresa">Garagem / Concessionária</option>
+            </select>
+          </div>
+          <div class="fg" id="fg-empresa" style="display:none;grid-column:span 2">
+            <label>Empresa vinculada</label>
+            <select id="nu_empresa_id"><option value="">Selecione...</option></select>
+          </div>
+        </div>
+        <button class="btn-main" style="margin-top:12px;padding:8px 18px;font-size:13px" onclick="salvarUsuario()">Salvar usuário</button>
+      </details>
+    </div>
+
+    <!-- EMPRESAS -->
+    <div id="apanel-empresas" style="display:none">
+      <div class="table-wrap">
+        <table id="tbl-empresas"><thead><tr><th>Nome</th><th>CNPJ</th><th>Contato</th><th>Login</th><th>Status</th><th></th></tr></thead><tbody></tbody></table>
+      </div>
+      <details style="margin-top:16px">
+        <summary style="cursor:pointer;font-size:13px;color:var(--acc);font-weight:500">+ Nova garagem / concessionária</summary>
+        <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="fg" style="grid-column:span 2"><label>Nome da empresa</label><input id="ne_nome" placeholder="Nome completo"></div>
+          <div class="fg"><label>CNPJ</label><input id="ne_cnpj" placeholder="00.000.000/0000-00"></div>
+          <div class="fg"><label>Contato / Responsável</label><input id="ne_contato" placeholder="Nome do responsável"></div>
+          <div class="fg"><label>Telefone</label><input id="ne_tel" placeholder="(62) 9..."></div>
+          <div class="fg"><label>E-mail</label><input id="ne_email" placeholder="email@empresa.com"></div>
+          <div style="grid-column:span 2;background:rgba(0,212,170,.06);border:1px solid rgba(0,212,170,.2);border-radius:8px;padding:12px;margin-top:4px">
+            <div style="font-size:11px;color:var(--acc);font-weight:600;margin-bottom:10px">🔐 ACESSO AO SISTEMA</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div class="fg" style="margin:0"><label>Login de acesso</label><input id="ne_login" placeholder="Ex: garagem.silva"></div>
+              <div class="fg" style="margin:0"><label>Senha</label><input id="ne_senha" type="password" placeholder="Senha de acesso"></div>
+            </div>
+            <div style="font-size:11px;color:var(--mut);margin-top:8px">⚠ Com login e senha, a empresa pode acessar o sistema e ver apenas os próprios processos.</div>
+          </div>
+        </div>
+        <button class="btn-main" style="margin-top:12px;padding:8px 18px;font-size:13px" onclick="salvarEmpresa()">Salvar empresa</button>
+      </details>
+    </div>
+  </div>
+</div>
+<script>
+// ═══ ESTADO GLOBAL ═══════════════════════════════════════════
+var HOJE=0, tabAtual='vendedor', todosHist=[];
+var AC = {}; // cache de listas autocomplete: AC['pessoa_v'], AC['pessoa_c'], AC['veiculo']
+var _timers = {};
+
+var CAMPOS_V = ['v_nome','v_cpf','v_rg','v_rg_org','v_ecivil','v_nasc','v_end','v_bairro','v_cidade','v_cep','v_cel','v_email'];
+var CAMPOS_VE= ['ve_modelo','ve_ano','ve_placa','ve_chassi'];
+var CAMPOS_C = ['c_nome','c_cpf','c_rg','c_nasc','c_valor','c_end','c_bairro','c_cidade','c_cep','c_email'];
+var CAMPOS_CT= ['ct_nome','ct_cpf','ct_tipo','ct_pgto','ct_tel','ct_valor_servico','ct_status_pgto','ct_obs'];
+var CAMPOS_TODOS = CAMPOS_V.concat(CAMPOS_VE).concat(CAMPOS_C).concat(CAMPOS_CT);
+
+function g(id){ return (document.getElementById(id)||{}).value||''; }
+function setVal(id,val){ var el=document.getElementById(id); if(el&&val&&val.trim()){ el.value=val.trim(); el.classList.add('ia'); } }
+function blank(v,n){ return v&&v.trim()?v:'_'.repeat(n||22); }
+
+// ═══ TABS ════════════════════════════════════════════════════
+var ABAS_ATPV = ['vendedor','veiculo','comprador','contratante','preview','assinaturas'];
+var MODULO_ATUAL = 'atpv';
+
+// Troca de módulo: cada um abre a tela inteira dele.
+function modulo(m){
+  MODULO_ATUAL = m;
+  document.querySelectorAll('.modbtn').forEach(function(b){
+    b.classList.toggle('active', b.getAttribute('data-mod')===m);
+  });
+  var ehAtpv = (m==='atpv');
+  var app   = document.querySelector('.app');
+  var lado  = document.querySelector('.left');
+  var abas  = document.querySelector('.ftabs');
+  var barra = document.getElementById('action-bar-atpv');
+
+  if(lado)  lado.style.display  = ehAtpv ? '' : 'none';
+  if(abas)  abas.style.display  = ehAtpv ? '' : 'none';
+  if(barra) barra.style.display = ehAtpv ? '' : 'none';
+  if(app)   app.classList.toggle('full', !ehAtpv);
+
+  if(ehAtpv){
+    ftab(ABAS_ATPV.indexOf(tabAtual)>=0 ? tabAtual : 'vendedor');
+    return;
+  }
+  document.querySelectorAll('.ftc').forEach(function(el){ el.classList.remove('active'); });
+  var alvo=document.getElementById('fc-'+m);
+  if(alvo) alvo.classList.add('active');
+  if(m==='recursos')   carregarRecursos();
+  if(m==='relatorios'){ carregarRelatorio(); relTab(relTabAtual||'atendimentos'); }
+}
+
+// Abas internas do módulo ATPV-e
+function ftab(t){
+  tabAtual=t;
+  // so as abas da barra principal — as sub-abas de Relatorios e Admin
+  // usam a mesma classe e nao devem ser mexidas aqui
+  document.querySelectorAll('.ftabs > .ftab').forEach(function(el){
+    el.classList.toggle('active', el.getAttribute('data-tab')===t);
+  });
+  document.querySelectorAll('.ftc').forEach(function(el){ el.classList.remove('active'); });
+  var alvo=document.getElementById('fc-'+t);
+  if(alvo) alvo.classList.add('active');
+  if(t==='preview') gerarPreview();
+  if(t==='assinaturas') carregarAssinaturas();
+  // a barra do ATPV nao faz sentido na lista de assinaturas
+  var barra=document.getElementById('action-bar-atpv');
+  if(barra) barra.style.display = (t==='assinaturas') ? 'none' : '';
+}
+
+// ═══ EXTRAÇÃO ════════════════════════════════════════════════
+function extrair(){
+  var txt=document.getElementById('paste-txt').value;
+  if(!txt.trim()){ alert('Cole algum texto antes de extrair.'); return; }
+  var btn=document.querySelector('.btn-ext');
+  btn.disabled=true;
+  animLoad(['Lendo documento...','Identificando campos...','Preenchendo...']);
+  fetch('/api/extrair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({texto:txt})})
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    pararLoad(); btn.disabled=false;
+    if(data.erro){ showAlert(data.erro,'err'); return; }
+    var campos=data.campos, filled=data.total;
+    // Se estiver na aba comprador, remapeia v_ -> c_
+    if(tabAtual==='comprador'){
+      var mapa={'v_nome':'c_nome','v_cpf':'c_cpf','v_rg':'c_rg','v_end':'c_end',
+                'v_cidade':'c_cidade','v_cep':'c_cep','v_email':'c_email','v_nasc':'c_nasc',
+                'v_bairro':'c_bairro'};
+      var remapeado={};
+      Object.keys(campos).forEach(function(k){
+        remapeado[mapa[k]||k] = campos[k];
+      });
+      campos = remapeado;
+    }
+    Object.keys(campos).forEach(function(k){ setVal(k, campos[k]); });
+    atualizarContadores();
+    gerarPreview();
+    showAlert('✓ '+filled+' campos extraídos!','ok');
+    if(campos.ve_placa||campos.ve_chassi) ftab('veiculo');
+    else if(tabAtual==='comprador') ftab('comprador');
+    else ftab('vendedor');
+  })
+  .catch(function(){ pararLoad(); btn.disabled=false; showAlert('Erro de conexão.','err'); });
+}
+
+// ═══ LOADING ═════════════════════════════════════════════════
+var _loadIv=null;
+function animLoad(msgs){
+  var lw=document.getElementById('load-wrap'),lm=document.getElementById('load-msg'),lf=document.getElementById('load-fill');
+  lw.style.display='block'; var i=0,pct=0;
+  _loadIv=setInterval(function(){ if(i<msgs.length){lm.textContent=msgs[i];i++;} pct=Math.min(pct+Math.random()*20+8,88); lf.style.width=Math.round(pct)+'%'; },600);
+}
+function pararLoad(){
+  clearInterval(_loadIv);
+  var lf=document.getElementById('load-fill'); lf.style.width='100%';
+  setTimeout(function(){ document.getElementById('load-wrap').style.display='none'; lf.style.width='0'; },300);
+}
+
+// ═══ AUTOCOMPLETE — SISTEMA ÚNICO E LIMPO ════════════════════
+function acBuscar(inputId, tipo, pref){
+  var el=document.getElementById(inputId);
+  if(!el) return;
+  var q = tipo==='veiculo' ? el.value.trim() : (tipo==='pessoaCpf' ? el.value.replace(/\D/g,'') : el.value.trim());
+  var minLen = tipo==='pessoaCpf' ? 3 : 1;
+  var dropId = 'ac-'+inputId;
+  if(q.length < minLen){ acFechar(dropId); return; }
+  clearTimeout(_timers[inputId]);
+  _timers[inputId] = setTimeout(function(){
+    var url = tipo==='veiculo'
+      ? '/api/veiculos?q='+encodeURIComponent(q)
+      : '/api/pessoas?q='+encodeURIComponent(q);
+    fetch(url).then(function(r){ return r.json(); })
+    .then(function(lista){
+      if(tipo==='veiculo') acRenderVeiculo(lista, dropId);
+      else acRenderPessoa(lista, pref, dropId);
+    });
+  }, 200);
+}
+
+function acRenderPessoa(lista, pref, dropId){
+  var drop=document.getElementById(dropId);
+  if(!drop) return;
+  if(!lista.length){ acFechar(dropId); return; }
+  AC['pessoa_'+pref] = lista;
+  drop.innerHTML='';
+  lista.forEach(function(p,i){
+    var div=document.createElement('div');
+    div.className='ac-item';
+    div.innerHTML='<div class="ac-nome">'+(p.nome||'')+'</div><div class="ac-meta">'+(p.cpf||'')+'</div>';
+    div.setAttribute('data-i', i);
+    div.setAttribute('data-pref', pref);
+    drop.appendChild(div);
+  });
+  var salvar=document.createElement('div');
+  salvar.className='ac-salvar';
+  salvar.textContent='+ Salvar '+(pref==='v'?'vendedor':'comprador')+' no cadastro';
+  salvar.setAttribute('data-salvar','1');
+  salvar.setAttribute('data-pref', pref);
+  drop.appendChild(salvar);
+  drop.classList.add('open');
+}
+
+function acRenderVeiculo(lista, dropId){
+  var drop=document.getElementById(dropId);
+  if(!drop) return;
+  if(!lista.length){ acFechar(dropId); return; }
+  AC['veiculo'] = lista;
+  drop.innerHTML='';
+  lista.forEach(function(v,i){
+    var div=document.createElement('div');
+    div.className='ac-item';
+    div.innerHTML='<div class="ac-nome">'+v.placa+' — '+(v.modelo||'')+'</div><div class="ac-meta">'+(v.ano||'')+(v.chassi?' · '+v.chassi:'')+'</div>';
+    div.setAttribute('data-i', i);
+    drop.appendChild(div);
+  });
+  var salvar=document.createElement('div');
+  salvar.className='ac-salvar';
+  salvar.textContent='+ Salvar veículo no cadastro';
+  salvar.setAttribute('data-salvar','1');
+  drop.appendChild(salvar);
+  drop.classList.add('open');
+}
+
+// DELEGAÇÃO DE EVENTOS — um único listener para todos os dropdowns
+document.addEventListener('mousedown', function(e){
+  var item = e.target.closest('.ac-item, .ac-salvar');
+  if(!item) return;
+  var drop = item.closest('.ac-drop');
+  if(!drop) return;
+  e.preventDefault();
+  e.stopPropagation();
+  var pref = item.getAttribute('data-pref');
+  var isSalvar = item.getAttribute('data-salvar')==='1';
+  var idx = parseInt(item.getAttribute('data-i'));
+  if(drop.id==='ac-ve_placa'){
+    if(isSalvar) salvarVeiculo();
+    else acPreencherVeiculo(idx);
+  } else {
+    if(isSalvar) salvarPessoa(pref);
+    else acPreencherPessoa(idx, pref);
+  }
+});
+
+function acPreencherPessoa(idx, pref){
+  var lista = AC['pessoa_'+pref];
+  if(!lista||!lista[idx]) return;
+  var p=lista[idx];
+  var map={nome:'_nome',cpf:'_cpf',rg:'_rg',rg_org:'_rg_org',nasc:'_nasc',
+           ecivil:'_ecivil',end:'_end',bairro:'_bairro',cidade:'_cidade',cep:'_cep',cel:'_cel',email:'_email'};
+  Object.keys(map).forEach(function(k){ setVal(pref+map[k], p[k]||''); });
+  acFecharTodos();
+  atualizarContadores(); gerarPreview();
+  showAlert('✓ Cadastro carregado: '+p.nome,'ok');
+}
+
+function acPreencherVeiculo(idx){
+  var lista = AC['veiculo'];
+  if(!lista||!lista[idx]) return;
+  var v=lista[idx];
+  setVal('ve_placa',v.placa||''); setVal('ve_chassi',v.chassi||'');
+  setVal('ve_modelo',v.modelo||''); setVal('ve_ano',v.ano||'');
+  acFecharTodos();
+  atualizarContadores(); gerarPreview();
+  showAlert('✓ Veículo carregado: '+v.placa+' — '+(v.modelo||''),'ok');
+}
+
+function salvarPessoa(pref){
+  var dados={nome:g(pref+'_nome'),cpf:g(pref+'_cpf'),rg:g(pref+'_rg'),rg_org:g(pref+'_rg_org'),
+             nasc:g(pref+'_nasc'),ecivil:g(pref+'_ecivil'),end:g(pref+'_end'),bairro:g(pref+'_bairro'),
+             cidade:g(pref+'_cidade'),cep:g(pref+'_cep'),cel:g(pref+'_cel'),email:g(pref+'_email')};
+  if(!dados.nome&&!dados.cpf){ showAlert('Preencha nome ou CPF.','warn'); return; }
+  fetch('/api/pessoas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dados)})
+  .then(function(){ showAlert('✓ Cadastro salvo!','ok'); });
+  acFecharTodos();
+}
+
+function salvarVeiculo(){
+  var dados={placa:g('ve_placa'),chassi:g('ve_chassi'),modelo:g('ve_modelo'),ano:g('ve_ano')};
+  if(!dados.placa){ showAlert('Preencha a placa.','warn'); return; }
+  fetch('/api/veiculos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dados)})
+  .then(function(){ showAlert('✓ Veículo salvo!','ok'); });
+  acFecharTodos();
+}
+
+function acFechar(id){ var el=document.getElementById(id); if(el) el.classList.remove('open'); }
+function acFecharTodos(){ document.querySelectorAll('.ac-drop').forEach(function(d){ d.classList.remove('open'); }); }
+
+// Fecha ao clicar fora
+document.addEventListener('click', function(e){
+  if(!e.target.closest('.ac-drop')&&!e.target.closest('.fg')) acFecharTodos();
+});
+
+// Fecha ao perder foco (blur) com delay para mousedown ter tempo
+['v_nome','v_cpf','c_nome','c_cpf','ve_placa'].forEach(function(id){
+  var el=document.getElementById(id);
+  if(el) el.addEventListener('blur', function(){ setTimeout(function(){ acFechar('ac-'+id); },300); });
+});
+
+// Enter na placa
+document.getElementById('ve_placa').addEventListener('keydown',function(e){
+  if(e.key!=='Enter') return;
+  e.preventDefault();
+  var q=this.value.trim(); if(!q) return;
+  fetch('/api/veiculos?q='+encodeURIComponent(q)).then(function(r){return r.json();})
+  .then(function(lista){
+    if(lista.length===1){ AC['veiculo']=lista; acPreencherVeiculo(0); }
+    else acRenderVeiculo(lista,'ac-ve_placa');
+  });
+});
+
+// ═══ CNPJ AUTO ═══════════════════════════════════════════════
+var _cnpjT={};
+function checarCNPJ(el,pref){
+  var d=el.value.replace(/\D/g,'');
+  if(d.length!==14) return;
+  clearTimeout(_cnpjT[pref]);
+  _cnpjT[pref]=setTimeout(function(){ buscarCNPJ(d,pref); },600);
+}
+function buscarCNPJ(cnpj,pref){
+  showAlert('Buscando CNPJ...','ok');
+  fetch('https://brasilapi.com.br/api/cnpj/v1/'+cnpj)
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if(!d||d.message){ showAlert('CNPJ não encontrado.','warn'); return; }
+    var razao=d.razao_social||d.nome||'';
+    var logr=d.logradouro||''; var num=d.numero||''; var compl=d.complemento||'';
+    var end=logr+(num&&num!='SN'&&num!='00'?', Nº '+num:'')+(compl?', '+compl:'');
+    setVal(pref+'_nome',razao); setVal(pref+'_end',end);
+    setVal(pref+'_bairro',d.bairro||'');
+    setVal(pref+'_cidade',(d.municipio||'')+(d.uf?' / '+d.uf:''));
+    var cep=(d.cep||'').replace(/\D/g,'');
+    if(cep.length===8) setVal(pref+'_cep',cep.slice(0,5)+'-'+cep.slice(5));
+    atualizarContadores(); gerarPreview();
+    showAlert('✓ Empresa: '+razao,'ok');
+  }).catch(function(){ showAlert('Erro ao buscar CNPJ.','warn'); });
+}
+
+// ═══ CEP ═════════════════════════════════════════════════════
+var _cepT={};
+function maskCep(el,pref){
+  var v=el.value.replace(/\D/g,'');
+  el.value=v.length>5?v.slice(0,5)+'-'+v.slice(5,8):v;
+  if(v.length===8){ clearTimeout(_cepT[pref]); _cepT[pref]=setTimeout(function(){ buscarCep(v,pref); },400); }
+}
+function buscarCep(cep,pref){
+  var spin=document.getElementById(pref+'_cep_spin'); if(spin) spin.style.display='inline';
+  fetch('https://viacep.com.br/ws/'+cep+'/json/').then(function(r){ return r.json(); })
+  .then(function(d){
+    if(spin) spin.style.display='none';
+    if(d.erro){ showAlert('CEP não encontrado.','warn'); return; }
+    var endEl=document.getElementById(pref+'_end');
+    var baiEl=document.getElementById(pref+'_bairro');
+    var cidEl=document.getElementById(pref+'_cidade');
+    if(endEl&&!endEl.value&&d.logradouro){ endEl.value=d.logradouro; endEl.classList.add('ia'); }
+    if(baiEl&&!baiEl.value&&d.bairro){ baiEl.value=d.bairro; baiEl.classList.add('ia'); }
+    if(cidEl&&!cidEl.value&&d.localidade){ cidEl.value=d.localidade+(d.uf?'/'+d.uf:''); cidEl.classList.add('ia'); }
+    atualizarContadores();
+    showAlert('✓ CEP: '+d.logradouro+', '+d.bairro+' — '+d.localidade,'ok');
+  }).catch(function(){ if(spin) spin.style.display='none'; });
+}
+
+// ═══ CONSULTA CPF RECEITA ════════════════════════════════════
+function consultarCPF(pref){
+  var cpf=g(pref+'_cpf'); if(!cpf){ showAlert('Preencha o CPF.','warn'); return; }
+  var nasc=g(pref+'_nasc'); var nome=g(pref+'_nome');
+  var txt='CPF: '+cpf+(nasc?'\nData de nascimento: '+nasc:'')+(nome?'\nNome: '+nome:'');
+  if(navigator.clipboard) navigator.clipboard.writeText(txt).then(function(){ showAlert('✓ CPF copiado!','ok'); });
+  setTimeout(function(){ window.open('https://servicos.receita.fazenda.gov.br/servicos/cpf/consultasituacao/consultapublica.asp','_blank'); },300);
+}
+
+// ═══ CONTADORES ══════════════════════════════════════════════
+function atualizarContadores(){
+  var v=CAMPOS_V.filter(function(k){return g(k);}).length;
+  var ve=CAMPOS_VE.filter(function(k){return g(k);}).length;
+  var c=CAMPOS_C.filter(function(k){return g(k);}).length;
+  document.getElementById('cnt-vendedor').textContent=v+' campos';
+  document.getElementById('cnt-veiculo').textContent=ve+' campos';
+  document.getElementById('cnt-comprador').textContent=c+' campos';
+}
+function atualizar(){ atualizarContadores(); }
+
+// ═══ PRÉ-VISUALIZAÇÃO ════════════════════════════════════════
+function gerarPreview(){
+  var cfg=getCfg(); var d=new Date();
+  var ms=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  var dt=d.getDate().toString().padStart(2,'0')+'/'+ms[d.getMonth()]+'/'+d.getFullYear();
+  var txt=
+'PROCURAÇÃO — INTENÇÃO DE VENDA E EMISSÃO ATPV-E\n'+
+'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'+
+'PROPRIETÁRIO / VENDEDOR\n\n'+
+'Nome:      '+blank(g('v_nome'),35)+'\n'+
+'CPF/CNPJ:  '+blank(g('v_cpf'),20)+'   RG: '+blank(g('v_rg'),10)+' '+blank(g('v_rg_org'),8)+'\n'+
+'Est.Civil: '+blank(g('v_ecivil'),15)+'\n'+
+'Endereço:  '+blank(g('v_end'),35)+'\n'+
+'Bairro:    '+blank(g('v_bairro'),22)+'   CEP: '+blank(g('v_cep'),10)+'\n'+
+'Município: '+blank(g('v_cidade'),22)+'   Cel: '+blank(g('v_cel'),14)+'\n'+
+'E-mail:    '+blank(g('v_email'),32)+'\n\n'+
+'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'+
+'Nomeia: '+cfg.nome+' (cód. '+cfg.cod+')\n'+
+'Sede: '+cfg.end+' — CEP '+cfg.cep+'\n'+
+'Para: INCLUSÃO DE INTENÇÃO DE VENDA / CANCELAMENTO ATPV / EMISSÃO ATPV-E\n\n'+
+'VEÍCULO\n\n'+
+'Marca/Modelo: '+blank(g('ve_modelo'),25)+'   Ano: '+blank(g('ve_ano'),10)+'\n'+
+'Placa:        '+blank(g('ve_placa'),10)+'   Chassi: '+blank(g('ve_chassi'),20)+'\n\n'+
+'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'+
+'COMPRADOR\n\n'+
+'Nome:      '+blank(g('c_nome'),35)+'\n'+
+'CPF/CNPJ:  '+blank(g('c_cpf'),20)+'   RG: '+blank(g('c_rg'),12)+'\n'+
+'Endereço:  '+blank(g('c_end'),35)+'\n'+
+'Bairro:    '+blank(g('c_bairro'),22)+'   Cidade: '+blank(g('c_cidade'),15)+'\n'+
+'CEP:       '+blank(g('c_cep'),10)+'   E-mail: '+blank(g('c_email'),25)+'\n'+
+'Valor:     '+blank(g('c_valor'),15)+'\n\n'+
+'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'+
+cfg.cidade+', '+dt+'\n\n\n'+
+'_________________________________________________\n'+
+'Assinatura do Outorgante (Proprietário Vendedor)';
+  document.getElementById('prev-box').textContent=txt;
+}
+
+// ═══ GERAR PDF ═══════════════════════════════════════════════
+function montarPDF(){
+  var cfg=getCfg(); var d=new Date();
+  var ms=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  var dt=d.getDate().toString().padStart(2,'0')+'/'+ms[d.getMonth()]+'/'+d.getFullYear();
+  var {jsPDF}=window.jspdf;
+  var doc=new jsPDF({unit:'mm',format:'a4'});
+  var W=210,ML=20,TW=170,y=20;
+  function lnE(){doc.setDrawColor(26,26,46);doc.setLineWidth(0.8);doc.line(ML,y,ML+TW,y);doc.setLineWidth(0.3);y+=5;}
+  function lnC(){doc.setDrawColor(190,190,190);doc.setLineWidth(0.3);doc.line(ML,y,ML+TW,y);y+=4;}
+  function bar(t){doc.setFillColor(26,26,46);doc.roundedRect(ML,y,TW,5.8,1.5,1.5,'F');doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(255,255,255);doc.text(t,W/2,y+4.1,{align:'center'});doc.setTextColor(30,30,30);y+=8.6;}
+  function cam(lb,val,x,cy,w){doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(120,120,120);doc.text(lb,x,cy);doc.setFontSize(9.5);doc.setTextColor(25,25,25);doc.text((val&&val.trim())?val:'_'.repeat(Math.max(4,Math.floor(w/2.2))),x,cy+4.5,{maxWidth:w});return cy+9;}
+  function par(txt,x,cy,w,sz){doc.setFont('helvetica','normal');doc.setFontSize(sz||8.5);doc.setTextColor(40,40,40);var lines=doc.splitTextToSize(txt,w);doc.text(lines,x,cy);return cy+lines.length*3.9+1.5;}
+  doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(26,26,46);doc.text('PROCURAÇÃO',W/2,y,{align:'center'});y+=5.4;
+  doc.setFontSize(9);doc.setTextColor(80,80,80);doc.text('INTENÇÃO DE VENDA E EMISSÃO ATPV-E',W/2,y,{align:'center'});y+=6;lnE();
+  bar('DADOS DO PROPRIETÁRIO / VENDEDOR (OUTORGANTE)');
+  cam('Nome completo',g('v_nome'),ML,y,108);cam('CPF / CNPJ',g('v_cpf'),ML+112,y,58);y+=9.6;
+  cam('RG',g('v_rg'),ML,y,38);cam('Órgão exp.',g('v_rg_org'),ML+42,y,35);cam('Estado civil',g('v_ecivil'),ML+81,y,89);y+=9.6;
+  cam('Endereço',g('v_end'),ML,y,108);cam('Bairro',g('v_bairro'),ML+112,y,58);y+=9.6;
+  cam('Município / UF',g('v_cidade'),ML,y,58);cam('CEP',g('v_cep'),ML+62,y,34);cam('Celular',g('v_cel'),ML+100,y,70);y+=9.6;
+  cam('E-mail',g('v_email'),ML,y,TW);y+=10;lnC();
+  y=par('Nomeia como procurador: '+cfg.nome+', código '+cfg.cod+', sito à '+cfg.end+' — CEP: '+cfg.cep+', para representá-lo junto ao DETRAN/GO para INCLUSÃO DE INTENÇÃO DE VENDA ou CANCELAMENTO ATPV e/ou EMISSÃO DA ATPV-E do veículo abaixo, podendo para tanto praticar quaisquer atos necessários para o fiel cumprimento deste Mandato, o que desde já fica dado por firme e valioso.',ML,y,TW,8.5);y+=2.5;
+  bar('DADOS DO VEÍCULO');
+  cam('Marca / Modelo',g('ve_modelo'),ML,y,108);cam('Ano fabricação / Modelo',g('ve_ano'),ML+112,y,58);y+=9.6;
+  cam('Placa',g('ve_placa'),ML,y,52);cam('Chassi',g('ve_chassi'),ML+56,y,TW-56);y+=11;
+  bar('DADOS DO COMPRADOR');
+  y=par('Declaro que os dados abaixo são verdadeiros, assumindo inteira responsabilidade, isentando o despachante de qualquer infortúnio.',ML,y,TW,8);y+=2;
+  cam('Nome completo do comprador',g('c_nome'),ML,y,108);cam('CPF / CNPJ',g('c_cpf'),ML+112,y,58);y+=9.6;
+  cam('RG',g('c_rg'),ML,y,52);cam('Valor da venda',g('c_valor'),ML+56,y,114);y+=9.6;
+  cam('Endereço completo',g('c_end'),ML,y,108);cam('Bairro',g('c_bairro'),ML+112,y,58);y+=9.6;
+  cam('Cidade / UF',g('c_cidade'),ML,y,58);cam('CEP',g('c_cep'),ML+62,y,34);cam('E-mail',g('c_email'),ML+100,y,70);y+=11;
+  lnC();y+=4;
+  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(50,50,50);doc.text(cfg.cidade+', '+dt,ML,y);
+
+  // ── Mede o bloco de encerramento antes de desenhar e encaixa acima do rodapé ──
+  // Assim a declaração e o carimbo nunca invadem o rodapé, e o espaço que sobra
+  // vira folga para a assinatura do cliente.
+  var decTxt='Declaro, sob as penas da lei, que a assinatura aposta neste instrumento foi colhida em '+
+             'conformidade com o procedimento adotado, assumindo a responsabilidade civil e criminal '+
+             'pelas informações e atos declaratórios aqui consignados, nos limites da atuação profissional.';
+  doc.setFont('helvetica','normal');doc.setFontSize(7.2);
+  var decLin=doc.splitTextToSize(decTxt,TW-10);
+  var decH=7+decLin.length*3.1;
+  var cbW=70, cbH=21, cbX=(W-cbW)/2;
+  var fimH=4+5+decH+3.5+cbH+3+10.4;        // rótulo + folga + declaração + carimbo + assinatura
+  var TOPO_RODAPE=281.5;                   // o rodapé do documento começa em 285
+  y=Math.max(y+8, TOPO_RODAPE-fimH);       // a linha do outorgante fica aqui
+
+  doc.setDrawColor(120,120,120);doc.setLineWidth(0.3);doc.line(W/2+8,y,ML+TW,y);
+
+  // Marca invisível que diz à ZapSign onde colocar a assinatura do cliente.
+  // Texto branco sobre fundo branco: não aparece no documento impresso.
+  var assX1=W/2+8, assX2=ML+TW, assY=y, H=297;
+  doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(255,255,255);
+  var anc='<<signer1>>', ancW=doc.getTextWidth(anc);
+  doc.text(anc, assX1+((assX2-assX1)-ancW)/2, assY-2.5);
+  doc.setTextColor(0,0,0);
+
+  // Guarda onde a linha ficou, em porcentagem da página, para mandar à ZapSign.
+  ASSIN_POS = {
+    page: 0,
+    relative_position_left:   +((assX1 / W) * 100).toFixed(2),
+    relative_position_bottom: +(((H - assY) / H) * 100).toFixed(2),
+    relative_size_x: +((((assX2-assX1) * 0.62) / W) * 100).toFixed(2),
+    relative_size_y: 9.42
+  };
+
+  doc.setFontSize(7.5);doc.setTextColor(100,100,100);doc.text('Assinatura do Outorgante (Proprietário Vendedor)',W/2+8,y+4);
+  y+=9;
+
+  // ── BLOCO DO DESPACHANTE (declaração + carimbo + assinatura) ──
+  // Escreve o texto centralizado encolhendo a fonte até caber na largura pedida.
+  function txtFit(t,cx,cy,maxW,sz,min){
+    t=(t||'').toString();
+    doc.setFontSize(sz);
+    while(sz>(min||4) && doc.getTextWidth(t)>maxW){ sz-=0.2; doc.setFontSize(sz); }
+    doc.text(t,cx,cy,{align:'center'});
+  }
+
+  // Declaração
+  doc.setDrawColor(190,190,190);doc.setLineWidth(0.3);
+  doc.roundedRect(ML,y,TW,decH,1.5,1.5,'D');
+  doc.setFont('helvetica','bold');doc.setFontSize(7);doc.setTextColor(40,40,40);
+  doc.text('DECLARAÇÃO DO DESPACHANTE',ML+5,y+4.6);
+  doc.setFont('helvetica','normal');doc.setFontSize(7.2);doc.setTextColor(50,50,50);
+  doc.text(decLin,ML+5,y+8.4);
+  y+=decH+3.5;
+
+  // Carimbo: atesto em cima, assinatura no meio, nome e código embaixo da linha
+  doc.setDrawColor(70,70,70);doc.setLineWidth(0.4);
+  doc.rect(cbX,y,cbW,cbH,'D');
+  doc.setFont('helvetica','normal');doc.setFontSize(4.6);doc.setTextColor(30,30,30);
+  var atesto=['ATESTO SOB AS PENAS DA LEI CIVIL E CRIMINAL',
+              'QUE A ASSINATURA NA PROCURAÇÃO É',
+              'DE PRÓPRIO PUNHO DO OUTORGANTE.'];
+  atesto.forEach(function(l,i){ doc.text(l,W/2,y+3.4+i*2.5,{align:'center'}); });
+  if(cfg.assinatura){
+    // 'FAST' comprime a imagem dentro do PDF: o arquivo final fica pequeno
+    // o bastante para subir no sistema do DETRAN.
+    try{ doc.addImage(cfg.assinatura,'PNG',cbX+21,y+8.9,28,7,'assinDesp','FAST'); }
+    catch(e){ try{ doc.addImage(cfg.assinatura,'PNG',cbX+21,y+8.9,28,7); }catch(e2){} }
+  }
+  doc.setDrawColor(70,70,70);doc.setLineWidth(0.25);
+  doc.line(cbX+6,y+16.2,cbX+cbW-6,y+16.2);
+  doc.setFont('helvetica','bold');
+  txtFit((cfg.nome||'').toUpperCase(),W/2,y+18.5,cbW-10,5.2,3.4);
+  doc.setFont('helvetica','normal');doc.setFontSize(4.8);
+  doc.text('CÓD.: '+(cfg.cod||'—'),W/2,y+20.4,{align:'center'});
+  y+=cbH+3;
+
+  // Linha de assinatura do despachante
+  doc.setDrawColor(110,110,110);doc.setLineWidth(0.3);
+  doc.line(W/2-38,y,W/2+38,y);y+=3.2;
+  doc.setFont('helvetica','normal');doc.setFontSize(6.2);doc.setTextColor(110,110,110);
+  doc.text('ASSINATURA DO DESPACHANTE',W/2,y,{align:'center'});y+=3.6;
+  doc.setFont('helvetica','bold');doc.setTextColor(30,30,30);
+  txtFit((cfg.nome||'')+(cfg.cnpj?', CNPJ: '+cfg.cnpj:''),W/2,y,TW,7.6,5);y+=3.4;
+  doc.setFont('helvetica','normal');doc.setFontSize(6.5);doc.setTextColor(90,90,90);
+  doc.text('Cód. interno: '+(cfg.cod||'—'),W/2,y,{align:'center'});
+
+  y=285;doc.setDrawColor(190,190,190);doc.setLineWidth(0.3);doc.line(ML,y,ML+TW,y);y+=4;
+  doc.setFont('helvetica','oblique');doc.setTextColor(150,150,150);
+  txtFit(cfg.nome+' — Código DETRAN '+cfg.cod+' — '+cfg.end+' — CEP '+cfg.cep,W/2,y,TW,7,4.2);
+  return doc;
+}
+
+function gerarPDF(){
+  var placa=g('ve_placa')||'veiculo';
+  montarPDF().save('ATPV_'+placa.replace(/[^A-Z0-9]/gi,'_')+'_'+Date.now()+'.pdf');
+  HOJE++;document.getElementById('st-hoje').textContent=HOJE;
+  showAlert('✓ PDF gerado e baixado!','ok');
+}
+
+// ═══ ASSINATURA ELETRÔNICA (ZapSign) ═════════════════════════
+var ASSIN_TOKEN='', ASSIN_POS=null;
+
+function enviarAssinatura(){
+  var nome=g('v_nome');
+  if(!nome){ showAlert('Preencha o nome do vendedor antes de enviar para assinatura.','warn'); ftab('vendedor'); return; }
+  abrirNivel(nome);
+}
+
+// ── confirmacao e escolha do nivel ──
+function abrirNivel(nome){
+  document.getElementById('niv-cliente').textContent=nome;
+  var cpf=g('v_cpf'), cel=g('v_cel'), email=g('v_email');
+  document.getElementById('niv-dados').innerHTML=
+    'CPF: '+(cpf||'<span style="color:var(--red)">não preenchido</span>')+'<br>'+
+    'Celular: '+(cel||'<span style="color:var(--red)">não preenchido</span>')+'<br>'+
+    'E-mail: '+(email||'<span style="color:var(--red)">não preenchido</span>');
+  var sel=document.getElementById('niv-escolha');
+  try{ sel.value=localStorage.getItem('nivel_assin')||'selfie'; }catch(e){ sel.value='selfie'; }
+  avaliarNivel();
+  document.getElementById('modal-nivel').classList.add('open');
+}
+
+function fecharNivel(){ document.getElementById('modal-nivel').classList.remove('open'); }
+
+function avaliarNivel(){
+  var n=document.getElementById('niv-escolha').value;
+  var cpf=(g('v_cpf')||'').replace(/\D/g,''), cel=(g('v_cel')||'').replace(/\D/g,''), email=g('v_email');
+  var regras={
+    simples:   {fone:false, email:false, cpf:false, custo:'Sem custo além do documento.',
+                nota:'Não confere identidade: quem receber o link consegue assinar.', cor:'var(--warn)'},
+    email:     {fone:false, email:true,  cpf:true,  custo:'Sem custo de envio.',
+                nota:'Prova que o cliente tem acesso ao e-mail informado.', cor:'var(--acc2)'},
+    sms:       {fone:true,  email:false, cpf:true,  custo:'Custo de SMS por envio.',
+                nota:'Prova que o cliente estava com o celular dele.', cor:'var(--acc2)'},
+    whatsapp:  {fone:true,  email:false, cpf:true,  custo:'Cerca de R$ 0,50 por envio.',
+                nota:'Prova que o cliente estava com o celular dele. Bom equilíbrio.', cor:'var(--acc)'},
+    selfie:    {fone:true,  email:false, cpf:true,  custo:'R$ 0,50 do WhatsApp + custo da selfie.',
+                nota:'Selfie do rosto no comprovante. Arquivo menor, cabe no sistema do DETRAN.', cor:'var(--acc)'},
+    documento: {fone:true,  email:false, cpf:true,  custo:'R$ 0,50 do WhatsApp + custo da verificação.',
+                nota:'Selfie e foto do documento. Arquivo fica maior.', cor:'var(--acc)'},
+    biometria: {fone:true,  email:false, cpf:true,  custo:'O mais caro por assinatura.',
+                nota:'Compara a selfie com a base oficial do governo. Prova mais forte.', cor:'var(--acc)'}
+  };
+  var r=regras[n]||regras.whatsapp, faltas=[];
+  if(r.fone  && cel.length<10) faltas.push('Celular');
+  if(r.email && !email)        faltas.push('E-mail');
+  if(r.cpf   && cpf.length!==11) faltas.push('CPF do vendedor (11 dígitos)');
+
+  var box=document.getElementById('niv-explica');
+  var btn=document.getElementById('niv-confirmar');
+  if(faltas.length){
+    box.style.borderColor='rgba(255,71,87,.4)';
+    box.innerHTML='<b style="color:var(--red)">Faltam dados para este nível:</b><br>'+faltas.join('<br>')+
+      '<br><br><span style="color:var(--mut)">Preencha na aba Vendedor ou escolha outro nível.</span>';
+    btn.disabled=true; btn.style.opacity=.4;
+  } else {
+    box.style.borderColor='var(--bord)';
+    box.innerHTML='<b style="color:'+r.cor+'">'+r.nota+'</b><br>'+
+      '<span style="color:var(--mut)">'+r.custo+'</span>';
+    btn.disabled=false; btn.style.opacity=1;
+  }
+}
+
+function confirmarEnvio(){
+  var nivel=document.getElementById('niv-escolha').value;
+  try{ localStorage.setItem('nivel_assin', nivel); }catch(e){}
+  fecharNivel();
+  dispararAssinatura(nivel);
+}
+
+function dispararAssinatura(nivel){
+  var nome=g('v_nome');
+  var btn=document.getElementById('btn-assin');
+  var txtOrig=btn?btn.textContent:'';
+  if(btn){ btn.disabled=true; btn.textContent='Enviando...'; }
+  function restaurar(){ if(btn){ btn.disabled=false; btn.textContent=txtOrig; } }
+
+  var b64;
+  try{ b64=montarPDF().output('datauristring').split(',')[1]; }
+  catch(e){ restaurar(); showAlert('Erro ao gerar o PDF.','err'); return; }
+
+  var placa=g('ve_placa');
+  fetch('/api/assinatura',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({pdf_base64:b64,nome:nome,email:g('v_email'),telefone:g('v_cel'),
+      titulo:'Procuração ATPV-e'+(placa?' — '+placa:''),
+      cpf:g('v_cpf'), nivel:nivel, atendimento_id:ATEND_ATUAL,
+      posicao_assinatura:ASSIN_POS})})
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    restaurar();
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    if(!d.sign_url){ showAlert('A ZapSign não devolveu o link de assinatura.','err'); return; }
+    abrirModalAssin(d.sign_url,nome,g('v_cel'),d.doc_token);
+    showAlert('✓ Enviado! '+(d.nivel_rotulo||''),'ok');
+  })
+  .catch(function(){ restaurar(); showAlert('Falha de conexão ao enviar para assinatura.','err'); });
+}
+
+function abrirModalAssin(url,nome,cel,token){
+  ASSIN_TOKEN=token||'';
+  document.getElementById('assin-nome').textContent=nome;
+  document.getElementById('assin-url').value=url;
+  document.getElementById('assin-status').textContent='';
+  var wa=document.getElementById('assin-wa');
+  var fone=(cel||'').replace(/\D/g,'');
+  if(fone.length>=10){ wa.style.display=''; wa.setAttribute('data-fone','55'+fone.slice(-11)); }
+  else { wa.style.display='none'; }
+  document.getElementById('modal-assin').classList.add('open');
+}
+
+function fecharAssin(){ document.getElementById('modal-assin').classList.remove('open'); }
+
+function copiarLinkAssin(){
+  var el=document.getElementById('assin-url');
+  el.select(); el.setSelectionRange(0,99999);
+  var ok=function(){ showAlert('✓ Link copiado!','ok'); };
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(el.value).then(ok).catch(function(){ document.execCommand('copy'); ok(); });
+  } else { document.execCommand('copy'); ok(); }
+}
+
+function abrirWhatsAssin(){
+  var fone=document.getElementById('assin-wa').getAttribute('data-fone')||'';
+  var url=document.getElementById('assin-url').value;
+  var msg='Olá! Segue o link para assinar a procuração do ATPV-e:\n\n'+url;
+  window.open('https://wa.me/'+fone+'?text='+encodeURIComponent(msg),'_blank');
+}
+
+function conferirAssin(){
+  var box=document.getElementById('assin-status');
+  if(!ASSIN_TOKEN){ box.textContent='Sem documento para consultar.'; return; }
+  box.textContent='Consultando...';
+  fetch('/api/assinatura/'+ASSIN_TOKEN).then(function(r){ return r.json(); }).then(function(d){
+    if(d.erro){ box.textContent=d.erro; return; }
+    var sg=(d.signers&&d.signers[0])?d.signers[0].status:'';
+    var html='Documento: <b style="color:var(--txt)">'+(d.status||'-')+'</b>';
+    if(sg) html+=' — signatário: <b style="color:var(--txt)">'+sg+'</b>';
+    if(d.signed_file) html+='<br><a href="'+d.signed_file+'" target="_blank" style="color:var(--acc)">⬇ Baixar PDF assinado</a>';
+    box.innerHTML=html;
+  }).catch(function(){ box.textContent='Falha ao consultar o status.'; });
+}
+
+// ═══ HISTÓRICO ═══════════════════════════════════════════════
+var HIST_BUSCA='', _histT=null, ATEND_ATUAL=null;
+
+function carregarHist(){
+  var url='/api/historico?limite=100'+(HIST_BUSCA?'&q='+encodeURIComponent(HIST_BUSCA):'');
+  fetch(url).then(function(r){return r.json();}).then(function(d){
+    var itens=(d&&d.itens)?d.itens:[];
+    todosHist=itens;
+    document.getElementById('st-total').textContent=(d&&typeof d.total==='number')?d.total:itens.length;
+    renderHist(itens);
+  }).catch(function(){});
+}
+function renderHist(lista){
+  var el=document.getElementById('hist-list');
+  if(!lista||!lista.length){el.innerHTML='<div class="hist-empty">Nenhum atendimento salvo</div>';return;}
+  el.innerHTML=lista.map(function(h,i){
+    var idx=h.id;
+    var status = h.status_pgto||'pendente';
+    var tagCls = status==='pago'?'tag-pago':'tag-pendente';
+    var tagTxt = status==='pago'?'Pago':'Pendente';
+    return '<div class="hist-item">'+
+      '<button class="hist-del" onclick="delHist('+idx+',event)">✕</button>'+
+      '<div onclick="carregarItem('+idx+')">'+
+      '<div class="hist-nome">'+h.nome+'</div>'+
+      '<div class="hist-meta">'+h.modelo+' | '+h.placa+' | '+h.data+'</div>'+
+      '</div>'+
+      '<div style="margin-top:5px;display:flex;align-items:center;gap:6px">'+
+      '<span class="'+tagCls+'">'+tagTxt+'</span>'+
+      (h.valor_cobrado?'<span style="font-size:11px;color:var(--mut);font-family:var(--mono)">'+h.valor_cobrado+'</span>':'')+
+      '<button class="btn-fin" onclick="abrirFin('+idx+',event,'+JSON.stringify(h.valor_cobrado||'')+')">R$ Editar</button>'+
+      '</div>'+
+      '</div>';
+  }).join('');
+}
+
+// Modal financeiro inline
+function abrirFin(id, e, valorAtual){
+  if(e) e.stopPropagation();
+  var val = prompt('Valor cobrado (ex: 50.00):', valorAtual||'');
+  if(val===null) return;
+  var status = confirm('Já foi pago?\nOK = Pago | Cancelar = Pendente') ? 'pago' : 'pendente';
+  fetch('/api/historico/'+id+'/financeiro',{
+    method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({valor_cobrado: val, status_pgto: status})
+  }).then(function(r){ return r.json(); })
+  .then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    carregarHist();
+    if(tabAtual==='relatorios') carregarRelatorio();
+    showAlert('✓ Financeiro atualizado!','ok');
+  });
+}
+
+// ═══ RELATÓRIOS ══════════════════════════════════════════════
+var relDados = {};
+var relTabAtual = 'atendimentos';
+
+function relTab(t){
+  relTabAtual = t;
+  ['atendimentos','func','emp','mes'].forEach(function(k){
+    document.getElementById('rtab-'+k).classList.toggle('active',k===t);
+    document.getElementById('rpanel-'+k).style.display = k===t?'block':'none';
+  });
+}
+
+function filtroRapido(tipo){
+  var hoje = new Date();
+  var de = document.getElementById('rel-de');
+  var ate = document.getElementById('rel-ate');
+  function fmt(d){ return d.toISOString().split('T')[0]; }
+  if(tipo==='hoje'){
+    de.value = fmt(hoje); ate.value = fmt(hoje);
+  } else if(tipo==='mes'){
+    de.value = fmt(new Date(hoje.getFullYear(),hoje.getMonth(),1));
+    ate.value = fmt(new Date(hoje.getFullYear(),hoje.getMonth()+1,0));
+  } else if(tipo==='ano'){
+    de.value = fmt(new Date(hoje.getFullYear(),0,1));
+    ate.value = fmt(new Date(hoje.getFullYear(),11,31));
+  }
+  carregarRelatorio();
+}
+
+var relFiltroStatus = ''; // '', 'pago', 'pendente'
+
+function filtrarStatus(status){
+  relFiltroStatus = status;
+  // Destaca card ativo
+  ['card-total','card-rec','card-pend'].forEach(function(id){
+    document.getElementById(id).style.outline='none';
+  });
+  if(status==='') document.getElementById('card-total').style.outline='2px solid var(--acc)';
+  if(status==='pago') document.getElementById('card-rec').style.outline='2px solid var(--acc)';
+  if(status==='pendente') document.getElementById('card-pend').style.outline='2px solid var(--red)';
+  // Vai para aba atendimentos
+  relTab('atendimentos');
+  filtrarTabela();
+}
+
+function filtrarTabela(){
+  if(!relDados.atendimentos) return;
+  var placa    = (document.getElementById('rel-placa').value||'').toLowerCase();
+  var modelo   = (document.getElementById('rel-modelo').value||'').toLowerCase();
+  var chassi   = (document.getElementById('rel-chassi').value||'').toLowerCase();
+  var vendedor = (document.getElementById('rel-vendedor').value||'').toLowerCase();
+  var comprador= (document.getElementById('rel-comprador').value||'').toLowerCase();
+
+  var lista = relDados.atendimentos.filter(function(a){
+    if(relFiltroStatus && a.status !== relFiltroStatus) return false;
+    if(placa    && !(a.placa||'').toLowerCase().includes(placa))    return false;
+    if(modelo   && !(a.modelo||'').toLowerCase().includes(modelo))  return false;
+    if(chassi   && !(a.chassi||'').toLowerCase().includes(chassi))  return false;
+    if(vendedor && !(a.vendedor||'').toLowerCase().includes(vendedor)) return false;
+    if(comprador){
+      if(!(a.comprador||'').toLowerCase().includes(comprador)) return false;
+    }
+    return true;
+  });
+
+  var lbl = document.getElementById('rel-count-label');
+  if(lbl) lbl.textContent = lista.length + ' registro(s) encontrado(s)' + (relFiltroStatus?' — Filtro: '+relFiltroStatus:'');
+
+  var tb = document.getElementById('tbody-atend');
+  if(!lista.length){
+    tb.innerHTML='<tr><td colspan="9" style="text-align:center;color:var(--mut);padding:20px">Nenhum resultado encontrado</td></tr>';
+    return;
+  }
+  tb.innerHTML = lista.map(function(a){
+    var tagCls = a.status==='pago'?'tag-pago':'tag-pendente';
+    return '<tr>'+
+      '<td style="font-size:11px;white-space:nowrap">'+a.data+'</td>'+
+      '<td style="font-family:var(--mono);font-weight:600">'+a.placa+'</td>'+
+      '<td style="font-size:12px">'+a.modelo+'</td>'+
+      '<td style="font-size:12px">'+a.vendedor+'</td>'+
+      '<td style="font-size:12px">'+a.func+'</td>'+
+      '<td style="font-size:12px">'+a.empresa+'</td>'+
+      '<td style="font-family:var(--mono);font-size:12px">'+(a.valor||'—')+'</td>'+
+      '<td><span class="'+tagCls+'">'+a.status+'</span></td>'+
+      '<td><button class="btn-fin" onclick="abrirFin('+a.id+',event,'+JSON.stringify(a.valor||'')+')">Editar</button></td>'+
+      '</tr>';
+  }).join('');
+}
+
+function limparFiltros(){
+  document.getElementById('rel-de').value='';
+  document.getElementById('rel-ate').value='';
+  document.getElementById('rel-func').value='';
+  document.getElementById('rel-emp').value='';
+  document.getElementById('rel-placa').value='';
+  document.getElementById('rel-modelo').value='';
+  document.getElementById('rel-chassi').value='';
+  document.getElementById('rel-vendedor').value='';
+  document.getElementById('rel-comprador').value='';
+  relFiltroStatus='';
+  ['card-total','card-rec','card-pend'].forEach(function(id){
+    document.getElementById(id).style.outline='none';
+  });
+  carregarRelatorio();
+}
+
+function carregarRelatorio(){
+  var de  = document.getElementById('rel-de').value;
+  var ate = document.getElementById('rel-ate').value;
+  var func= document.getElementById('rel-func').value;
+  var emp = document.getElementById('rel-emp').value;
+
+  // Converte datas para DD/MM/AAAA
+  function fmtBr(s){ if(!s) return ''; var p=s.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
+
+  var params = new URLSearchParams();
+  if(de)  params.append('de',  fmtBr(de));
+  if(ate) params.append('ate', fmtBr(ate));
+  if(func)params.append('func',func);
+  if(emp) params.append('emp', emp);
+
+  fetch('/api/relatorios?'+params.toString())
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    relDados = d;
+    renderRelatorio(d);
+  });
+}
+
+function fmtVal(v){ return 'R$ '+(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2}); }
+
+function renderRelatorio(d){
+  // Cards
+  document.getElementById('rc-total').textContent  = d.total;
+  document.getElementById('rc-rec').textContent    = d.recebidos;
+  document.getElementById('rc-pend').textContent   = d.pendentes;
+  document.getElementById('rc-val-rec').textContent  = fmtVal(d.val_recebido);
+  document.getElementById('rc-val-pend').textContent = fmtVal(d.val_pendente);
+
+  // Tabela atendimentos — delega para filtrarTabela que aplica todos os filtros
+  filtrarTabela();
+
+  // Por funcionário
+  var tf = document.getElementById('tbody-func');
+  tf.innerHTML = (d.por_func||[]).map(function(f){
+    return '<tr>'+
+      '<td style="font-weight:500">'+f.nome+'</td>'+
+      '<td style="text-align:center;font-family:var(--mono)">'+f.total+'</td>'+
+      '<td style="text-align:center;color:var(--acc);font-family:var(--mono)">'+f.recebidos+'</td>'+
+      '<td style="text-align:center;color:var(--red);font-family:var(--mono)">'+(f.total-f.recebidos)+'</td>'+
+      '<td style="font-family:var(--mono)">'+fmtVal(f.val_total)+'</td>'+
+      '<td style="font-family:var(--mono);color:var(--acc)">'+fmtVal(f.val_recebido)+'</td>'+
+      '</tr>';
+  }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--mut);padding:16px">Sem dados</td></tr>';
+
+  // Por empresa
+  var te = document.getElementById('tbody-emp');
+  te.innerHTML = (d.por_emp||[]).map(function(e){
+    return '<tr>'+
+      '<td style="font-weight:500">'+e.nome+'</td>'+
+      '<td style="text-align:center;font-family:var(--mono)">'+e.total+'</td>'+
+      '<td style="text-align:center;color:var(--acc);font-family:var(--mono)">'+e.recebidos+'</td>'+
+      '<td style="text-align:center;color:var(--red);font-family:var(--mono)">'+(e.total-e.recebidos)+'</td>'+
+      '<td style="font-family:var(--mono)">'+fmtVal(e.val_total)+'</td>'+
+      '<td style="font-family:var(--mono);color:var(--acc)">'+fmtVal(e.val_recebido)+'</td>'+
+      '<td><button class="btn-fin" onclick="gerarPDFEmpresa(\''+e.nome+'\')" style="color:var(--acc2);border-color:rgba(0,153,255,.3)">📄 PDF</button></td>'+
+      '</tr>';
+  }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--mut);padding:16px">Sem dados</td></tr>';
+
+  // Por mês
+  var tm = document.getElementById('tbody-mes');
+  tm.innerHTML = (d.por_mes||[]).map(function(m){
+    return '<tr>'+
+      '<td style="font-weight:500;font-family:var(--mono)">'+m.mes+'</td>'+
+      '<td style="text-align:center;font-family:var(--mono)">'+m.total+'</td>'+
+      '<td style="text-align:center;color:var(--acc);font-family:var(--mono)">'+m.recebidos+'</td>'+
+      '<td style="text-align:center;color:var(--red);font-family:var(--mono)">'+(m.total-m.recebidos)+'</td>'+
+      '<td style="font-family:var(--mono)">'+fmtVal(m.val_total)+'</td>'+
+      '</tr>';
+  }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--mut);padding:16px">Sem dados</td></tr>';
+}
+
+function gerarPDFEmpresa(nomeEmp){
+  var empData = (relDados.por_emp||[]).find(function(e){ return e.nome===nomeEmp; });
+  if(!empData){ showAlert('Empresa não encontrada.','err'); return; }
+  var {jsPDF}=window.jspdf;
+  var doc=new jsPDF({unit:'mm',format:'a4'});
+  var W=210,ML=20,TW=170,y=20;
+
+  // Cabeçalho
+  doc.setFont('helvetica','bold');doc.setFontSize(14);doc.setTextColor(26,26,46);
+  doc.text('RELATÓRIO DE ATENDIMENTOS',W/2,y,{align:'center'});y+=7;
+  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(80,80,80);
+  doc.text('Empresa: '+nomeEmp,W/2,y,{align:'center'});y+=5;
+  var de=document.getElementById('rel-de').value;
+  var ate=document.getElementById('rel-ate').value;
+  if(de||ate) doc.text('Período: '+(de||'início')+' a '+(ate||'hoje'),W/2,y,{align:'center'});
+  y+=8;
+
+  // Resumo
+  doc.setFillColor(26,26,46);doc.roundedRect(ML,y,TW,8,1,1,'F');
+  doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(255,255,255);
+  doc.text('Total: '+empData.total+' | Recebidos: '+empData.recebidos+' | Pendentes: '+(empData.total-empData.recebidos)+' | Valor: '+fmtVal(empData.val_total),W/2,y+5.2,{align:'center'});
+  y+=14;
+
+  // Tabela
+  doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(120,120,120);
+  doc.text('PLACA',ML,y);doc.text('MODELO',ML+22,y);doc.text('CHASSI',ML+72,y);doc.text('VENDEDOR',ML+110,y);doc.text('DATA',ML+148,y);doc.text('STATUS',ML+163,y);
+  y+=2;doc.setDrawColor(200,200,200);doc.line(ML,y,ML+TW,y);y+=5;
+
+  doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(30,30,30);
+  (empData.atendimentos||[]).forEach(function(a){
+    if(y>270){ doc.addPage(); y=20; }
+    doc.text((a.placa||'—').slice(0,10),ML,y);
+    doc.text((a.modelo||'—').slice(0,22),ML+22,y);
+    doc.text((a.chassi||'—').slice(0,18),ML+72,y);
+    doc.text((a.vendedor||'—').slice(0,18),ML+110,y);
+    doc.text((a.data||'—').slice(0,10),ML+148,y);
+    var s=a.status==='pago'?'PAGO':'PENDENTE';
+    doc.setTextColor(a.status==='pago'?0:220, a.status==='pago'?160:50, a.status==='pago'?100:50);
+    doc.text(s,ML+163,y);
+    doc.setTextColor(30,30,30);
+    y+=5;doc.setDrawColor(240,240,240);doc.line(ML,y-1,ML+TW,y-1);
+  });
+
+  // Rodapé
+  y=285;doc.setFont('helvetica','oblique');doc.setFontSize(7);doc.setTextColor(150,150,150);
+  doc.text('DIEGO DESPACHANTE — Código DETRAN 2670 — Gerado em '+new Date().toLocaleString('pt-BR'),W/2,y,{align:'center'});
+
+  doc.save('Relatorio_'+nomeEmp.replace(/\s+/g,'_')+'_'+Date.now()+'.pdf');
+  showAlert('✓ PDF gerado!','ok');
+}
+
+function carregarFiltrosRelatorio(){
+  // Carrega funcionários no select
+  if(MEU_PERFIL==='admin'){
+    fetch('/api/usuarios').then(function(r){return r.json();}).then(function(users){
+      var sel=document.getElementById('rel-func');
+      sel.innerHTML='<option value="">Todos</option>'+
+        users.filter(function(u){return u.ativo;}).map(function(u){
+          return '<option value="'+u.id+'">'+u.nome+'</option>';
+        }).join('');
+      document.getElementById('fg-rel-func').style.display='block';
+    });
+  }
+  // Carrega empresas no select
+  fetch('/api/empresas').then(function(r){return r.json();}).then(function(emps){
+    var sel=document.getElementById('rel-emp');
+    sel.innerHTML='<option value="">Todas</option>'+
+      emps.map(function(e){ return '<option value="'+e.id+'">'+e.nome+'</option>'; }).join('');
+  });
+}
+function filtrarHist(q){
+  HIST_BUSCA=(q||'').trim();
+  clearTimeout(_histT);
+  _histT=setTimeout(carregarHist,350);
+}
+function carregarItem(i){
+  ATEND_ATUAL=i;
+  fetch('/api/historico/'+i+'/snap').then(function(r){return r.json();}).then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    var snap=d.snap||{};
+    CAMPOS_TODOS.forEach(function(k){var el=document.getElementById(k);if(el)el.value=snap[k]||'';});
+    atualizarContadores();gerarPreview();ftab('vendedor');
+    showAlert('Atendimento carregado!','ok');
+  }).catch(function(){ showAlert('Falha ao abrir o atendimento.','err'); });
+}
+function delHist(i,e){
+  e.stopPropagation();
+  if(!confirm('Remover?'))return;
+  fetch('/api/historico/'+i,{method:'DELETE'}).then(function(){carregarHist();});
+}
+function salvar(){
+  var nome=g('v_nome'),placa=g('ve_placa');
+  if(!nome&&!placa){showAlert('Preencha nome ou placa.','warn');return;}
+  var igual=todosHist.slice(0,2).some(function(h){return h.nome===nome&&h.placa===placa;});
+  if(igual){showAlert('Já está salvo no histórico.','warn');return;}
+  var snap={};CAMPOS_TODOS.forEach(function(k){snap[k]=g(k);});
+  fetch('/api/historico',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      nome:nome||'—',placa:placa||'—',modelo:g('ve_modelo'),snap:snap,
+      contratante_nome:g('ct_nome'),contratante_cpf:g('ct_cpf'),
+      contratante_tipo:g('ct_tipo'),ct_pgto:g('ct_pgto'),
+      valor_cobrado:g('ct_valor_servico'),status_pgto:g('ct_status_pgto'),obs:g('ct_obs'),
+    })
+  }).then(function(r){ return r.json(); })
+  .then(function(d){
+    if(d && d.id) ATEND_ATUAL=d.id;
+    carregarHist();showAlert('✓ Atendimento salvo!','ok');
+    salvarCadastros();
+    if(g('ct_nome')) salvarContratanteAtual();
+  });
+}
+function salvarCadastros(){
+  var vN=g('v_nome'),vC=g('v_cpf');
+  if(vN||vC) fetch('/api/pessoas',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({nome:vN,cpf:vC,rg:g('v_rg'),rg_org:g('v_rg_org'),nasc:g('v_nasc'),
+    ecivil:g('v_ecivil'),end:g('v_end'),bairro:g('v_bairro'),cidade:g('v_cidade'),cep:g('v_cep'),cel:g('v_cel'),email:g('v_email')})});
+  var cN=g('c_nome'),cC=g('c_cpf');
+  if(cN||cC) fetch('/api/pessoas',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({nome:cN,cpf:cC,rg:g('c_rg'),nasc:g('c_nasc'),
+    end:g('c_end'),bairro:g('c_bairro'),cidade:g('c_cidade'),cep:g('c_cep'),email:g('c_email')})});
+  var vP=g('ve_placa');
+  if(vP) fetch('/api/veiculos',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({placa:vP,chassi:g('ve_chassi'),modelo:g('ve_modelo'),ano:g('ve_ano')})});
+}
+
+// ═══ LIMPAR ══════════════════════════════════════════════════
+function limparAba(){
+  var mapa={vendedor:CAMPOS_V,veiculo:CAMPOS_VE,comprador:CAMPOS_C,contratante:CAMPOS_CT};
+  (mapa[tabAtual]||[]).forEach(function(k){var el=document.getElementById(k);if(el){el.value='';el.classList.remove('ia');}});
+  document.getElementById('paste-txt').value='';
+  atualizarContadores();
+  showAlert('Campos da aba "'+tabAtual+'" limpos!','ok');
+}
+function limparTudo(){
+  ATEND_ATUAL=null;
+  CAMPOS_TODOS.forEach(function(k){var el=document.getElementById(k);if(el){el.value='';el.classList.remove('ia');}});
+  document.getElementById('paste-txt').value='';
+  atualizarContadores();gerarPreview();
+  showAlert('Pronto para novo atendimento!','ok');
+}
+
+// ═══ CONFIG ══════════════════════════════════════════════════
+var CFG_ASSINATURA='';
+
+function carregarConfig(){
+  fetch('/api/config').then(function(r){return r.json();}).then(function(c){
+    [['cfg_nome','nome'],['cfg_cod','cod'],['cfg_end','end'],['cfg_cep','cep'],
+     ['cfg_cidade','cidade'],['cfg_cnpj','cnpj']].forEach(function(par){
+      var el=document.getElementById(par[0]);
+      if(el) el.value=(c[par[1]]!==undefined&&c[par[1]]!==null)?c[par[1]]:'';
+    });
+    CFG_ASSINATURA=c.assinatura||'';
+    mostrarPreviaAssinatura();
+  }).catch(function(){});
+}
+
+function mostrarPreviaAssinatura(){
+  var box=document.getElementById('cfg-assin-previa');
+  if(!box) return;
+  box.innerHTML = CFG_ASSINATURA
+    ? '<img src="'+CFG_ASSINATURA+'" style="max-width:190px;max-height:56px">'
+    : '<span style="font-size:11px;color:#888">sem assinatura</span>';
+}
+
+function carregarAssinaturaArquivo(input){
+  var f=input.files && input.files[0];
+  if(!f) return;
+  if(f.size > 4*1024*1024){ showAlert('Imagem muito grande. Use uma foto menor.','warn'); return; }
+  var fr=new FileReader();
+  fr.onload=function(){
+    // Reduz e joga o fundo claro fora, para o carimbo sair limpo.
+    var img=new Image();
+    img.onload=function(){
+      var maxL=420, esc=Math.min(1, maxL/img.width, maxL/img.height);
+      var cv=document.createElement('canvas');
+      cv.width=Math.round(img.width*esc); cv.height=Math.round(img.height*esc);
+      var cx=cv.getContext('2d');
+      cx.drawImage(img,0,0,cv.width,cv.height);
+      try{
+        var d=cx.getImageData(0,0,cv.width,cv.height), p=d.data;
+        for(var i=0;i<p.length;i+=4){
+          var lum=p[i]*0.299+p[i+1]*0.587+p[i+2]*0.114;
+          if(lum>170){ p[i+3]=0; }                       // fundo claro vira transparente
+          else { p[i]=15; p[i+1]=20; p[i+2]=75;          // traço em azul-escuro
+                 p[i+3]=Math.min(255, Math.round((190-lum)*3)); }
+        }
+        cx.putImageData(d,0,0);
+      }catch(e){}
+      CFG_ASSINATURA=cv.toDataURL('image/png');
+      mostrarPreviaAssinatura();
+      showAlert('Assinatura carregada. Clique em Salvar configurações.','ok');
+    };
+    img.src=fr.result;
+  };
+  fr.readAsDataURL(f);
+  input.value='';
+}
+
+function removerAssinaturaCarimbo(){
+  CFG_ASSINATURA='';
+  mostrarPreviaAssinatura();
+  showAlert('Assinatura removida. Clique em Salvar configurações.','warn');
+}
+
+function salvarConfig(){
+  var st=document.getElementById('cfg-status');
+  if(st) st.textContent='Salvando...';
+  fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      nome:g('cfg_nome'), cod:g('cfg_cod'), end:g('cfg_end'), cep:g('cfg_cep'),
+      cidade:g('cfg_cidade'), cnpj:g('cfg_cnpj'), assinatura:CFG_ASSINATURA })})
+  .then(function(r){return r.json();}).then(function(d){
+    if(st) st.textContent='';
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    showAlert('✓ Configurações salvas!','ok');
+  }).catch(function(){ if(st) st.textContent=''; showAlert('Falha ao salvar.','err'); });
+}
+
+function getCfg(){return{nome:g('cfg_nome')||'DIEGO DESPACHANTE',cod:g('cfg_cod')||'2670',
+  end:g('cfg_end')||'AVENIDA BRASIL N.464 VILA JUSSARA ANAPOLIS-GO',
+  cep:g('cfg_cep')||'75123-115',cidade:g('cfg_cidade')||'ANÁPOLIS/GO',
+  cnpj:g('cfg_cnpj')||'', assinatura:CFG_ASSINATURA||''};}
+
+// ═══ ALERTA ══════════════════════════════════════════════════
+function showAlert(msg,tipo){
+  var el=document.getElementById('alert-box');
+  el.textContent=msg;el.className='alert '+tipo;el.style.display='block';
+  clearTimeout(el._t);el._t=setTimeout(function(){el.style.display='none';},5000);
+}
+
+// ═══ LIMPEZA SERVIDOR ════════════════════════════════════════
+function limparHistorico(){
+  if(!confirm('Apagar TODO o histórico? Não tem volta!')) return;
+  fetch('/api/historico-limpar',{method:'POST'}).then(function(){ carregarHist(); showAlert('✓ Histórico apagado!','ok'); });
+}
+function limparPessoas(){
+  if(!confirm('Apagar TODO o cadastro de pessoas? Não tem volta!')) return;
+  fetch('/api/pessoas-limpar',{method:'POST'}).then(function(){ showAlert('✓ Cadastro de pessoas apagado!','ok'); });
+}
+function limparVeiculos(){
+  if(!confirm('Apagar TODO o cadastro de veículos? Não tem volta!')) return;
+  fetch('/api/veiculos-limpar',{method:'POST'}).then(function(){ showAlert('✓ Cadastro de veículos apagado!','ok'); });
+}
+function limparTodosServidor(){
+  if(!confirm('⚠ ATENÇÃO: Isso vai apagar histórico, pessoas e veículos.\nTem certeza?')) return;
+  if(!confirm('Última chance! Confirmar limpeza total?')) return;
+  fetch('/api/limpar-tudo',{method:'POST'}).then(function(){ carregarHist(); showAlert('✓ Todos os dados apagados! Pode começar do zero.','ok'); });
+}
+
+// ═══ CONTRATANTE ═════════════════════════════════════════════
+function acBuscarContratante(el){
+  var q=el.value.trim();
+  if(q.length<1){acFechar('ac-ct_busca');return;}
+  clearTimeout(_timers['ct_busca']);
+  _timers['ct_busca']=setTimeout(function(){
+    fetch('/api/contratantes?q='+encodeURIComponent(q))
+    .then(function(r){return r.json();})
+    .then(function(lista){acRenderContratante(lista);});
+  },200);
+}
+function acRenderContratante(lista){
+  var drop=document.getElementById('ac-ct_busca');
+  if(!drop)return;
+  if(!lista.length){acFechar('ac-ct_busca');return;}
+  AC['contratante']=lista;
+  drop.innerHTML='';
+  lista.forEach(function(p,i){
+    var div=document.createElement('div');
+    div.className='ac-item';
+    div.innerHTML='<div class="ac-nome">'+(p.nome||'')+'</div><div class="ac-meta">'+(p.cpf||'')+(p.tipo?' · '+p.tipo:'')+'</div>';
+    div.setAttribute('data-i',i);
+    drop.appendChild(div);
+    (function(idx){
+      div.addEventListener('mousedown',function(e){
+        e.preventDefault();e.stopImmediatePropagation();
+        setTimeout(function(){preencherContratante(idx);},10);
+      });
+    })(i);
+  });
+  drop.classList.add('open');
+}
+function preencherContratante(idx){
+  var lista=AC['contratante'];
+  if(!lista||!lista[idx])return;
+  var p=lista[idx];
+  [{k:'nome',id:'ct_nome'},{k:'cpf',id:'ct_cpf'},{k:'tipo',id:'ct_tipo'},{k:'pgto',id:'ct_pgto'},{k:'tel',id:'ct_tel'}]
+  .forEach(function(m){var el=document.getElementById(m.id);if(el&&p[m.k]){el.value=p[m.k];el.classList.add('ia');}});
+  acFechar('ac-ct_busca');
+  document.getElementById('ct_busca').value='';
+  atualizar();showAlert('✓ Contratante: '+p.nome,'ok');
+}
+function salvarContratanteAtual(){
+  var dados={nome:g('ct_nome'),cpf:g('ct_cpf'),tipo:g('ct_tipo'),pgto:g('ct_pgto'),tel:g('ct_tel')};
+  if(!dados.nome){showAlert('Informe o nome do contratante.','warn');return;}
+  fetch('/api/contratantes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dados)})
+  .then(function(){showAlert('✓ Contratante salvo!','ok');});
+}
+
+// ═══ COFRE SECRETO ═══════════════════════════════════════════
+function carregarCofre(){
+  fetch('/api/cofre').then(function(r){return r.json();}).then(function(lista){
+    var el=document.getElementById('cofre-lista');
+    if(!lista||!lista.length){
+      el.innerHTML='<div style="font-size:12px;color:var(--mut);padding:8px 0">Nenhuma informação salva ainda.</div>';
+      return;
+    }
+    el.innerHTML='<table style="width:100%;font-size:12px;border-collapse:collapse">'+
+      '<tr><th style="text-align:left;padding:6px 8px;color:var(--mut);font-size:10px;border-bottom:1px solid var(--bord)">DESCRIÇÃO</th>'+
+      '<th style="text-align:left;padding:6px 8px;color:var(--mut);font-size:10px;border-bottom:1px solid var(--bord)">VALOR</th>'+
+      '<th style="border-bottom:1px solid var(--bord)"></th></tr>'+
+      lista.map(function(item,i){
+        return '<tr>'+
+          '<td style="padding:8px;font-weight:500">'+item.desc+'</td>'+
+          '<td style="padding:8px;font-family:var(--mono);font-size:11px">'+
+            '<span id="cofre-v-'+i+'" style="filter:blur(4px);cursor:pointer" onclick="revelarCofre('+i+')">'+item.val+'</span>'+
+            ' <button onclick="copiarCofre(\''+item.val+'\')" style="background:none;border:none;color:var(--acc);cursor:pointer;font-size:11px">📋</button>'+
+          '</td>'+
+          '<td style="padding:8px"><button onclick="removerCofre('+i+')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:11px">✕</button></td>'+
+          '</tr>';
+      }).join('')+
+      '</table>';
+  });
+}
+
+function revelarCofre(i){
+  var el=document.getElementById('cofre-v-'+i);
+  if(el) el.style.filter=el.style.filter?'':'blur(4px)';
+}
+
+function copiarCofre(val){
+  if(navigator.clipboard) navigator.clipboard.writeText(val).then(function(){ showAlert('✓ Copiado!','ok'); });
+}
+
+function adicionarCofre(){
+  var desc=document.getElementById('cofre-desc').value.trim();
+  var val=document.getElementById('cofre-val').value.trim();
+  if(!desc||!val){ showAlert('Preencha descrição e valor.','warn'); return; }
+  fetch('/api/cofre',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({desc:desc,val:val})})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    document.getElementById('cofre-desc').value='';
+    document.getElementById('cofre-val').value='';
+    carregarCofre();
+    showAlert('✓ Salvo no cofre!','ok');
+  });
+}
+
+function removerCofre(idx){
+  if(!confirm('Remover este item do cofre?')) return;
+  fetch('/api/cofre/'+idx,{method:'DELETE'})
+  .then(function(){ carregarCofre(); showAlert('Item removido.','ok'); });
+}
+
+// ═══ AUTH ═════════════════════════════════════════════════════
+var MEU_PERFIL = '', MEU_NOME = '', MINHA_EMPRESA = null;
+
+function logout(){
+  fetch('/api/logout',{method:'POST'}).then(function(){ window.location.href='/login'; });
+}
+
+function carregarMe(){
+  fetch('/api/me').then(function(r){return r.json();}).then(function(d){
+    if(!d.logado){ window.location.href='/login'; return; }
+    MEU_PERFIL = d.perfil; MEU_NOME = d.nome; MINHA_EMPRESA = d.empresa_id;
+    document.getElementById('user-nome').textContent = d.nome;
+    var badge = document.getElementById('perfil-badge');
+    var labels = {admin:'Admin',funcionario:'Funcionário',empresa:'Empresa'};
+    var classes = {admin:'perfil-admin',funcionario:'perfil-funcionario',empresa:'perfil-empresa'};
+    badge.textContent = labels[d.perfil]||d.perfil;
+    badge.className = 'perfil-badge '+(classes[d.perfil]||'');
+    if(d.perfil==='admin'){
+      document.getElementById('btn-admin').style.display='inline-block';
+      document.getElementById('cofre-sec').style.display='block';
+      carregarCofre();
+    }
+    carregarFiltrosRelatorio();
+  });
+}
+
+// ═══ ADMIN ════════════════════════════════════════════════════
+function abrirAdmin(){
+  document.getElementById('modal-admin').classList.add('open');
+  adminTab('usuarios');
+}
+function fecharAdmin(){ document.getElementById('modal-admin').classList.remove('open'); }
+document.getElementById('modal-admin').addEventListener('click',function(e){ if(e.target===this) fecharAdmin(); });
+
+function adminTab(t){
+  ['usuarios','empresas'].forEach(function(k){
+    document.getElementById('atab-'+k).classList.toggle('active',k===t);
+    document.getElementById('apanel-'+k).style.display = k===t?'block':'none';
+  });
+  if(t==='usuarios') carregarUsuarios();
+  if(t==='empresas') carregarEmpresas();
+}
+
+function toggleEmpresaSelect(){
+  var p = document.getElementById('nu_perfil').value;
+  document.getElementById('fg-empresa').style.display = p==='empresa'?'block':'none';
+}
+
+function carregarUsuarios(){
+  fetch('/api/usuarios').then(function(r){return r.json();}).then(function(users){
+    var tb = document.querySelector('#tbl-usuarios tbody');
+    if(!users||users.length===0){ tb.innerHTML='<tr><td colspan="5" style="color:var(--mut);text-align:center;padding:20px">Nenhum usuário</td></tr>'; return; }
+    var perfilLabel={admin:'Admin',funcionario:'Funcionário',empresa:'Empresa'};
+    var perfilClass={admin:'tag-admin',funcionario:'tag-func',empresa:'tag-emp'};
+    tb.innerHTML = users.map(function(u){
+      return '<tr>'+
+        '<td>'+u.nome+'</td>'+
+        '<td style="font-family:var(--mono);font-size:12px">'+u.login+'</td>'+
+        '<td><span class="tag '+perfilClass[u.perfil]+'">'+perfilLabel[u.perfil]+'</span></td>'+
+        '<td><span class="tag '+(u.ativo?'tag-ok':'tag-off')+'">'+(u.ativo?'Ativo':'Inativo')+'</span></td>'+
+        '<td><button onclick="toggleUsuario(\''+u.id+'\','+(!u.ativo)+')" style="background:none;border:none;color:var(--mut);cursor:pointer;font-size:12px">'+(u.ativo?'Desativar':'Ativar')+'</button>'+
+        ' <button onclick="delUsuario(\''+u.id+'\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px">Excluir</button></td>'+
+        '</tr>';
+    }).join('');
+  });
+  // Popula select de empresas
+  fetch('/api/empresas').then(function(r){return r.json();}).then(function(emps){
+    var sel = document.getElementById('nu_empresa_id');
+    sel.innerHTML = '<option value="">Selecione...</option>' +
+      emps.map(function(e){ return '<option value="'+e.id+'">'+e.nome+'</option>'; }).join('');
+  });
+}
+
+function salvarUsuario(){
+  var dados = {
+    nome: document.getElementById('nu_nome').value,
+    login: document.getElementById('nu_login').value,
+    senha: document.getElementById('nu_senha').value,
+    perfil: document.getElementById('nu_perfil').value,
+    empresa_id: document.getElementById('nu_empresa_id').value || null
+  };
+  fetch('/api/usuarios',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dados)})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    showAlert('✓ Usuário criado com sucesso!','ok');
+    ['nu_nome','nu_login','nu_senha'].forEach(function(id){ document.getElementById(id).value=''; });
+    carregarUsuarios();
+  });
+}
+
+function toggleUsuario(id, ativo){
+  fetch('/api/usuarios/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({ativo:ativo})})
+  .then(function(){ carregarUsuarios(); showAlert('Usuário atualizado!','ok'); });
+}
+
+function delUsuario(id){
+  if(!confirm('Excluir este usuário?')) return;
+  fetch('/api/usuarios/'+id,{method:'DELETE'}).then(function(r){return r.json();})
+  .then(function(d){ if(d.erro){showAlert(d.erro,'err');return;} carregarUsuarios(); showAlert('Usuário excluído!','ok'); });
+}
+
+function carregarEmpresas(){
+  fetch('/api/empresas').then(function(r){return r.json();}).then(function(emps){
+    var tb = document.querySelector('#tbl-empresas tbody');
+    if(!emps||emps.length===0){ tb.innerHTML='<tr><td colspan="6" style="color:var(--mut);text-align:center;padding:20px">Nenhuma empresa</td></tr>'; return; }
+    // Busca usuários para mostrar login de cada empresa
+    fetch('/api/usuarios').then(function(r){return r.json();}).then(function(users){
+      tb.innerHTML = emps.map(function(e){
+        var user = users.find(function(u){ return u.empresa_id===e.id; });
+        var loginInfo = user
+          ? '<span style="font-family:var(--mono);font-size:11px;color:var(--acc)">'+user.login+'</span> <span class="tag '+(user.ativo?'tag-ok':'tag-off')+'">'+(user.ativo?'Ativo':'Inativo')+'</span>'
+          : '<span style="color:var(--mut);font-size:11px">Sem login</span>';
+        return '<tr>'+
+          '<td style="font-weight:500">'+e.nome+'</td>'+
+          '<td style="font-family:var(--mono);font-size:11px">'+(e.cnpj||'—')+'</td>'+
+          '<td>'+(e.contato||'—')+(e.tel?' · '+e.tel:'')+'</td>'+
+          '<td>'+loginInfo+'</td>'+
+          '<td>'+
+            (user ? '<button onclick="toggleUsuario(\''+user.id+'\','+(!user.ativo)+')" style="background:none;border:none;color:var(--mut);cursor:pointer;font-size:11px">'+(user.ativo?'Desativar':'Ativar')+'</button>' : '')+
+          '</td>'+
+          '<td><button onclick="delEmpresa(\''+e.id+'\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px">Excluir</button></td>'+
+          '</tr>';
+      }).join('');
+    });
+  });
+}
+
+function salvarEmpresa(){
+  var dados = {
+    nome: document.getElementById('ne_nome').value,
+    cnpj: document.getElementById('ne_cnpj').value,
+    contato: document.getElementById('ne_contato').value,
+    tel: document.getElementById('ne_tel').value,
+    email: document.getElementById('ne_email').value
+  };
+  if(!dados.nome){ showAlert('Informe o nome da empresa.','warn'); return; }
+  var login = document.getElementById('ne_login').value.trim();
+  var senha = document.getElementById('ne_senha').value;
+  fetch('/api/empresas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dados)})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    // Se informou login e senha, cria usuário vinculado
+    if(login && senha){
+      fetch('/api/usuarios',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({nome:dados.nome, login:login, senha:senha, perfil:'empresa', empresa_id:d.id})
+      }).then(function(r2){return r2.json();})
+      .then(function(d2){
+        if(d2.erro){ showAlert('Empresa salva mas erro no login: '+d2.erro,'warn'); }
+        else { showAlert('✓ Empresa e login criados com sucesso!','ok'); }
+      });
+    } else {
+      showAlert('✓ Empresa cadastrada! (sem login de acesso)','ok');
+    }
+    ['ne_nome','ne_cnpj','ne_contato','ne_tel','ne_email','ne_login','ne_senha'].forEach(function(id){
+      var el=document.getElementById(id); if(el) el.value='';
+    });
+    carregarEmpresas();
+  });
+}
+
+function delEmpresa(id){
+  if(!confirm('Excluir esta empresa?')) return;
+  fetch('/api/empresas/'+id,{method:'DELETE'}).then(function(){ carregarEmpresas(); showAlert('Empresa excluída!','ok'); });
+}
+
+
+// ═══ ACOMPANHAMENTO DAS ASSINATURAS ══════════════════════════
+var ASSIN_LISTA = [], _assinT = null;
+
+function carregarAssinaturas(){
+  var url='/api/assinaturas?status='+encodeURIComponent((document.getElementById('assin-filtro')||{}).value||'')+
+          '&q='+encodeURIComponent((document.getElementById('assin-busca')||{}).value||'');
+  fetch(url).then(function(r){return r.json();}).then(function(d){
+    ASSIN_LISTA=d.itens||[];
+    var r=d.resumo||{};
+    document.getElementById('assin-cards').innerHTML=[
+      {v:r.aguardando||0, l:'Aguardando assinatura', cor:'var(--warn)'},
+      {v:r.assinados||0,  l:'Assinados',             cor:'var(--acc)'},
+      {v:r.total||0,      l:'Total enviado',         cor:'var(--mut)'}
+    ].map(function(c){
+      return '<div class="pcard"><div class="pcard-v" style="color:'+c.cor+'">'+c.v+'</div>'+
+             '<div class="pcard-l">'+c.l+'</div></div>';
+    }).join('');
+    renderAssinaturas();
+  }).catch(function(){});
+}
+
+function filtrarAssin(){ clearTimeout(_assinT); _assinT=setTimeout(carregarAssinaturas,350); }
+
+function renderAssinaturas(){
+  var tb=document.querySelector('#tbl-assin tbody');
+  if(!ASSIN_LISTA.length){
+    tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--mut);padding:24px">'+
+      'Nenhum documento enviado para assinatura ainda</td></tr>';
+    return;
+  }
+  tb.innerHTML=ASSIN_LISTA.map(function(a){
+    var assinado = a.assinatura_status==='signed';
+    var recusado = a.assinatura_status==='refused';
+    var cor = assinado?'var(--acc)' : recusado?'var(--red)' : 'var(--warn)';
+    var acoes='';
+    if(assinado && a.assinatura_arquivo){
+      acoes+='<a href="'+a.assinatura_arquivo+'" target="_blank" class="btn-fin" '+
+             'style="color:var(--acc);border-color:rgba(0,212,170,.4);text-decoration:none">⬇ Baixar assinado</a> ';
+    }
+    if(!assinado && a.assinatura_url){
+      acoes+='<button class="btn-fin" onclick="copiarLinkAssin2('+a.id+')">📋 Copiar link</button> '+
+             '<button class="btn-fin" onclick="atualizarUm('+a.id+')">🔄</button>';
+    }
+    return '<tr'+(assinado?' style="background:rgba(0,212,170,.04)"':'')+'>'+
+      '<td style="font-weight:600">'+(a.nome||'—')+'</td>'+
+      '<td style="font-size:12px">'+(a.modelo||'—')+
+        (a.placa?'<div style="font-family:var(--mono);font-size:11px;color:var(--mut)">'+a.placa+'</div>':'')+'</td>'+
+      '<td style="font-size:11px;white-space:nowrap">'+(a.data||'—')+'</td>'+
+      '<td><span class="tag-prazo" style="background:'+cor+'22;color:'+cor+'">'+
+        (assinado?'✓ ':'')+(a.status_label||'—')+'</span></td>'+
+      '<td style="font-size:11px;white-space:nowrap">'+(a.assinatura_em||'—')+'</td>'+
+      '<td style="white-space:nowrap">'+acoes+'</td>'+
+      '</tr>';
+  }).join('');
+}
+
+function copiarLinkAssin2(id){
+  var a=ASSIN_LISTA.filter(function(x){return x.id===id;})[0];
+  if(!a||!a.assinatura_url) return;
+  var ok=function(){ showAlert('✓ Link copiado! Cole no WhatsApp do cliente.','ok'); };
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(a.assinatura_url).then(ok).catch(function(){
+      window.prompt('Copie o link:', a.assinatura_url); });
+  } else { window.prompt('Copie o link:', a.assinatura_url); }
+}
+
+function atualizarUm(id){
+  fetch('/api/assinaturas/'+id+'/atualizar',{method:'POST'})
+  .then(function(r){return r.json();}).then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    showAlert(d.status==='signed' ? '✓ Cliente assinou!' : 'Situação: '+d.status_label,
+              d.status==='signed'?'ok':'warn');
+    carregarAssinaturas();
+  }).catch(function(){ showAlert('Falha ao consultar.','err'); });
+}
+
+function sincronizarAssinaturas(){
+  var b=document.getElementById('btn-sinc'); var t=b?b.textContent:'';
+  if(b){ b.disabled=true; b.textContent='Consultando...'; }
+  fetch('/api/assinaturas/sincronizar',{method:'POST'})
+  .then(function(r){return r.json();}).then(function(d){
+    if(b){ b.disabled=false; b.textContent=t; }
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    showAlert(d.assinados_agora ? '✓ '+d.assinados_agora+' documento(s) assinado(s)!'
+                                : 'Nenhuma novidade — '+d.consultados+' conferido(s).', 'ok');
+    carregarAssinaturas();
+  }).catch(function(){ if(b){ b.disabled=false; b.textContent=t; } showAlert('Falha ao consultar.','err'); });
+}
+
+function registrarWebhookZapsign(){
+  if(!confirm('Ativar o aviso automático da ZapSign?\n\nDepois disso o sistema fica sabendo na hora em que o cliente assina.')) return;
+  fetch('/api/zapsign-webhook/registrar',{method:'POST'})
+  .then(function(r){return r.json();}).then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    showAlert('✓ Aviso automático ativado na ZapSign.','ok');
+  }).catch(function(){ showAlert('Falha ao ativar.','err'); });
+}
+
+// ═══ RECURSOS DE MULTA / CNH ═════════════════════════════════
+var REC_LISTA = [], REC_URGENCIA = '', _recT = null, PROC_ABERTO = null;
+
+var REC_TIPOS  = {multa:'Recurso de multa', suspensao:'Suspensão do direito de dirigir', cassacao:'Cassação da CNH'};
+var REC_FASES  = {defesa_previa:'Defesa prévia', jari:'Recurso à JARI', cetran:'Recurso ao CETRAN'};
+var REC_STATUS = {a_protocolar:'A protocolar', protocolado:'Protocolado — aguardando',
+                  deferido:'Deferido', indeferido:'Indeferido', arquivado:'Arquivado'};
+
+function dataBR(iso){
+  if(!iso) return '—';
+  var p=String(iso).split('-');
+  return p.length===3 ? p[2]+'/'+p[1]+'/'+p[0] : iso;
+}
+
+function carregarRecursos(){
+  var url='/api/processos?'+
+    'q='+encodeURIComponent((document.getElementById('rec-busca')||{}).value||'')+
+    '&tipo='+encodeURIComponent((document.getElementById('rec-tipo')||{}).value||'')+
+    '&status='+encodeURIComponent((document.getElementById('rec-status')||{}).value||'')+
+    '&urgencia='+encodeURIComponent(REC_URGENCIA);
+  fetch(url).then(function(r){return r.json();}).then(function(d){
+    REC_LISTA=d.itens||[];
+    renderRecursos();
+  }).catch(function(){});
+  carregarPrazos();
+}
+
+function filtrarRecursos(){ clearTimeout(_recT); _recT=setTimeout(carregarRecursos,350); }
+
+function filtrarUrgencia(u){
+  REC_URGENCIA = (REC_URGENCIA===u) ? '' : u;
+  var box=document.getElementById('rec-filtro-ativo');
+  var nomes={vencidos:'Vencidos', hoje:'Vence hoje', semana:'Vence nos próximos 7 dias', abertos:'Em aberto'};
+  if(REC_URGENCIA){
+    box.style.display='block';
+    box.innerHTML='Filtrando: <b>'+nomes[REC_URGENCIA]+'</b> — <a href="#" onclick="filtrarUrgencia(\'\');return false" style="color:var(--acc)">limpar</a>';
+    var sel=document.getElementById('rec-status'); if(sel) sel.value='';
+  } else { box.style.display='none'; }
+  carregarRecursos();
+}
+
+function carregarPrazos(){
+  fetch('/api/processos/prazos').then(function(r){return r.json();}).then(function(d){
+    var r=d.resumo||{};
+    var cards=[
+      {k:'vencidos', v:r.vencidos||0,  l:'Vencidos',       cor:'var(--red)'},
+      {k:'hoje',     v:r.hoje||0,      l:'Vence hoje',     cor:'var(--warn)'},
+      {k:'semana',   v:(r.tres_dias||0)+(r.semana||0), l:'Próximos 7 dias', cor:'var(--acc2)'},
+      {k:'abertos',  v:r.a_protocolar||0, l:'A protocolar', cor:'var(--txt)'},
+      {k:'',         v:r.aguardando||0, l:'Aguardando julgamento', cor:'var(--mut)'}
+    ];
+    document.getElementById('prazo-cards').innerHTML = cards.map(function(c){
+      var ativo = c.k && REC_URGENCIA===c.k ? ';border-color:'+c.cor : '';
+      return '<div class="pcard" style="'+(c.v&&c.k?'border-color:'+c.cor+'33':'')+ativo+'"'+
+        (c.k?' onclick="filtrarUrgencia(\''+c.k+'\')"':'')+'>'+
+        '<div class="pcard-v" style="color:'+c.cor+'">'+c.v+'</div>'+
+        '<div class="pcard-l">'+c.l+'</div></div>';
+    }).join('');
+
+    var alerta=(r.vencidos||0)+(r.hoje||0)+(r.tres_dias||0);
+    var badge=document.getElementById('badge-prazos');
+    if(badge){
+      badge.textContent=alerta;
+      badge.style.display = alerta>0 ? 'inline-block' : 'none';
+      badge.style.background = (r.vencidos||0)>0 ? 'var(--red)' : 'var(--warn)';
+    }
+  }).catch(function(){});
+}
+
+function classePrazo(p){
+  if(p.status!=='a_protocolar' || p.dias===null || p.dias===undefined) return '';
+  if(p.dias<0)  return 'lin-vencido';
+  if(p.dias===0) return 'lin-hoje';
+  if(p.dias<=3) return 'lin-hoje';
+  if(p.dias<=7) return 'lin-prox';
+  return '';
+}
+
+function tagPrazo(p){
+  if(p.status!=='a_protocolar'){
+    var cor = p.status==='deferido' ? 'var(--acc)' :
+              p.status==='indeferido' ? 'var(--red)' : 'var(--mut)';
+    return '<span class="tag-prazo" style="background:'+cor+'22;color:'+cor+'">'+
+           (REC_STATUS[p.status]||p.status)+'</span>';
+  }
+  var d=p.dias, cor='var(--acc2)', txt;
+  if(d===null||d===undefined){ return '<span class="tag-prazo" style="background:#8882;color:var(--mut)">sem prazo</span>'; }
+  if(d<0){ cor='var(--red)';  txt='VENCEU há '+Math.abs(d)+'d'; }
+  else if(d===0){ cor='var(--warn)'; txt='VENCE HOJE'; }
+  else if(d<=3){ cor='var(--warn)'; txt='faltam '+d+'d'; }
+  else if(d<=7){ cor='var(--acc2)'; txt='faltam '+d+'d'; }
+  else { cor='var(--mut)'; txt='faltam '+d+'d'; }
+  return '<span class="tag-prazo" style="background:'+cor+'22;color:'+cor+'">'+txt+'</span>';
+}
+
+function renderRecursos(){
+  var tb=document.querySelector('#tbl-recursos tbody');
+  if(!REC_LISTA.length){
+    tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--mut);padding:24px">Nenhum processo encontrado</td></tr>';
+    return;
+  }
+  tb.innerHTML=REC_LISTA.map(function(p){
+    var ident=[p.placa, p.ait?('AIT '+p.ait):''].filter(Boolean).join(' · ')||'—';
+    return '<tr class="'+classePrazo(p)+'">'+
+      '<td><div style="font-weight:600">'+(p.cliente_nome||'—')+'</div>'+
+        (p.cliente_cpf?'<div style="font-size:11px;color:var(--mut);font-family:var(--mono)">'+p.cliente_cpf+'</div>':'')+'</td>'+
+      '<td><div style="font-size:12px">'+(REC_TIPOS[p.tipo]||p.tipo)+'</div>'+
+        '<div style="font-size:11px;color:var(--acc)">'+(REC_FASES[p.fase]||p.fase)+'</div></td>'+
+      '<td style="font-family:var(--mono);font-size:11px">'+ident+'</td>'+
+      '<td style="white-space:nowrap;font-size:12px">'+dataBR(p.prazo_final)+'</td>'+
+      '<td>'+tagPrazo(p)+'</td>'+
+      '<td><button class="btn-fin" onclick="abrirProc('+p.id+')">Abrir</button></td>'+
+      '</tr>';
+  }).join('');
+}
+
+// ── cadastro ──
+function novoRecurso(){
+  document.getElementById('rec-modal-titulo').textContent='Novo recurso';
+  ['rec-id','rec-f-cliente','rec-f-cpf','rec-f-tel','rec-f-placa','rec-f-ait',
+   'rec-f-orgao','rec-f-infracao','rec-f-valor','rec-f-obs','rec-f-prazo'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.value='';
+  });
+  document.getElementById('rec-f-tipo').value='multa';
+  document.getElementById('rec-f-fase').value='defesa_previa';
+  document.getElementById('rec-f-dias').value='30';
+  document.getElementById('rec-f-pgto').value='pendente';
+  var hoje=new Date(); document.getElementById('rec-f-notif').value=hoje.toISOString().slice(0,10);
+  recalcPrazo();
+  document.getElementById('modal-recurso').classList.add('open');
+}
+
+function editarRecurso(p){
+  document.getElementById('rec-modal-titulo').textContent='Editar processo';
+  document.getElementById('rec-id').value=p.id;
+  document.getElementById('rec-f-tipo').value=p.tipo||'multa';
+  document.getElementById('rec-f-fase').value=p.fase||'defesa_previa';
+  document.getElementById('rec-f-cliente').value=p.cliente_nome||'';
+  document.getElementById('rec-f-cpf').value=p.cliente_cpf||'';
+  document.getElementById('rec-f-tel').value=p.cliente_tel||'';
+  document.getElementById('rec-f-placa').value=p.placa||'';
+  document.getElementById('rec-f-ait').value=p.ait||'';
+  document.getElementById('rec-f-orgao').value=p.orgao||'';
+  document.getElementById('rec-f-infracao').value=p.infracao||'';
+  document.getElementById('rec-f-notif').value=p.data_notificacao||'';
+  document.getElementById('rec-f-dias').value=p.prazo_dias||30;
+  document.getElementById('rec-f-prazo').value=p.prazo_final||'';
+  document.getElementById('rec-f-valor').value=p.valor_servico||'';
+  document.getElementById('rec-f-pgto').value=p.status_pgto||'pendente';
+  document.getElementById('rec-f-obs').value=p.obs||'';
+  fecharProc();
+  document.getElementById('modal-recurso').classList.add('open');
+}
+
+function fecharRecurso(){ document.getElementById('modal-recurso').classList.remove('open'); }
+
+function recalcPrazo(){
+  var n=document.getElementById('rec-f-notif').value;
+  var d=parseInt(document.getElementById('rec-f-dias').value||'30',10);
+  if(!n||isNaN(d)) return;
+  var dt=new Date(n+'T12:00:00');
+  dt.setDate(dt.getDate()+d);
+  document.getElementById('rec-f-prazo').value=dt.toISOString().slice(0,10);
+}
+
+function salvarRecurso(){
+  var id=document.getElementById('rec-id').value;
+  var dados={
+    tipo:  document.getElementById('rec-f-tipo').value,
+    fase:  document.getElementById('rec-f-fase').value,
+    cliente_nome: document.getElementById('rec-f-cliente').value.trim(),
+    cliente_cpf:  document.getElementById('rec-f-cpf').value,
+    cliente_tel:  document.getElementById('rec-f-tel').value,
+    placa:    document.getElementById('rec-f-placa').value,
+    ait:      document.getElementById('rec-f-ait').value,
+    orgao:    document.getElementById('rec-f-orgao').value,
+    infracao: document.getElementById('rec-f-infracao').value,
+    data_notificacao: document.getElementById('rec-f-notif').value,
+    prazo_dias:  document.getElementById('rec-f-dias').value,
+    prazo_final: document.getElementById('rec-f-prazo').value,
+    valor_servico: document.getElementById('rec-f-valor').value,
+    status_pgto:   document.getElementById('rec-f-pgto').value,
+    obs: document.getElementById('rec-f-obs').value
+  };
+  if(!dados.cliente_nome){ showAlert('Informe o nome do cliente.','warn'); return; }
+  if(!dados.data_notificacao){ showAlert('Informe a data da notificação.','warn'); return; }
+
+  fetch('/api/processos'+(id?'/'+id:''), {
+    method: id?'PUT':'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(dados)
+  }).then(function(r){return r.json();}).then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    fecharRecurso(); carregarRecursos();
+    showAlert(id?'✓ Processo atualizado!':'✓ Recurso cadastrado!','ok');
+  }).catch(function(){ showAlert('Falha ao salvar.','err'); });
+}
+
+// busca de cliente reaproveitando o cadastro de pessoas
+function acBuscarCliente(v){
+  var drop=document.getElementById('ac-rec-cliente');
+  if(!v||v.length<2){ drop.classList.remove('open'); return; }
+  fetch('/api/pessoas?q='+encodeURIComponent(v)).then(function(r){return r.json();})
+  .then(function(lista){
+    if(!lista.length){ drop.classList.remove('open'); return; }
+    window._recPessoas=lista;
+    drop.innerHTML=lista.slice(0,8).map(function(p,i){
+      return '<div class="ac-item" onclick="acPreencherCliente('+i+')">'+
+        '<b>'+(p.nome||'')+'</b><span style="color:var(--mut);font-size:11px"> '+(p.cpf||'')+'</span></div>';
+    }).join('');
+    drop.classList.add('open');
+  }).catch(function(){});
+}
+
+function acPreencherCliente(i){
+  var p=(window._recPessoas||[])[i]; if(!p) return;
+  document.getElementById('rec-f-cliente').value=p.nome||'';
+  document.getElementById('rec-f-cpf').value=p.cpf||'';
+  document.getElementById('rec-f-tel').value=p.cel||'';
+  document.getElementById('ac-rec-cliente').classList.remove('open');
+}
+
+// ── detalhe do processo ──
+function abrirProc(id){
+  fetch('/api/processos/'+id).then(function(r){return r.json();}).then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    PROC_ABERTO=d.processo;
+    var p=d.processo, a=d.andamentos||[];
+    document.getElementById('proc-titulo').textContent=p.cliente_nome;
+
+    var info=[
+      ['Tipo', REC_TIPOS[p.tipo]||p.tipo],
+      ['Fase atual', REC_FASES[p.fase]||p.fase],
+      ['Órgão', p.orgao||'—'],
+      ['Infração', p.infracao||'—'],
+      ['Placa', p.placa||'—'],
+      ['AIT', p.ait||'—'],
+      ['Notificação', dataBR(p.data_notificacao)],
+      ['Prazo final', dataBR(p.prazo_final)],
+      ['Protocolo', p.protocolo||'—'],
+      ['Protocolado em', dataBR(p.data_protocolo)],
+      ['Valor', p.valor_servico||'—'],
+      ['Pagamento', p.status_pgto==='pago'?'Pago':'Pendente']
+    ];
+
+    var html='<div style="margin-bottom:14px">'+tagPrazo(p)+'</div>'+
+      '<div class="proc-grid">'+info.map(function(x){
+        return '<div><div class="proc-lb">'+x[0]+'</div><div class="proc-vl">'+x[1]+'</div></div>';
+      }).join('')+'</div>';
+
+    if(p.obs) html+='<div style="margin-top:12px;font-size:12px;color:var(--mut)"><b>Obs:</b> '+p.obs+'</div>';
+
+    html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 6px">';
+    if(p.status==='a_protocolar')
+      html+='<button class="btn-main" onclick="protocolarProc()">✓ Registrar protocolo</button>';
+    if(p.status==='protocolado'){
+      html+='<button class="btn-main" onclick="julgarProc(\'deferido\')">Deferido</button>'+
+            '<button class="btn-sec" style="border-color:rgba(255,71,87,.4);color:var(--red)" onclick="julgarProc(\'indeferido\')">Indeferido</button>';
+    }
+    html+='<button class="btn-sec" onclick="editarRecurso(PROC_ABERTO)">Editar</button>'+
+          '<button class="btn-sec" onclick="novoAndamento()">+ Andamento</button>'+
+          '<button class="btn-danger" onclick="excluirProc()">Excluir</button></div>';
+
+    html+='<div style="margin-top:18px"><div class="proc-lb" style="margin-bottom:8px">Histórico</div>'+
+      (a.length ? a.map(function(x){
+        return '<div class="andam"><div class="andam-d">'+x.quando+(x.usuario?' · '+x.usuario:'')+'</div>'+
+               '<div>'+x.descricao+'</div></div>';
+      }).join('') : '<div style="font-size:12px;color:var(--mut)">Sem movimentações</div>')+'</div>';
+
+    document.getElementById('proc-corpo').innerHTML=html;
+    document.getElementById('modal-proc').classList.add('open');
+  }).catch(function(){ showAlert('Falha ao abrir o processo.','err'); });
+}
+
+function fecharProc(){ document.getElementById('modal-proc').classList.remove('open'); }
+
+function protocolarProc(){
+  var num=prompt('Número do protocolo:');
+  if(num===null||!num.trim()) return;
+  var hoje=new Date().toISOString().slice(0,10);
+  var quando=prompt('Data do protocolo (AAAA-MM-DD):', hoje);
+  if(quando===null) return;
+  fetch('/api/processos/'+PROC_ABERTO.id+'/protocolar',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({protocolo:num.trim(), data_protocolo:quando})
+  }).then(function(r){return r.json();}).then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    showAlert('✓ Protocolo registrado! O processo saiu do alerta de prazo.','ok');
+    abrirProc(PROC_ABERTO.id); carregarRecursos();
+  });
+}
+
+function julgarProc(res){
+  var obs=prompt(res==='deferido' ? 'Observação do deferimento (opcional):'
+                                  : 'Observação do indeferimento (opcional):', '');
+  if(obs===null) return;
+  var corpo={status:res, resultado:obs};
+  if(res==='indeferido'){
+    var prox = PROC_ABERTO.fase==='defesa_previa' ? 'recurso à JARI'
+             : PROC_ABERTO.fase==='jari' ? 'recurso ao CETRAN' : null;
+    if(prox && confirm('Abrir a fase seguinte ('+prox+') com novo prazo?')){
+      corpo.avancar=true;
+      var hoje=new Date().toISOString().slice(0,10);
+      var dn=prompt('Data da notificação desta nova fase (AAAA-MM-DD):', hoje);
+      if(dn===null) return;
+      corpo.data_notificacao=dn;
+      var dias=prompt('Prazo em dias:', '30');
+      if(dias===null) return;
+      corpo.prazo_dias=dias;
+    }
+  }
+  fetch('/api/processos/'+PROC_ABERTO.id+'/resultado',{
+    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(corpo)
+  }).then(function(r){return r.json();}).then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    showAlert(d.aviso||'✓ Resultado registrado!','ok');
+    abrirProc(PROC_ABERTO.id); carregarRecursos();
+  });
+}
+
+function novoAndamento(){
+  var txt=prompt('O que aconteceu no processo?');
+  if(txt===null||!txt.trim()) return;
+  fetch('/api/processos/'+PROC_ABERTO.id+'/andamentos',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({descricao:txt.trim()})
+  }).then(function(r){return r.json();}).then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    abrirProc(PROC_ABERTO.id);
+  });
+}
+
+function excluirProc(){
+  if(!confirm('Excluir este processo e todo o histórico dele?')) return;
+  fetch('/api/processos/'+PROC_ABERTO.id,{method:'DELETE'})
+  .then(function(r){return r.json();}).then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    fecharProc(); carregarRecursos(); showAlert('Processo excluído.','ok');
+  });
+}
+
+function testarAlertaTelegram(){
+  showAlert('Enviando...','ok');
+  fetch('/api/alerta-teste',{method:'POST'}).then(function(r){return r.json();})
+  .then(function(d){
+    if(d.ok) showAlert('✓ Enviado no Telegram ('+d.processos+' processo(s) no aviso).','ok');
+    else showAlert(d.detalhe||d.erro||'Falha ao enviar.','err');
+  }).catch(function(){ showAlert('Falha ao enviar.','err'); });
+}
+
+// ═══ INIT ════════════════════════════════════════════════════
+document.getElementById('user-badge') && (document.getElementById('user-badge').textContent = window.location.hostname||'local');
+carregarMe();
+carregarHist();
+gerarPreview();
+carregarPrazos();
+carregarConfig();
+modulo('atpv');
+setInterval(carregarHist,300000);
+</script>
+</body>
+</html>
