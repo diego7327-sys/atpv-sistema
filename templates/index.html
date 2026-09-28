@@ -32,6 +32,23 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 .btn-logout{background:none;border:1px solid var(--bord);color:var(--mut);border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:var(--font)}
 .btn-logout:hover{border-color:var(--red);color:var(--red)}
 /* MODAL */
+.badge-alerta{background:var(--red);color:#fff;border-radius:9px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px;font-family:var(--mono)}
+.btn-novo-rec{float:right;padding:7px 14px;font-size:12px;font-weight:600;background:var(--acc);color:#04231c;border:none;border-radius:7px;cursor:pointer;font-family:var(--font)}
+.prazo-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:10px;margin-top:14px}
+.pcard{border:1px solid var(--bord);border-radius:10px;padding:13px 10px;text-align:center;background:var(--surf2);transition:border-color .15s}
+.pcard[onclick]{cursor:pointer}
+.pcard[onclick]:hover{border-color:var(--acc)}
+.pcard-v{font-size:23px;font-weight:700;font-family:var(--mono);line-height:1.1}
+.pcard-l{font-size:9.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin-top:4px}
+#tbl-recursos tr.lin-vencido td:first-child{box-shadow:inset 3px 0 0 var(--red)}
+#tbl-recursos tr.lin-hoje td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
+#tbl-recursos tr.lin-prox td:first-child{box-shadow:inset 3px 0 0 var(--acc2)}
+.tag-prazo{font-size:10px;padding:3px 8px;border-radius:5px;font-weight:600;white-space:nowrap;font-family:var(--mono)}
+.proc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;background:var(--surf2);border:1px solid var(--bord);border-radius:10px;padding:14px}
+.proc-lb{font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+.proc-vl{font-size:13px;margin-top:2px}
+.andam{border-left:2px solid var(--bord);padding:6px 0 6px 12px;margin-bottom:8px;font-size:12.5px}
+.andam-d{font-size:10.5px;color:var(--mut);font-family:var(--mono);margin-bottom:2px}
 .modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
 .modal{background:var(--surf);border:1px solid var(--bord);border-radius:14px;padding:28px;width:100%;max-width:560px;max-height:85vh;overflow-y:auto}
@@ -171,13 +188,14 @@ tr:hover td{background:var(--surf2)}
 </div>
 <div class="right">
   <div class="ftabs">
-    <button class="ftab active" onclick="ftab('vendedor')">Vendedor</button>
-    <button class="ftab" onclick="ftab('veiculo')">Veículo</button>
-    <button class="ftab" onclick="ftab('comprador')">Comprador</button>
-    <button class="ftab" onclick="ftab('contratante')" style="color:var(--warn)">★ Contratante</button>
-    <button class="ftab" onclick="ftab('preview')">Pré-visualização</button>
-    <button class="ftab" onclick="ftab('relatorios')" id="tab-rel">📊 Relatórios</button>
-    <button class="ftab" onclick="ftab('config')">Configurações</button>
+    <button class="ftab active" data-tab="vendedor" onclick="ftab('vendedor')">Vendedor</button>
+    <button class="ftab" data-tab="veiculo" onclick="ftab('veiculo')">Veículo</button>
+    <button class="ftab" data-tab="comprador" onclick="ftab('comprador')">Comprador</button>
+    <button class="ftab" data-tab="contratante" onclick="ftab('contratante')" style="color:var(--warn)">★ Contratante</button>
+    <button class="ftab" data-tab="preview" onclick="ftab('preview')">Pré-visualização</button>
+    <button class="ftab" data-tab="recursos" onclick="ftab('recursos')" id="tab-recursos">⚖ Recursos <span id="badge-prazos" class="badge-alerta" style="display:none">0</span></button>
+    <button class="ftab" data-tab="relatorios" onclick="ftab('relatorios')" id="tab-rel">📊 Relatórios</button>
+    <button class="ftab" data-tab="config" onclick="ftab('config')">Configurações</button>
   </div>
   <div id="alert-box" class="alert"></div>
 
@@ -493,6 +511,51 @@ tr:hover td{background:var(--surf2)}
     </div>
   </div>
 
+  <!-- RECURSOS DE MULTA / CNH -->
+  <div id="fc-recursos" class="ftc fields">
+    <div class="fb">
+      <div class="fb-title">
+        ⚖ Recursos de multa e suspensão de CNH
+        <button class="btn-novo-rec" onclick="novoRecurso()">+ Novo recurso</button>
+      </div>
+
+      <div class="prazo-cards" id="prazo-cards"></div>
+
+      <div class="g3" style="margin-top:18px">
+        <div class="fg"><label>Buscar</label>
+          <input id="rec-busca" placeholder="Cliente, placa, AIT ou protocolo" oninput="filtrarRecursos()"></div>
+        <div class="fg"><label>Tipo</label>
+          <select id="rec-tipo" onchange="carregarRecursos()">
+            <option value="">Todos</option>
+            <option value="multa">Recurso de multa</option>
+            <option value="suspensao">Suspensão do direito de dirigir</option>
+            <option value="cassacao">Cassação da CNH</option>
+          </select></div>
+        <div class="fg"><label>Situação</label>
+          <select id="rec-status" onchange="carregarRecursos()">
+            <option value="">Todas</option>
+            <option value="a_protocolar">A protocolar</option>
+            <option value="protocolado">Protocolado — aguardando</option>
+            <option value="deferido">Deferido</option>
+            <option value="indeferido">Indeferido</option>
+            <option value="arquivado">Arquivado</option>
+          </select></div>
+      </div>
+
+      <div id="rec-filtro-ativo" style="display:none;margin-top:10px;font-size:12px;color:var(--warn)"></div>
+
+      <div class="table-wrap" style="margin-top:14px">
+        <table id="tbl-recursos">
+          <thead><tr>
+            <th>Cliente</th><th>Tipo / Fase</th><th>Placa / AIT</th>
+            <th>Prazo</th><th>Situação</th><th></th>
+          </tr></thead>
+          <tbody><tr><td colspan="6" style="text-align:center;color:var(--mut);padding:20px">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <!-- CONFIG -->
   <div id="fc-config" class="ftc fields">
     <div class="fb">
@@ -508,6 +571,13 @@ tr:hover td{background:var(--surf2)}
         <div class="fg"><label>Cidade (para data)</label><input id="cfg_cidade" value="ANÁPOLIS/GO"></div>
       </div>
     </div>
+    <div class="fb">
+      <div class="fb-title">Alerta de prazos no Telegram</div>
+      <p class="cfg-note">Aviso diário com os recursos que estão vencendo. Configurado pelas variáveis
+        TELEGRAM_TOKEN, TELEGRAM_CHAT_ID e ALERTA_CHAVE no Render.</p>
+      <button class="btn-sec" onclick="testarAlertaTelegram()">📨 Enviar teste agora</button>
+    </div>
+
     <div class="fb">
       <div class="fb-title">Portal DETRAN-GO</div>
       <p class="cfg-note">Acesse após gerar a procuração para registrar a ATPV-E.</p>
@@ -538,7 +608,7 @@ tr:hover td{background:var(--surf2)}
     </div>
   </div>
 
-  <div class="action-bar">
+  <div class="action-bar" id="action-bar-atpv">
     <button class="btn-main" onclick="gerarPDF()">⬇ Baixar Procuração PDF</button>
     <button class="btn-sec" id="btn-assin" onclick="enviarAssinatura()" style="border-color:rgba(0,212,170,.45);color:var(--acc)">✍ Enviar para assinatura</button>
     <button class="btn-sec" onclick="salvar()">Salvar histórico</button>
@@ -549,6 +619,95 @@ tr:hover td{background:var(--surf2)}
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<!-- MODAL: CADASTRO / EDIÇÃO DE RECURSO -->
+<div class="modal-overlay" id="modal-recurso">
+  <div class="modal" style="max-width:720px">
+    <div class="modal-title">
+      <span id="rec-modal-titulo">Novo recurso</span>
+      <button class="modal-close" onclick="fecharRecurso()">✕</button>
+    </div>
+    <input type="hidden" id="rec-id">
+
+    <div class="g2">
+      <div class="fg"><label>Tipo de processo</label>
+        <select id="rec-f-tipo">
+          <option value="multa">Recurso de multa</option>
+          <option value="suspensao">Suspensão do direito de dirigir</option>
+          <option value="cassacao">Cassação da CNH</option>
+        </select></div>
+      <div class="fg"><label>Fase atual</label>
+        <select id="rec-f-fase">
+          <option value="defesa_previa">Defesa prévia</option>
+          <option value="jari">Recurso à JARI</option>
+          <option value="cetran">Recurso ao CETRAN</option>
+        </select></div>
+    </div>
+
+    <div class="g2">
+      <div class="fg"><label>Nome do cliente ★</label>
+        <input id="rec-f-cliente" placeholder="Digite para buscar..." autocomplete="off"
+               oninput="acBuscarCliente(this.value)">
+        <div class="ac-drop" id="ac-rec-cliente"></div></div>
+      <div class="fg"><label>CPF</label><input id="rec-f-cpf" placeholder="000.000.000-00"></div>
+    </div>
+
+    <div class="g3">
+      <div class="fg"><label>Celular</label><input id="rec-f-tel" placeholder="(62) 9...."></div>
+      <div class="fg"><label>Placa</label><input id="rec-f-placa" placeholder="ABC1D23"
+            oninput="this.value=this.value.toUpperCase()"></div>
+      <div class="fg"><label>Auto de infração (AIT)</label><input id="rec-f-ait"></div>
+    </div>
+
+    <div class="g2">
+      <div class="fg"><label>Órgão autuador</label>
+        <input id="rec-f-orgao" list="lista-orgaos" placeholder="DETRAN-GO, PRF, DNIT...">
+        <datalist id="lista-orgaos">
+          <option value="DETRAN-GO"><option value="PRF"><option value="DNIT">
+          <option value="Prefeitura de Anápolis"><option value="PM-GO"><option value="ANTT">
+        </datalist></div>
+      <div class="fg"><label>Infração / motivo</label><input id="rec-f-infracao" placeholder="Ex.: excesso de velocidade"></div>
+    </div>
+
+    <div style="background:var(--surf2);border:1px solid var(--bord);border-radius:10px;padding:14px;margin:14px 0">
+      <div style="font-size:11px;color:var(--acc);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Prazo</div>
+      <div class="g3">
+        <div class="fg"><label>Data da notificação ★</label>
+          <input type="date" id="rec-f-notif" onchange="recalcPrazo()"></div>
+        <div class="fg"><label>Prazo (dias)</label>
+          <input type="number" id="rec-f-dias" value="30" min="1" max="365" onchange="recalcPrazo()"></div>
+        <div class="fg"><label>Vence em</label>
+          <input type="date" id="rec-f-prazo"></div>
+      </div>
+      <div style="font-size:11px;color:var(--mut);margin-top:6px">
+        O vencimento é calculado sozinho pela data da notificação. Se a notificação trouxer prazo diferente, é só ajustar.
+      </div>
+    </div>
+
+    <div class="g3">
+      <div class="fg"><label>Valor do serviço (R$)</label><input id="rec-f-valor" placeholder="R$ 0,00"></div>
+      <div class="fg"><label>Pagamento</label>
+        <select id="rec-f-pgto"><option value="pendente">Pendente</option><option value="pago">Pago</option></select></div>
+      <div class="fg"><label>Observações</label><input id="rec-f-obs"></div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:18px">
+      <button class="btn-main" onclick="salvarRecurso()">Salvar</button>
+      <button class="btn-sec" onclick="fecharRecurso()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: DETALHE DO PROCESSO -->
+<div class="modal-overlay" id="modal-proc">
+  <div class="modal" style="max-width:720px">
+    <div class="modal-title">
+      <span id="proc-titulo">Processo</span>
+      <button class="modal-close" onclick="fecharProc()">✕</button>
+    </div>
+    <div id="proc-corpo"></div>
+  </div>
+</div>
 
 <!-- MODAL ADMIN -->
 <div class="modal-overlay" id="modal-assin">
@@ -656,13 +815,15 @@ function blank(v,n){ return v&&v.trim()?v:'_'.repeat(n||22); }
 // ═══ TABS ════════════════════════════════════════════════════
 function ftab(t){
   tabAtual=t;
-  document.querySelectorAll('.ftab').forEach(function(el,i){
-    el.classList.toggle('active',['vendedor','veiculo','comprador','contratante','preview','relatorios','config'][i]===t);
+  document.querySelectorAll('.ftab').forEach(function(el){
+    el.classList.toggle('active', el.getAttribute('data-tab')===t);
   });
   document.querySelectorAll('.ftc').forEach(function(el){ el.classList.remove('active'); });
-  document.getElementById('fc-'+t).classList.add('active');
-  if(t==='preview') gerarPreview();
+  var alvo=document.getElementById('fc-'+t);
+  if(alvo) alvo.classList.add('active');
+  if(t==='preview')    gerarPreview();
   if(t==='relatorios') carregarRelatorio();
+  if(t==='recursos')   carregarRecursos();
 }
 
 // ═══ EXTRAÇÃO ════════════════════════════════════════════════
@@ -1778,11 +1939,362 @@ function delEmpresa(id){
   fetch('/api/empresas/'+id,{method:'DELETE'}).then(function(){ carregarEmpresas(); showAlert('Empresa excluída!','ok'); });
 }
 
+
+// ═══ RECURSOS DE MULTA / CNH ═════════════════════════════════
+var REC_LISTA = [], REC_URGENCIA = '', _recT = null, PROC_ABERTO = null;
+
+var REC_TIPOS  = {multa:'Recurso de multa', suspensao:'Suspensão do direito de dirigir', cassacao:'Cassação da CNH'};
+var REC_FASES  = {defesa_previa:'Defesa prévia', jari:'Recurso à JARI', cetran:'Recurso ao CETRAN'};
+var REC_STATUS = {a_protocolar:'A protocolar', protocolado:'Protocolado — aguardando',
+                  deferido:'Deferido', indeferido:'Indeferido', arquivado:'Arquivado'};
+
+function dataBR(iso){
+  if(!iso) return '—';
+  var p=String(iso).split('-');
+  return p.length===3 ? p[2]+'/'+p[1]+'/'+p[0] : iso;
+}
+
+function carregarRecursos(){
+  var url='/api/processos?'+
+    'q='+encodeURIComponent((document.getElementById('rec-busca')||{}).value||'')+
+    '&tipo='+encodeURIComponent((document.getElementById('rec-tipo')||{}).value||'')+
+    '&status='+encodeURIComponent((document.getElementById('rec-status')||{}).value||'')+
+    '&urgencia='+encodeURIComponent(REC_URGENCIA);
+  fetch(url).then(function(r){return r.json();}).then(function(d){
+    REC_LISTA=d.itens||[];
+    renderRecursos();
+  }).catch(function(){});
+  carregarPrazos();
+}
+
+function filtrarRecursos(){ clearTimeout(_recT); _recT=setTimeout(carregarRecursos,350); }
+
+function filtrarUrgencia(u){
+  REC_URGENCIA = (REC_URGENCIA===u) ? '' : u;
+  var box=document.getElementById('rec-filtro-ativo');
+  var nomes={vencidos:'Vencidos', hoje:'Vence hoje', semana:'Vence nos próximos 7 dias', abertos:'Em aberto'};
+  if(REC_URGENCIA){
+    box.style.display='block';
+    box.innerHTML='Filtrando: <b>'+nomes[REC_URGENCIA]+'</b> — <a href="#" onclick="filtrarUrgencia(\'\');return false" style="color:var(--acc)">limpar</a>';
+    var sel=document.getElementById('rec-status'); if(sel) sel.value='';
+  } else { box.style.display='none'; }
+  carregarRecursos();
+}
+
+function carregarPrazos(){
+  fetch('/api/processos/prazos').then(function(r){return r.json();}).then(function(d){
+    var r=d.resumo||{};
+    var cards=[
+      {k:'vencidos', v:r.vencidos||0,  l:'Vencidos',       cor:'var(--red)'},
+      {k:'hoje',     v:r.hoje||0,      l:'Vence hoje',     cor:'var(--warn)'},
+      {k:'semana',   v:(r.tres_dias||0)+(r.semana||0), l:'Próximos 7 dias', cor:'var(--acc2)'},
+      {k:'abertos',  v:r.a_protocolar||0, l:'A protocolar', cor:'var(--txt)'},
+      {k:'',         v:r.aguardando||0, l:'Aguardando julgamento', cor:'var(--mut)'}
+    ];
+    document.getElementById('prazo-cards').innerHTML = cards.map(function(c){
+      var ativo = c.k && REC_URGENCIA===c.k ? ';border-color:'+c.cor : '';
+      return '<div class="pcard" style="'+(c.v&&c.k?'border-color:'+c.cor+'33':'')+ativo+'"'+
+        (c.k?' onclick="filtrarUrgencia(\''+c.k+'\')"':'')+'>'+
+        '<div class="pcard-v" style="color:'+c.cor+'">'+c.v+'</div>'+
+        '<div class="pcard-l">'+c.l+'</div></div>';
+    }).join('');
+
+    var alerta=(r.vencidos||0)+(r.hoje||0)+(r.tres_dias||0);
+    var badge=document.getElementById('badge-prazos');
+    if(badge){
+      badge.textContent=alerta;
+      badge.style.display = alerta>0 ? 'inline-block' : 'none';
+      badge.style.background = (r.vencidos||0)>0 ? 'var(--red)' : 'var(--warn)';
+    }
+  }).catch(function(){});
+}
+
+function classePrazo(p){
+  if(p.status!=='a_protocolar' || p.dias===null || p.dias===undefined) return '';
+  if(p.dias<0)  return 'lin-vencido';
+  if(p.dias===0) return 'lin-hoje';
+  if(p.dias<=3) return 'lin-hoje';
+  if(p.dias<=7) return 'lin-prox';
+  return '';
+}
+
+function tagPrazo(p){
+  if(p.status!=='a_protocolar'){
+    var cor = p.status==='deferido' ? 'var(--acc)' :
+              p.status==='indeferido' ? 'var(--red)' : 'var(--mut)';
+    return '<span class="tag-prazo" style="background:'+cor+'22;color:'+cor+'">'+
+           (REC_STATUS[p.status]||p.status)+'</span>';
+  }
+  var d=p.dias, cor='var(--acc2)', txt;
+  if(d===null||d===undefined){ return '<span class="tag-prazo" style="background:#8882;color:var(--mut)">sem prazo</span>'; }
+  if(d<0){ cor='var(--red)';  txt='VENCEU há '+Math.abs(d)+'d'; }
+  else if(d===0){ cor='var(--warn)'; txt='VENCE HOJE'; }
+  else if(d<=3){ cor='var(--warn)'; txt='faltam '+d+'d'; }
+  else if(d<=7){ cor='var(--acc2)'; txt='faltam '+d+'d'; }
+  else { cor='var(--mut)'; txt='faltam '+d+'d'; }
+  return '<span class="tag-prazo" style="background:'+cor+'22;color:'+cor+'">'+txt+'</span>';
+}
+
+function renderRecursos(){
+  var tb=document.querySelector('#tbl-recursos tbody');
+  if(!REC_LISTA.length){
+    tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--mut);padding:24px">Nenhum processo encontrado</td></tr>';
+    return;
+  }
+  tb.innerHTML=REC_LISTA.map(function(p){
+    var ident=[p.placa, p.ait?('AIT '+p.ait):''].filter(Boolean).join(' · ')||'—';
+    return '<tr class="'+classePrazo(p)+'">'+
+      '<td><div style="font-weight:600">'+(p.cliente_nome||'—')+'</div>'+
+        (p.cliente_cpf?'<div style="font-size:11px;color:var(--mut);font-family:var(--mono)">'+p.cliente_cpf+'</div>':'')+'</td>'+
+      '<td><div style="font-size:12px">'+(REC_TIPOS[p.tipo]||p.tipo)+'</div>'+
+        '<div style="font-size:11px;color:var(--acc)">'+(REC_FASES[p.fase]||p.fase)+'</div></td>'+
+      '<td style="font-family:var(--mono);font-size:11px">'+ident+'</td>'+
+      '<td style="white-space:nowrap;font-size:12px">'+dataBR(p.prazo_final)+'</td>'+
+      '<td>'+tagPrazo(p)+'</td>'+
+      '<td><button class="btn-fin" onclick="abrirProc('+p.id+')">Abrir</button></td>'+
+      '</tr>';
+  }).join('');
+}
+
+// ── cadastro ──
+function novoRecurso(){
+  document.getElementById('rec-modal-titulo').textContent='Novo recurso';
+  ['rec-id','rec-f-cliente','rec-f-cpf','rec-f-tel','rec-f-placa','rec-f-ait',
+   'rec-f-orgao','rec-f-infracao','rec-f-valor','rec-f-obs','rec-f-prazo'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.value='';
+  });
+  document.getElementById('rec-f-tipo').value='multa';
+  document.getElementById('rec-f-fase').value='defesa_previa';
+  document.getElementById('rec-f-dias').value='30';
+  document.getElementById('rec-f-pgto').value='pendente';
+  var hoje=new Date(); document.getElementById('rec-f-notif').value=hoje.toISOString().slice(0,10);
+  recalcPrazo();
+  document.getElementById('modal-recurso').classList.add('open');
+}
+
+function editarRecurso(p){
+  document.getElementById('rec-modal-titulo').textContent='Editar processo';
+  document.getElementById('rec-id').value=p.id;
+  document.getElementById('rec-f-tipo').value=p.tipo||'multa';
+  document.getElementById('rec-f-fase').value=p.fase||'defesa_previa';
+  document.getElementById('rec-f-cliente').value=p.cliente_nome||'';
+  document.getElementById('rec-f-cpf').value=p.cliente_cpf||'';
+  document.getElementById('rec-f-tel').value=p.cliente_tel||'';
+  document.getElementById('rec-f-placa').value=p.placa||'';
+  document.getElementById('rec-f-ait').value=p.ait||'';
+  document.getElementById('rec-f-orgao').value=p.orgao||'';
+  document.getElementById('rec-f-infracao').value=p.infracao||'';
+  document.getElementById('rec-f-notif').value=p.data_notificacao||'';
+  document.getElementById('rec-f-dias').value=p.prazo_dias||30;
+  document.getElementById('rec-f-prazo').value=p.prazo_final||'';
+  document.getElementById('rec-f-valor').value=p.valor_servico||'';
+  document.getElementById('rec-f-pgto').value=p.status_pgto||'pendente';
+  document.getElementById('rec-f-obs').value=p.obs||'';
+  fecharProc();
+  document.getElementById('modal-recurso').classList.add('open');
+}
+
+function fecharRecurso(){ document.getElementById('modal-recurso').classList.remove('open'); }
+
+function recalcPrazo(){
+  var n=document.getElementById('rec-f-notif').value;
+  var d=parseInt(document.getElementById('rec-f-dias').value||'30',10);
+  if(!n||isNaN(d)) return;
+  var dt=new Date(n+'T12:00:00');
+  dt.setDate(dt.getDate()+d);
+  document.getElementById('rec-f-prazo').value=dt.toISOString().slice(0,10);
+}
+
+function salvarRecurso(){
+  var id=document.getElementById('rec-id').value;
+  var dados={
+    tipo:  document.getElementById('rec-f-tipo').value,
+    fase:  document.getElementById('rec-f-fase').value,
+    cliente_nome: document.getElementById('rec-f-cliente').value.trim(),
+    cliente_cpf:  document.getElementById('rec-f-cpf').value,
+    cliente_tel:  document.getElementById('rec-f-tel').value,
+    placa:    document.getElementById('rec-f-placa').value,
+    ait:      document.getElementById('rec-f-ait').value,
+    orgao:    document.getElementById('rec-f-orgao').value,
+    infracao: document.getElementById('rec-f-infracao').value,
+    data_notificacao: document.getElementById('rec-f-notif').value,
+    prazo_dias:  document.getElementById('rec-f-dias').value,
+    prazo_final: document.getElementById('rec-f-prazo').value,
+    valor_servico: document.getElementById('rec-f-valor').value,
+    status_pgto:   document.getElementById('rec-f-pgto').value,
+    obs: document.getElementById('rec-f-obs').value
+  };
+  if(!dados.cliente_nome){ showAlert('Informe o nome do cliente.','warn'); return; }
+  if(!dados.data_notificacao){ showAlert('Informe a data da notificação.','warn'); return; }
+
+  fetch('/api/processos'+(id?'/'+id:''), {
+    method: id?'PUT':'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(dados)
+  }).then(function(r){return r.json();}).then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    fecharRecurso(); carregarRecursos();
+    showAlert(id?'✓ Processo atualizado!':'✓ Recurso cadastrado!','ok');
+  }).catch(function(){ showAlert('Falha ao salvar.','err'); });
+}
+
+// busca de cliente reaproveitando o cadastro de pessoas
+function acBuscarCliente(v){
+  var drop=document.getElementById('ac-rec-cliente');
+  if(!v||v.length<2){ drop.classList.remove('open'); return; }
+  fetch('/api/pessoas?q='+encodeURIComponent(v)).then(function(r){return r.json();})
+  .then(function(lista){
+    if(!lista.length){ drop.classList.remove('open'); return; }
+    window._recPessoas=lista;
+    drop.innerHTML=lista.slice(0,8).map(function(p,i){
+      return '<div class="ac-item" onclick="acPreencherCliente('+i+')">'+
+        '<b>'+(p.nome||'')+'</b><span style="color:var(--mut);font-size:11px"> '+(p.cpf||'')+'</span></div>';
+    }).join('');
+    drop.classList.add('open');
+  }).catch(function(){});
+}
+
+function acPreencherCliente(i){
+  var p=(window._recPessoas||[])[i]; if(!p) return;
+  document.getElementById('rec-f-cliente').value=p.nome||'';
+  document.getElementById('rec-f-cpf').value=p.cpf||'';
+  document.getElementById('rec-f-tel').value=p.cel||'';
+  document.getElementById('ac-rec-cliente').classList.remove('open');
+}
+
+// ── detalhe do processo ──
+function abrirProc(id){
+  fetch('/api/processos/'+id).then(function(r){return r.json();}).then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    PROC_ABERTO=d.processo;
+    var p=d.processo, a=d.andamentos||[];
+    document.getElementById('proc-titulo').textContent=p.cliente_nome;
+
+    var info=[
+      ['Tipo', REC_TIPOS[p.tipo]||p.tipo],
+      ['Fase atual', REC_FASES[p.fase]||p.fase],
+      ['Órgão', p.orgao||'—'],
+      ['Infração', p.infracao||'—'],
+      ['Placa', p.placa||'—'],
+      ['AIT', p.ait||'—'],
+      ['Notificação', dataBR(p.data_notificacao)],
+      ['Prazo final', dataBR(p.prazo_final)],
+      ['Protocolo', p.protocolo||'—'],
+      ['Protocolado em', dataBR(p.data_protocolo)],
+      ['Valor', p.valor_servico||'—'],
+      ['Pagamento', p.status_pgto==='pago'?'Pago':'Pendente']
+    ];
+
+    var html='<div style="margin-bottom:14px">'+tagPrazo(p)+'</div>'+
+      '<div class="proc-grid">'+info.map(function(x){
+        return '<div><div class="proc-lb">'+x[0]+'</div><div class="proc-vl">'+x[1]+'</div></div>';
+      }).join('')+'</div>';
+
+    if(p.obs) html+='<div style="margin-top:12px;font-size:12px;color:var(--mut)"><b>Obs:</b> '+p.obs+'</div>';
+
+    html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 6px">';
+    if(p.status==='a_protocolar')
+      html+='<button class="btn-main" onclick="protocolarProc()">✓ Registrar protocolo</button>';
+    if(p.status==='protocolado'){
+      html+='<button class="btn-main" onclick="julgarProc(\'deferido\')">Deferido</button>'+
+            '<button class="btn-sec" style="border-color:rgba(255,71,87,.4);color:var(--red)" onclick="julgarProc(\'indeferido\')">Indeferido</button>';
+    }
+    html+='<button class="btn-sec" onclick="editarRecurso(PROC_ABERTO)">Editar</button>'+
+          '<button class="btn-sec" onclick="novoAndamento()">+ Andamento</button>'+
+          '<button class="btn-danger" onclick="excluirProc()">Excluir</button></div>';
+
+    html+='<div style="margin-top:18px"><div class="proc-lb" style="margin-bottom:8px">Histórico</div>'+
+      (a.length ? a.map(function(x){
+        return '<div class="andam"><div class="andam-d">'+x.quando+(x.usuario?' · '+x.usuario:'')+'</div>'+
+               '<div>'+x.descricao+'</div></div>';
+      }).join('') : '<div style="font-size:12px;color:var(--mut)">Sem movimentações</div>')+'</div>';
+
+    document.getElementById('proc-corpo').innerHTML=html;
+    document.getElementById('modal-proc').classList.add('open');
+  }).catch(function(){ showAlert('Falha ao abrir o processo.','err'); });
+}
+
+function fecharProc(){ document.getElementById('modal-proc').classList.remove('open'); }
+
+function protocolarProc(){
+  var num=prompt('Número do protocolo:');
+  if(num===null||!num.trim()) return;
+  var hoje=new Date().toISOString().slice(0,10);
+  var quando=prompt('Data do protocolo (AAAA-MM-DD):', hoje);
+  if(quando===null) return;
+  fetch('/api/processos/'+PROC_ABERTO.id+'/protocolar',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({protocolo:num.trim(), data_protocolo:quando})
+  }).then(function(r){return r.json();}).then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    showAlert('✓ Protocolo registrado! O processo saiu do alerta de prazo.','ok');
+    abrirProc(PROC_ABERTO.id); carregarRecursos();
+  });
+}
+
+function julgarProc(res){
+  var obs=prompt(res==='deferido' ? 'Observação do deferimento (opcional):'
+                                  : 'Observação do indeferimento (opcional):', '');
+  if(obs===null) return;
+  var corpo={status:res, resultado:obs};
+  if(res==='indeferido'){
+    var prox = PROC_ABERTO.fase==='defesa_previa' ? 'recurso à JARI'
+             : PROC_ABERTO.fase==='jari' ? 'recurso ao CETRAN' : null;
+    if(prox && confirm('Abrir a fase seguinte ('+prox+') com novo prazo?')){
+      corpo.avancar=true;
+      var hoje=new Date().toISOString().slice(0,10);
+      var dn=prompt('Data da notificação desta nova fase (AAAA-MM-DD):', hoje);
+      if(dn===null) return;
+      corpo.data_notificacao=dn;
+      var dias=prompt('Prazo em dias:', '30');
+      if(dias===null) return;
+      corpo.prazo_dias=dias;
+    }
+  }
+  fetch('/api/processos/'+PROC_ABERTO.id+'/resultado',{
+    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(corpo)
+  }).then(function(r){return r.json();}).then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    showAlert(d.aviso||'✓ Resultado registrado!','ok');
+    abrirProc(PROC_ABERTO.id); carregarRecursos();
+  });
+}
+
+function novoAndamento(){
+  var txt=prompt('O que aconteceu no processo?');
+  if(txt===null||!txt.trim()) return;
+  fetch('/api/processos/'+PROC_ABERTO.id+'/andamentos',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({descricao:txt.trim()})
+  }).then(function(r){return r.json();}).then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    abrirProc(PROC_ABERTO.id);
+  });
+}
+
+function excluirProc(){
+  if(!confirm('Excluir este processo e todo o histórico dele?')) return;
+  fetch('/api/processos/'+PROC_ABERTO.id,{method:'DELETE'})
+  .then(function(r){return r.json();}).then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    fecharProc(); carregarRecursos(); showAlert('Processo excluído.','ok');
+  });
+}
+
+function testarAlertaTelegram(){
+  showAlert('Enviando...','ok');
+  fetch('/api/alerta-teste',{method:'POST'}).then(function(r){return r.json();})
+  .then(function(d){
+    if(d.ok) showAlert('✓ Enviado no Telegram ('+d.processos+' processo(s) no aviso).','ok');
+    else showAlert(d.detalhe||d.erro||'Falha ao enviar.','err');
+  }).catch(function(){ showAlert('Falha ao enviar.','err'); });
+}
+
 // ═══ INIT ════════════════════════════════════════════════════
 document.getElementById('user-badge') && (document.getElementById('user-badge').textContent = window.location.hostname||'local');
 carregarMe();
 carregarHist();
 gerarPreview();
+carregarPrazos();
 setInterval(carregarHist,300000);
 </script>
 </body>
