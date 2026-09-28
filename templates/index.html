@@ -67,7 +67,15 @@ tr:hover td{background:var(--surf2)}
 .tag-emp{background:rgba(255,165,2,.15);color:var(--warn)}
 .tag-ok{background:rgba(0,212,170,.1);color:var(--acc)}
 .tag-off{background:rgba(255,71,87,.1);color:var(--red)}
+.modbar{display:flex;gap:4px;padding:0 24px;background:var(--surf2);border-bottom:1px solid var(--bord);overflow-x:auto}
+.modbtn{display:flex;align-items:center;gap:7px;padding:14px 20px;font-size:13px;font-weight:600;cursor:pointer;
+  border:none;border-bottom:3px solid transparent;background:none;color:var(--mut);font-family:var(--font);
+  white-space:nowrap;transition:all .15s}
+.modbtn:hover{color:var(--txt)}
+.modbtn.active{color:var(--acc);border-bottom-color:var(--acc);background:rgba(0,212,170,.05)}
+.modbtn .mod-ico{font-size:15px}
 .app{display:grid;grid-template-columns:320px 1fr;flex:1}
+.app.full{grid-template-columns:1fr}
 .left{border-right:1px solid var(--bord);display:flex;flex-direction:column;background:var(--surf);overflow-y:auto;max-height:calc(100vh - 57px);position:sticky;top:57px}
 .psec{padding:16px;border-bottom:1px solid var(--bord)}
 .psec:last-child{border-bottom:none;flex:1}
@@ -145,7 +153,7 @@ tr:hover td{background:var(--surf2)}
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--bord);border-radius:3px}
-@media(max-width:900px){.app{grid-template-columns:1fr}.left{max-height:none;position:static;border-right:none;border-bottom:1px solid var(--bord)}.g2,.g3{grid-template-columns:1fr}}
+@media(max-width:900px){.app{grid-template-columns:1fr}.modbtn{padding:12px 13px;font-size:12px}.left{max-height:none;position:static;border-right:none;border-bottom:1px solid var(--bord)}.g2,.g3{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -165,6 +173,18 @@ tr:hover td{background:var(--surf2)}
     <button class="btn-logout" onclick="logout()">Sair</button>
   </div>
 </header>
+<nav class="modbar">
+  <button class="modbtn active" data-mod="atpv" onclick="modulo('atpv')">
+    <span class="mod-ico">📄</span> ATPV-e</button>
+  <button class="modbtn" data-mod="recursos" onclick="modulo('recursos')">
+    <span class="mod-ico">⚖</span> Recursos de Multa e Suspensão de CNH
+    <span id="badge-prazos" class="badge-alerta" style="display:none">0</span></button>
+  <button class="modbtn" data-mod="relatorios" onclick="modulo('relatorios')">
+    <span class="mod-ico">📊</span> Relatórios</button>
+  <button class="modbtn" data-mod="config" onclick="modulo('config')">
+    <span class="mod-ico">⚙</span> Configurações</button>
+</nav>
+
 <div class="app">
 <div class="left">
   <div class="psec">
@@ -193,9 +213,6 @@ tr:hover td{background:var(--surf2)}
     <button class="ftab" data-tab="comprador" onclick="ftab('comprador')">Comprador</button>
     <button class="ftab" data-tab="contratante" onclick="ftab('contratante')" style="color:var(--warn)">★ Contratante</button>
     <button class="ftab" data-tab="preview" onclick="ftab('preview')">Pré-visualização</button>
-    <button class="ftab" data-tab="recursos" onclick="ftab('recursos')" id="tab-recursos">⚖ Recursos <span id="badge-prazos" class="badge-alerta" style="display:none">0</span></button>
-    <button class="ftab" data-tab="relatorios" onclick="ftab('relatorios')" id="tab-rel">📊 Relatórios</button>
-    <button class="ftab" data-tab="config" onclick="ftab('config')">Configurações</button>
   </div>
   <div id="alert-box" class="alert"></div>
 
@@ -813,21 +830,49 @@ function setVal(id,val){ var el=document.getElementById(id); if(el&&val&&val.tri
 function blank(v,n){ return v&&v.trim()?v:'_'.repeat(n||22); }
 
 // ═══ TABS ════════════════════════════════════════════════════
+var ABAS_ATPV = ['vendedor','veiculo','comprador','contratante','preview'];
+var MODULO_ATUAL = 'atpv';
+
+// Troca de módulo: cada um abre a tela inteira dele.
+function modulo(m){
+  MODULO_ATUAL = m;
+  document.querySelectorAll('.modbtn').forEach(function(b){
+    b.classList.toggle('active', b.getAttribute('data-mod')===m);
+  });
+  var ehAtpv = (m==='atpv');
+  var app   = document.querySelector('.app');
+  var lado  = document.querySelector('.left');
+  var abas  = document.querySelector('.ftabs');
+  var barra = document.getElementById('action-bar-atpv');
+
+  if(lado)  lado.style.display  = ehAtpv ? '' : 'none';
+  if(abas)  abas.style.display  = ehAtpv ? '' : 'none';
+  if(barra) barra.style.display = ehAtpv ? '' : 'none';
+  if(app)   app.classList.toggle('full', !ehAtpv);
+
+  if(ehAtpv){
+    ftab(ABAS_ATPV.indexOf(tabAtual)>=0 ? tabAtual : 'vendedor');
+    return;
+  }
+  document.querySelectorAll('.ftc').forEach(function(el){ el.classList.remove('active'); });
+  var alvo=document.getElementById('fc-'+m);
+  if(alvo) alvo.classList.add('active');
+  if(m==='recursos')   carregarRecursos();
+  if(m==='relatorios'){ carregarRelatorio(); relTab(relTabAtual||'atendimentos'); }
+}
+
+// Abas internas do módulo ATPV-e
 function ftab(t){
   tabAtual=t;
-  document.querySelectorAll('.ftab').forEach(function(el){
+  // so as abas da barra principal — as sub-abas de Relatorios e Admin
+  // usam a mesma classe e nao devem ser mexidas aqui
+  document.querySelectorAll('.ftabs > .ftab').forEach(function(el){
     el.classList.toggle('active', el.getAttribute('data-tab')===t);
   });
   document.querySelectorAll('.ftc').forEach(function(el){ el.classList.remove('active'); });
   var alvo=document.getElementById('fc-'+t);
   if(alvo) alvo.classList.add('active');
-  // a barra de acoes do ATPV so faz sentido nas abas do atendimento
-  var barra=document.getElementById('action-bar-atpv');
-  if(barra) barra.style.display =
-    ['vendedor','veiculo','comprador','contratante','preview'].indexOf(t)>=0 ? '' : 'none';
-  if(t==='preview')    gerarPreview();
-  if(t==='relatorios') carregarRelatorio();
-  if(t==='recursos')   carregarRecursos();
+  if(t==='preview') gerarPreview();
 }
 
 // ═══ EXTRAÇÃO ════════════════════════════════════════════════
@@ -2299,6 +2344,7 @@ carregarMe();
 carregarHist();
 gerarPreview();
 carregarPrazos();
+modulo('atpv');
 setInterval(carregarHist,300000);
 </script>
 </body>
