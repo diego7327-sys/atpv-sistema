@@ -821,6 +821,10 @@ function ftab(t){
   document.querySelectorAll('.ftc').forEach(function(el){ el.classList.remove('active'); });
   var alvo=document.getElementById('fc-'+t);
   if(alvo) alvo.classList.add('active');
+  // a barra de acoes do ATPV so faz sentido nas abas do atendimento
+  var barra=document.getElementById('action-bar-atpv');
+  if(barra) barra.style.display =
+    ['vendedor','veiculo','comprador','contratante','preview'].indexOf(t)>=0 ? '' : 'none';
   if(t==='preview')    gerarPreview();
   if(t==='relatorios') carregarRelatorio();
   if(t==='recursos')   carregarRecursos();
