@@ -213,6 +213,7 @@ tr:hover td{background:var(--surf2)}
     <button class="ftab" data-tab="comprador" onclick="ftab('comprador')">Comprador</button>
     <button class="ftab" data-tab="contratante" onclick="ftab('contratante')" style="color:var(--warn)">★ Contratante</button>
     <button class="ftab" data-tab="preview" onclick="ftab('preview')">Pré-visualização</button>
+    <button class="ftab" data-tab="assinaturas" onclick="ftab('assinaturas')">✍ Assinaturas</button>
   </div>
   <div id="alert-box" class="alert"></div>
 
@@ -528,6 +529,44 @@ tr:hover td{background:var(--surf2)}
     </div>
   </div>
 
+  <!-- ASSINATURAS -->
+  <div id="fc-assinaturas" class="ftc fields">
+    <div class="fb">
+      <div class="fb-title">
+        ✍ Documentos enviados para assinatura
+        <button class="btn-novo-rec" onclick="sincronizarAssinaturas()" id="btn-sinc">🔄 Atualizar status</button>
+      </div>
+
+      <div class="prazo-cards" id="assin-cards"></div>
+
+      <div class="g3" style="margin-top:18px">
+        <div class="fg"><label>Buscar</label>
+          <input id="assin-busca" placeholder="Nome do cliente ou placa" oninput="filtrarAssin()"></div>
+        <div class="fg"><label>Situação</label>
+          <select id="assin-filtro" onchange="carregarAssinaturas()">
+            <option value="">Todos</option>
+            <option value="pendentes">Aguardando assinatura</option>
+            <option value="assinados">Assinados</option>
+          </select></div>
+        <div class="fg"><label>&nbsp;</label>
+          <div style="font-size:11px;color:var(--mut);line-height:1.5;padding-top:8px">
+            O sistema é avisado automaticamente quando o cliente assina.
+            Use "Atualizar status" se quiser conferir na hora.
+          </div></div>
+      </div>
+
+      <div class="table-wrap" style="margin-top:14px">
+        <table id="tbl-assin">
+          <thead><tr>
+            <th>Cliente</th><th>Veículo</th><th>Enviado em</th>
+            <th>Situação</th><th>Assinado em</th><th></th>
+          </tr></thead>
+          <tbody><tr><td colspan="6" style="text-align:center;color:var(--mut);padding:20px">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <!-- RECURSOS DE MULTA / CNH -->
   <div id="fc-recursos" class="ftc fields">
     <div class="fb">
@@ -588,6 +627,13 @@ tr:hover td{background:var(--surf2)}
         <div class="fg"><label>Cidade (para data)</label><input id="cfg_cidade" value="ANÁPOLIS/GO"></div>
       </div>
     </div>
+    <div class="fb">
+      <div class="fb-title">Aviso automático de assinatura (ZapSign)</div>
+      <p class="cfg-note">Com isso ligado, a ZapSign avisa o sistema no instante em que o cliente
+        assina — o documento aparece como assinado sem você precisar conferir. Clique uma vez só.</p>
+      <button class="btn-sec" onclick="registrarWebhookZapsign()">🔔 Ativar aviso automático</button>
+    </div>
+
     <div class="fb">
       <div class="fb-title">Alerta de prazos no Telegram</div>
       <p class="cfg-note">Aviso diário com os recursos que estão vencendo. Configurado pelas variáveis
@@ -830,7 +876,7 @@ function setVal(id,val){ var el=document.getElementById(id); if(el&&val&&val.tri
 function blank(v,n){ return v&&v.trim()?v:'_'.repeat(n||22); }
 
 // ═══ TABS ════════════════════════════════════════════════════
-var ABAS_ATPV = ['vendedor','veiculo','comprador','contratante','preview'];
+var ABAS_ATPV = ['vendedor','veiculo','comprador','contratante','preview','assinaturas'];
 var MODULO_ATUAL = 'atpv';
 
 // Troca de módulo: cada um abre a tela inteira dele.
@@ -873,6 +919,10 @@ function ftab(t){
   var alvo=document.getElementById('fc-'+t);
   if(alvo) alvo.classList.add('active');
   if(t==='preview') gerarPreview();
+  if(t==='assinaturas') carregarAssinaturas();
+  // a barra do ATPV nao faz sentido na lista de assinaturas
+  var barra=document.getElementById('action-bar-atpv');
+  if(barra) barra.style.display = (t==='assinaturas') ? 'none' : '';
 }
 
 // ═══ EXTRAÇÃO ════════════════════════════════════════════════
@@ -1988,6 +2038,104 @@ function delEmpresa(id){
   fetch('/api/empresas/'+id,{method:'DELETE'}).then(function(){ carregarEmpresas(); showAlert('Empresa excluída!','ok'); });
 }
 
+
+// ═══ ACOMPANHAMENTO DAS ASSINATURAS ══════════════════════════
+var ASSIN_LISTA = [], _assinT = null;
+
+function carregarAssinaturas(){
+  var url='/api/assinaturas?status='+encodeURIComponent((document.getElementById('assin-filtro')||{}).value||'')+
+          '&q='+encodeURIComponent((document.getElementById('assin-busca')||{}).value||'');
+  fetch(url).then(function(r){return r.json();}).then(function(d){
+    ASSIN_LISTA=d.itens||[];
+    var r=d.resumo||{};
+    document.getElementById('assin-cards').innerHTML=[
+      {v:r.aguardando||0, l:'Aguardando assinatura', cor:'var(--warn)'},
+      {v:r.assinados||0,  l:'Assinados',             cor:'var(--acc)'},
+      {v:r.total||0,      l:'Total enviado',         cor:'var(--mut)'}
+    ].map(function(c){
+      return '<div class="pcard"><div class="pcard-v" style="color:'+c.cor+'">'+c.v+'</div>'+
+             '<div class="pcard-l">'+c.l+'</div></div>';
+    }).join('');
+    renderAssinaturas();
+  }).catch(function(){});
+}
+
+function filtrarAssin(){ clearTimeout(_assinT); _assinT=setTimeout(carregarAssinaturas,350); }
+
+function renderAssinaturas(){
+  var tb=document.querySelector('#tbl-assin tbody');
+  if(!ASSIN_LISTA.length){
+    tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--mut);padding:24px">'+
+      'Nenhum documento enviado para assinatura ainda</td></tr>';
+    return;
+  }
+  tb.innerHTML=ASSIN_LISTA.map(function(a){
+    var assinado = a.assinatura_status==='signed';
+    var recusado = a.assinatura_status==='refused';
+    var cor = assinado?'var(--acc)' : recusado?'var(--red)' : 'var(--warn)';
+    var acoes='';
+    if(assinado && a.assinatura_arquivo){
+      acoes+='<a href="'+a.assinatura_arquivo+'" target="_blank" class="btn-fin" '+
+             'style="color:var(--acc);border-color:rgba(0,212,170,.4);text-decoration:none">⬇ Baixar assinado</a> ';
+    }
+    if(!assinado && a.assinatura_url){
+      acoes+='<button class="btn-fin" onclick="copiarLinkAssin2('+a.id+')">📋 Copiar link</button> '+
+             '<button class="btn-fin" onclick="atualizarUm('+a.id+')">🔄</button>';
+    }
+    return '<tr'+(assinado?' style="background:rgba(0,212,170,.04)"':'')+'>'+
+      '<td style="font-weight:600">'+(a.nome||'—')+'</td>'+
+      '<td style="font-size:12px">'+(a.modelo||'—')+
+        (a.placa?'<div style="font-family:var(--mono);font-size:11px;color:var(--mut)">'+a.placa+'</div>':'')+'</td>'+
+      '<td style="font-size:11px;white-space:nowrap">'+(a.data||'—')+'</td>'+
+      '<td><span class="tag-prazo" style="background:'+cor+'22;color:'+cor+'">'+
+        (assinado?'✓ ':'')+(a.status_label||'—')+'</span></td>'+
+      '<td style="font-size:11px;white-space:nowrap">'+(a.assinatura_em||'—')+'</td>'+
+      '<td style="white-space:nowrap">'+acoes+'</td>'+
+      '</tr>';
+  }).join('');
+}
+
+function copiarLinkAssin2(id){
+  var a=ASSIN_LISTA.filter(function(x){return x.id===id;})[0];
+  if(!a||!a.assinatura_url) return;
+  var ok=function(){ showAlert('✓ Link copiado! Cole no WhatsApp do cliente.','ok'); };
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(a.assinatura_url).then(ok).catch(function(){
+      window.prompt('Copie o link:', a.assinatura_url); });
+  } else { window.prompt('Copie o link:', a.assinatura_url); }
+}
+
+function atualizarUm(id){
+  fetch('/api/assinaturas/'+id+'/atualizar',{method:'POST'})
+  .then(function(r){return r.json();}).then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    showAlert(d.status==='signed' ? '✓ Cliente assinou!' : 'Situação: '+d.status_label,
+              d.status==='signed'?'ok':'warn');
+    carregarAssinaturas();
+  }).catch(function(){ showAlert('Falha ao consultar.','err'); });
+}
+
+function sincronizarAssinaturas(){
+  var b=document.getElementById('btn-sinc'); var t=b?b.textContent:'';
+  if(b){ b.disabled=true; b.textContent='Consultando...'; }
+  fetch('/api/assinaturas/sincronizar',{method:'POST'})
+  .then(function(r){return r.json();}).then(function(d){
+    if(b){ b.disabled=false; b.textContent=t; }
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    showAlert(d.assinados_agora ? '✓ '+d.assinados_agora+' documento(s) assinado(s)!'
+                                : 'Nenhuma novidade — '+d.consultados+' conferido(s).', 'ok');
+    carregarAssinaturas();
+  }).catch(function(){ if(b){ b.disabled=false; b.textContent=t; } showAlert('Falha ao consultar.','err'); });
+}
+
+function registrarWebhookZapsign(){
+  if(!confirm('Ativar o aviso automático da ZapSign?\n\nDepois disso o sistema fica sabendo na hora em que o cliente assina.')) return;
+  fetch('/api/zapsign-webhook/registrar',{method:'POST'})
+  .then(function(r){return r.json();}).then(function(d){
+    if(d.erro){ showAlert(d.erro,'err'); return; }
+    showAlert('✓ Aviso automático ativado na ZapSign.','ok');
+  }).catch(function(){ showAlert('Falha ao ativar.','err'); });
+}
 
 // ═══ RECURSOS DE MULTA / CNH ═════════════════════════════════
 var REC_LISTA = [], REC_URGENCIA = '', _recT = null, PROC_ABERTO = null;
