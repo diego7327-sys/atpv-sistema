@@ -20,6 +20,11 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 ZAPSIGN_TOKEN = os.environ.get('ZAPSIGN_TOKEN', '')
 ZAPSIGN_API   = os.environ.get('ZAPSIGN_API', 'https://api.zapsign.com.br/api/v1')
 
+# ── ALERTAS (Telegram) ────────────────────────────────────────
+TELEGRAM_TOKEN   = os.environ.get('TELEGRAM_TOKEN', '')
+TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
+ALERTA_CHAVE     = os.environ.get('ALERTA_CHAVE', '')
+
 # ── BANCO DE DADOS ────────────────────────────────────────────
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 HIST_PAGINA  = int(os.environ.get('HIST_PAGINA', '100'))
@@ -155,6 +160,47 @@ CREATE TABLE IF NOT EXISTS cofre (
     valor     TEXT DEFAULT '',
     criado    TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS processos (
+    id               BIGSERIAL PRIMARY KEY,
+    criado           TIMESTAMPTZ DEFAULT NOW(),
+    atualizado       TIMESTAMPTZ DEFAULT NOW(),
+    tipo             TEXT DEFAULT 'multa',
+    cliente_nome     TEXT DEFAULT '',
+    cliente_cpf      TEXT DEFAULT '',
+    cliente_tel      TEXT DEFAULT '',
+    placa            TEXT DEFAULT '',
+    ait              TEXT DEFAULT '',
+    orgao            TEXT DEFAULT '',
+    infracao         TEXT DEFAULT '',
+    fase             TEXT DEFAULT 'defesa_previa',
+    data_notificacao DATE,
+    prazo_dias       INTEGER DEFAULT 30,
+    prazo_final      DATE,
+    protocolo        TEXT DEFAULT '',
+    data_protocolo   DATE,
+    status           TEXT DEFAULT 'a_protocolar',
+    resultado        TEXT DEFAULT '',
+    valor_servico    TEXT DEFAULT '',
+    status_pgto      TEXT DEFAULT 'pendente',
+    obs              TEXT DEFAULT '',
+    user_id          TEXT DEFAULT '',
+    user_nome        TEXT DEFAULT '',
+    empresa_id       TEXT
+);
+CREATE INDEX IF NOT EXISTS proc_prazo_idx   ON processos (prazo_final);
+CREATE INDEX IF NOT EXISTS proc_status_idx  ON processos (status);
+CREATE INDEX IF NOT EXISTS proc_cliente_idx ON processos (lower(cliente_nome));
+CREATE INDEX IF NOT EXISTS proc_placa_idx   ON processos (lower(placa));
+
+CREATE TABLE IF NOT EXISTS processo_andamentos (
+    id          BIGSERIAL PRIMARY KEY,
+    processo_id BIGINT REFERENCES processos(id) ON DELETE CASCADE,
+    quando      TIMESTAMPTZ DEFAULT NOW(),
+    descricao   TEXT DEFAULT '',
+    usuario     TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS andam_proc_idx ON processo_andamentos (processo_id, id);
 
 CREATE TABLE IF NOT EXISTS migracoes (
     nome     TEXT PRIMARY KEY,
@@ -1098,6 +1144,389 @@ def api_assinatura_status(doc_token):
         "signers": [{"nome": s.get("name", ""), "status": s.get("status", ""),
                      "sign_url": s.get("sign_url", "")} for s in (resp.get("signers") or [])],
     })
+
+# ══════════════════════════════════════════════════════════════
+# RECURSOS DE MULTA E SUSPENSÃO DE CNH
+# ══════════════════════════════════════════════════════════════
+from datetime import date, timedelta
+
+TIPOS_PROCESSO = {
+    'multa':      'Recurso de multa',
+    'suspensao':  'Suspensão do direito de dirigir',
+    'cassacao':   'Cassação da CNH',
+}
+FASES = {
+    'defesa_previa': 'Defesa prévia',
+    'jari':          'Recurso à JARI',
+    'cetran':        'Recurso ao CETRAN',
+}
+ORDEM_FASES = ['defesa_previa', 'jari', 'cetran']
+STATUS = {
+    'a_protocolar': 'A protocolar',
+    'protocolado':  'Protocolado — aguardando julgamento',
+    'deferido':     'Deferido (ganhou)',
+    'indeferido':   'Indeferido',
+    'arquivado':    'Arquivado',
+}
+
+def _data_iso(v):
+    """Aceita '2026-09-25' ou '25/09/2026'. Devolve date ou None."""
+    if not v:
+        return None
+    if isinstance(v, date):
+        return v
+    v = str(v).strip()
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(v, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+def _calcular_prazo(data_notif, dias):
+    d = _data_iso(data_notif)
+    if not d:
+        return None
+    try:
+        dias = int(dias)
+    except (TypeError, ValueError):
+        dias = 30
+    return d + timedelta(days=dias)
+
+def _andamento(cur, pid, descricao):
+    cur.execute("""INSERT INTO processo_andamentos (processo_id,descricao,usuario)
+                   VALUES (%s,%s,%s)""",
+                (pid, descricao, session.get('user_nome') or ''))
+
+def _escopo_proc():
+    if session.get('perfil') == 'empresa':
+        return " AND empresa_id = %s", [session.get('empresa_id')]
+    return "", []
+
+CAMPOS_PROC = """id, tipo, cliente_nome, cliente_cpf, cliente_tel, placa, ait, orgao,
+                 infracao, fase, data_notificacao, prazo_dias, prazo_final, protocolo,
+                 data_protocolo, status, resultado, valor_servico, status_pgto, obs,
+                 user_nome, empresa_id, criado, atualizado"""
+
+def _proc_saida(r):
+    d = dict(r)
+    for k in ('data_notificacao', 'prazo_final', 'data_protocolo'):
+        if d.get(k):
+            d[k] = d[k].isoformat()
+    for k in ('criado', 'atualizado'):
+        if d.get(k):
+            d[k] = d[k].strftime('%d/%m/%Y %H:%M')
+    d['tipo_label']   = TIPOS_PROCESSO.get(d.get('tipo'), d.get('tipo'))
+    d['fase_label']   = FASES.get(d.get('fase'), d.get('fase'))
+    d['status_label'] = STATUS.get(d.get('status'), d.get('status'))
+    # dias restantes: negativo = vencido
+    if d.get('prazo_final') and d.get('status') == 'a_protocolar':
+        d['dias'] = (_data_iso(d['prazo_final']) - date.today()).days
+    else:
+        d['dias'] = None
+    return d
+
+@app.route("/api/processos", methods=["GET"])
+@login_required
+def api_proc_get():
+    q      = (request.args.get("q") or "").strip().lower()
+    status = (request.args.get("status") or "").strip()
+    tipo   = (request.args.get("tipo") or "").strip()
+    urg    = (request.args.get("urgencia") or "").strip()
+
+    cond, params = _escopo_proc()
+    if q:
+        cond += (" AND (lower(cliente_nome) LIKE %s OR lower(placa) LIKE %s"
+                 " OR lower(ait) LIKE %s OR lower(protocolo) LIKE %s)")
+        params += ['%'+q+'%'] * 4
+    if status:
+        cond += " AND status = %s"; params.append(status)
+    if tipo:
+        cond += " AND tipo = %s"; params.append(tipo)
+    if urg == 'vencidos':
+        cond += " AND status = 'a_protocolar' AND prazo_final < CURRENT_DATE"
+    elif urg == 'hoje':
+        cond += " AND status = 'a_protocolar' AND prazo_final = CURRENT_DATE"
+    elif urg == 'semana':
+        cond += " AND status = 'a_protocolar' AND prazo_final BETWEEN CURRENT_DATE AND CURRENT_DATE + 7"
+    elif urg == 'abertos':
+        cond += " AND status IN ('a_protocolar','protocolado')"
+
+    with db() as cur:
+        cur.execute("SELECT " + CAMPOS_PROC + """ FROM processos WHERE TRUE""" + cond +
+                    """ ORDER BY (status = 'a_protocolar') DESC,
+                                 prazo_final ASC NULLS LAST, id DESC LIMIT 300""", params)
+        itens = [_proc_saida(r) for r in cur.fetchall()]
+    return jsonify({"itens": itens, "total": len(itens)})
+
+def _resumo_prazos(cur, cond="", params=None):
+    """Contagem por urgência, para o painel e para o alerta."""
+    params = params or []
+    cur.execute("""SELECT
+          COUNT(*) FILTER (WHERE prazo_final <  CURRENT_DATE)                                AS vencidos,
+          COUNT(*) FILTER (WHERE prazo_final =  CURRENT_DATE)                                AS hoje,
+          COUNT(*) FILTER (WHERE prazo_final BETWEEN CURRENT_DATE + 1 AND CURRENT_DATE + 3)  AS tres_dias,
+          COUNT(*) FILTER (WHERE prazo_final BETWEEN CURRENT_DATE + 4 AND CURRENT_DATE + 7)  AS semana,
+          COUNT(*)                                                                           AS a_protocolar
+        FROM processos
+        WHERE status = 'a_protocolar' AND prazo_final IS NOT NULL""" + cond, params)
+    return dict(cur.fetchone())
+
+@app.route("/api/processos/prazos", methods=["GET"])
+@login_required
+def api_proc_prazos():
+    cond, params = _escopo_proc()
+    with db() as cur:
+        resumo = _resumo_prazos(cur, cond, params)
+        cur.execute("SELECT " + CAMPOS_PROC + """ FROM processos
+                     WHERE status = 'a_protocolar' AND prazo_final IS NOT NULL
+                       AND prazo_final <= CURRENT_DATE + 7""" + cond +
+                    " ORDER BY prazo_final ASC LIMIT 100", params)
+        urgentes = [_proc_saida(r) for r in cur.fetchall()]
+        cur.execute("SELECT COUNT(*) AS n FROM processos WHERE status='protocolado'" + cond, params)
+        resumo['aguardando'] = cur.fetchone()['n']
+    return jsonify({"resumo": resumo, "urgentes": urgentes})
+
+@app.route("/api/processos", methods=["POST"])
+@login_required
+def api_proc_post():
+    d = request.get_json() or {}
+    if not (d.get("cliente_nome") or "").strip():
+        return jsonify({"erro": "Informe o nome do cliente."}), 400
+    notif = _data_iso(d.get("data_notificacao"))
+    if not notif:
+        return jsonify({"erro": "Informe a data da notificação."}), 400
+    dias  = d.get("prazo_dias") or 30
+    prazo = _data_iso(d.get("prazo_final")) or _calcular_prazo(notif, dias)
+
+    with db(commit=True) as cur:
+        cur.execute("""INSERT INTO processos
+            (tipo,cliente_nome,cliente_cpf,cliente_tel,placa,ait,orgao,infracao,fase,
+             data_notificacao,prazo_dias,prazo_final,valor_servico,status_pgto,obs,
+             user_id,user_nome,empresa_id)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+            (d.get("tipo","multa"), d.get("cliente_nome","").strip(), d.get("cliente_cpf",""),
+             d.get("cliente_tel",""), (d.get("placa","") or "").upper(), d.get("ait",""),
+             d.get("orgao",""), d.get("infracao",""), d.get("fase","defesa_previa"),
+             notif, int(dias), prazo, d.get("valor_servico",""),
+             d.get("status_pgto") or "pendente", d.get("obs",""),
+             str(session.get('user_id') or ""), session.get('user_nome') or "",
+             session.get('empresa_id')))
+        pid = cur.fetchone()['id']
+        _andamento(cur, pid, "Processo cadastrado — %s, prazo até %s" %
+                   (FASES.get(d.get("fase","defesa_previa"), ""), prazo.strftime("%d/%m/%Y") if prazo else "—"))
+    return jsonify({"ok": True, "id": pid})
+
+@app.route("/api/processos/<int:pid>", methods=["GET"])
+@login_required
+def api_proc_um(pid):
+    cond, params = _escopo_proc()
+    with db() as cur:
+        cur.execute("SELECT " + CAMPOS_PROC + " FROM processos WHERE id = %s" + cond,
+                    [pid] + params)
+        row = cur.fetchone()
+        if not row:
+            return jsonify({"erro": "Não encontrado"}), 404
+        proc = _proc_saida(row)
+        cur.execute("""SELECT id, quando, descricao, usuario FROM processo_andamentos
+                       WHERE processo_id = %s ORDER BY id DESC""", (pid,))
+        andamentos = [{"id": a['id'], "quando": a['quando'].strftime('%d/%m/%Y %H:%M'),
+                       "descricao": a['descricao'], "usuario": a['usuario']}
+                      for a in cur.fetchall()]
+    return jsonify({"ok": True, "processo": proc, "andamentos": andamentos})
+
+@app.route("/api/processos/<int:pid>", methods=["PUT"])
+@login_required
+def api_proc_put(pid):
+    d = request.get_json() or {}
+    cond, params = _escopo_proc()
+    notif = _data_iso(d.get("data_notificacao"))
+    dias  = d.get("prazo_dias")
+    prazo = _data_iso(d.get("prazo_final"))
+    if prazo is None and notif and dias:
+        prazo = _calcular_prazo(notif, dias)
+    with db(commit=True) as cur:
+        cur.execute("""UPDATE processos SET
+              tipo = COALESCE(%s,tipo), cliente_nome = COALESCE(%s,cliente_nome),
+              cliente_cpf = COALESCE(%s,cliente_cpf), cliente_tel = COALESCE(%s,cliente_tel),
+              placa = COALESCE(%s,placa), ait = COALESCE(%s,ait), orgao = COALESCE(%s,orgao),
+              infracao = COALESCE(%s,infracao), data_notificacao = COALESCE(%s,data_notificacao),
+              prazo_dias = COALESCE(%s,prazo_dias), prazo_final = COALESCE(%s,prazo_final),
+              valor_servico = COALESCE(%s,valor_servico), status_pgto = COALESCE(%s,status_pgto),
+              obs = COALESCE(%s,obs), atualizado = NOW()
+            WHERE id = %s""" + cond,
+            [d.get("tipo"), d.get("cliente_nome"), d.get("cliente_cpf"), d.get("cliente_tel"),
+             (d.get("placa") or None), d.get("ait"), d.get("orgao"), d.get("infracao"),
+             notif, (int(dias) if dias else None), prazo,
+             d.get("valor_servico"), d.get("status_pgto"), d.get("obs"), pid] + params)
+        if cur.rowcount == 0:
+            return jsonify({"erro": "Não encontrado"}), 404
+        _andamento(cur, pid, "Dados do processo atualizados")
+    return jsonify({"ok": True})
+
+@app.route("/api/processos/<int:pid>/protocolar", methods=["POST"])
+@login_required
+def api_proc_protocolar(pid):
+    """Registra o protocolo: o processo sai do alerta de prazo."""
+    d = request.get_json() or {}
+    protocolo = (d.get("protocolo") or "").strip()
+    quando    = _data_iso(d.get("data_protocolo")) or date.today()
+    if not protocolo:
+        return jsonify({"erro": "Informe o número do protocolo."}), 400
+    cond, params = _escopo_proc()
+    with db(commit=True) as cur:
+        cur.execute("""UPDATE processos SET protocolo=%s, data_protocolo=%s,
+                       status='protocolado', atualizado=NOW()
+                       WHERE id=%s""" + cond, [protocolo, quando, pid] + params)
+        if cur.rowcount == 0:
+            return jsonify({"erro": "Não encontrado"}), 404
+        _andamento(cur, pid, "Protocolado em %s sob nº %s" %
+                   (quando.strftime("%d/%m/%Y"), protocolo))
+    return jsonify({"ok": True})
+
+@app.route("/api/processos/<int:pid>/resultado", methods=["POST"])
+@login_required
+def api_proc_resultado(pid):
+    """Registra o julgamento. Se indeferido, pode abrir a fase seguinte."""
+    d = request.get_json() or {}
+    novo = d.get("status")
+    if novo not in ('deferido', 'indeferido', 'arquivado'):
+        return jsonify({"erro": "Resultado inválido."}), 400
+    cond, params = _escopo_proc()
+    with db(commit=True) as cur:
+        cur.execute("SELECT fase FROM processos WHERE id=%s" + cond, [pid] + params)
+        row = cur.fetchone()
+        if not row:
+            return jsonify({"erro": "Não encontrado"}), 404
+        fase_atual = row['fase']
+
+        cur.execute("""UPDATE processos SET status=%s, resultado=COALESCE(%s,resultado),
+                       atualizado=NOW() WHERE id=%s""" + cond,
+                    [novo, d.get("resultado"), pid] + params)
+        _andamento(cur, pid, "%s em %s — %s" % (STATUS[novo], FASES.get(fase_atual, fase_atual),
+                                                d.get("resultado") or "sem observação"))
+
+        # Indeferido + pedido de avanço -> abre a próxima instância
+        if novo == 'indeferido' and d.get("avancar"):
+            i = ORDEM_FASES.index(fase_atual) if fase_atual in ORDEM_FASES else -1
+            if i < 0 or i + 1 >= len(ORDEM_FASES):
+                return jsonify({"ok": True, "aviso": "Não há instância seguinte nesta esfera."})
+            prox   = ORDEM_FASES[i + 1]
+            notif  = _data_iso(d.get("data_notificacao")) or date.today()
+            dias   = int(d.get("prazo_dias") or 30)
+            prazo  = _calcular_prazo(notif, dias)
+            cur.execute("""UPDATE processos SET fase=%s, status='a_protocolar',
+                           data_notificacao=%s, prazo_dias=%s, prazo_final=%s,
+                           protocolo='', data_protocolo=NULL, atualizado=NOW()
+                           WHERE id=%s""" + cond, [prox, notif, dias, prazo, pid] + params)
+            _andamento(cur, pid, "Avançou para %s — novo prazo até %s" %
+                       (FASES[prox], prazo.strftime("%d/%m/%Y")))
+    return jsonify({"ok": True})
+
+@app.route("/api/processos/<int:pid>/andamentos", methods=["POST"])
+@login_required
+def api_proc_andamento(pid):
+    d = request.get_json() or {}
+    texto = (d.get("descricao") or "").strip()
+    if not texto:
+        return jsonify({"erro": "Escreva o andamento."}), 400
+    cond, params = _escopo_proc()
+    with db(commit=True) as cur:
+        cur.execute("SELECT 1 FROM processos WHERE id=%s" + cond, [pid] + params)
+        if not cur.fetchone():
+            return jsonify({"erro": "Não encontrado"}), 404
+        _andamento(cur, pid, texto)
+    return jsonify({"ok": True})
+
+@app.route("/api/processos/<int:pid>", methods=["DELETE"])
+@login_required
+def api_proc_del(pid):
+    cond, params = _escopo_proc()
+    with db(commit=True) as cur:
+        cur.execute("DELETE FROM processos WHERE id=%s" + cond, [pid] + params)
+        if cur.rowcount == 0:
+            return jsonify({"erro": "Não encontrado"}), 404
+    return jsonify({"ok": True})
+
+# ── ALERTA DIÁRIO DE PRAZOS (Telegram) ────────────────────────
+def _telegram(texto):
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        return False, "Telegram não configurado (falta TELEGRAM_TOKEN ou TELEGRAM_CHAT_ID)."
+    url = "https://api.telegram.org/bot%s/sendMessage" % TELEGRAM_TOKEN
+    corpo = json.dumps({"chat_id": TELEGRAM_CHAT_ID, "text": texto,
+                        "parse_mode": "HTML", "disable_web_page_preview": True}).encode()
+    req = urllib.request.Request(url, data=corpo, method="POST",
+                                 headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            r.read()
+        return True, "enviado"
+    except Exception as e:
+        return False, "Falha ao enviar no Telegram: %s" % e
+
+def _monta_alerta():
+    with db() as cur:
+        cur.execute("""SELECT id, cliente_nome, placa, ait, tipo, fase, prazo_final,
+                              (prazo_final - CURRENT_DATE) AS dias
+                       FROM processos
+                       WHERE status = 'a_protocolar' AND prazo_final IS NOT NULL
+                         AND prazo_final <= CURRENT_DATE + 7
+                       ORDER BY prazo_final ASC""")
+        linhas = [dict(r) for r in cur.fetchall()]
+    if not linhas:
+        return None, 0
+
+    grupos = {"🔴 VENCIDOS": [], "🟠 VENCE HOJE": [], "🟡 PRÓXIMOS 3 DIAS": [], "🔵 ESTA SEMANA": []}
+    for r in linhas:
+        dias = r['dias']
+        if   dias <  0: g = "🔴 VENCIDOS"
+        elif dias == 0: g = "🟠 VENCE HOJE"
+        elif dias <= 3: g = "🟡 PRÓXIMOS 3 DIAS"
+        else:           g = "🔵 ESTA SEMANA"
+        ident = " · ".join(x for x in [r['placa'], ("AIT " + r['ait']) if r['ait'] else ""] if x)
+        quando = r['prazo_final'].strftime("%d/%m")
+        if   dias <  0: obs = "venceu há %d dia(s)" % abs(dias)
+        elif dias == 0: obs = "vence HOJE"
+        else:           obs = "faltam %d dia(s)" % dias
+        grupos[g].append("• <b>%s</b>%s\n   %s — %s (%s)" % (
+            r['cliente_nome'], (" — " + ident) if ident else "",
+            FASES.get(r['fase'], r['fase']), quando, obs))
+
+    partes = ["<b>⚖️ PRAZOS DE RECURSO</b>", date.today().strftime("%d/%m/%Y"), ""]
+    for titulo, itens in grupos.items():
+        if itens:
+            partes.append("<b>%s (%d)</b>" % (titulo, len(itens)))
+            partes.extend(itens)
+            partes.append("")
+    return "\n".join(partes).strip(), len(linhas)
+
+@app.route("/api/alerta-prazos", methods=["GET", "POST"])
+def api_alerta_prazos():
+    """Disparado por um agendador diário. Protegido por chave."""
+    if ALERTA_CHAVE:
+        if (request.args.get("chave") or "") != ALERTA_CHAVE:
+            return jsonify({"erro": "Chave inválida"}), 403
+    elif 'user_id' not in session:
+        return jsonify({"erro": "Não autorizado"}), 401
+
+    texto, quantos = _monta_alerta()
+    if not texto:
+        return jsonify({"ok": True, "enviado": False, "motivo": "Nenhum prazo nos próximos 7 dias."})
+    ok, detalhe = _telegram(texto)
+    return jsonify({"ok": ok, "enviado": ok, "processos": quantos, "detalhe": detalhe})
+
+@app.route("/api/alerta-teste", methods=["POST"])
+@login_required
+def api_alerta_teste():
+    """Botão 'testar alerta' dentro do sistema."""
+    if not so_admin():
+        return jsonify({"erro": "Sem permissão"}), 403
+    texto, quantos = _monta_alerta()
+    if not texto:
+        texto, quantos = "<b>⚖️ Teste do alerta de prazos</b>\nNenhum prazo vencendo nos próximos 7 dias.", 0
+    ok, detalhe = _telegram(texto)
+    return jsonify({"ok": ok, "processos": quantos, "detalhe": detalhe})
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
