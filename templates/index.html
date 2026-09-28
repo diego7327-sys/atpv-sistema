@@ -1453,7 +1453,10 @@ function abrirNivel(nome){
     'Celular: '+(cel||'<span style="color:var(--red)">não preenchido</span>')+'<br>'+
     'E-mail: '+(email||'<span style="color:var(--red)">não preenchido</span>');
   var sel=document.getElementById('niv-escolha');
-  try{ sel.value=localStorage.getItem('nivel_assin')||'selfie'; }catch(e){ sel.value='selfie'; }
+  // Chave nova de propósito: a escolha guardada antes da selfie virar padrão
+  // é descartada, para o navegador não continuar pedindo foto do documento.
+  try{ sel.value=localStorage.getItem('nivel_assin_v2')||'selfie'; }catch(e){ sel.value='selfie'; }
+  if(!sel.value) sel.value='selfie';
   avaliarNivel();
   document.getElementById('modal-nivel').classList.add('open');
 }
@@ -1508,7 +1511,7 @@ function avaliarNivel(){
 
 function confirmarEnvio(){
   var nivel=document.getElementById('niv-escolha').value;
-  try{ localStorage.setItem('nivel_assin', nivel); }catch(e){}
+  try{ localStorage.setItem('nivel_assin_v2', nivel); localStorage.removeItem('nivel_assin'); }catch(e){}
   fecharNivel();
   dispararAssinatura(nivel);
 }
