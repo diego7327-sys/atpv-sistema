@@ -2002,6 +2002,9 @@ function carregarAssinaturaArquivo(input){
       try{
         var d=cx.getImageData(0,0,cv.width,cv.height), p=d.data;
         for(var i=0;i<p.length;i+=4){
+          // Pixel já transparente (imagem sem fundo) continua transparente.
+          // Sem isso ele entraria como preto e a imagem viraria um bloco cheio.
+          if(p[i+3]<24){ p[i+3]=0; continue; }
           var lum=p[i]*0.299+p[i+1]*0.587+p[i+2]*0.114;
           if(lum>170){ p[i+3]=0; }                       // fundo claro vira transparente
           else { p[i]=15; p[i+1]=20; p[i+2]=75;          // traço em azul-escuro
