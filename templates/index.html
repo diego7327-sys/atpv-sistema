@@ -154,6 +154,57 @@ tr:hover td{background:var(--surf2)}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--bord);border-radius:3px}
 @media(max-width:900px){.app{grid-template-columns:1fr}.modbtn{padding:12px 13px;font-size:12px}.left{max-height:none;position:static;border-right:none;border-bottom:1px solid var(--bord)}.g2,.g3{grid-template-columns:1fr}}
+/* ── AGENDA DE PRAZOS ── */
+.ag-wrap{display:grid;grid-template-columns:380px 1fr;gap:16px;align-items:start}
+@media(max-width:1000px){.ag-wrap{grid-template-columns:1fr}}
+.ag-card{background:var(--surf);border:1px solid var(--bord);border-radius:12px;padding:16px}
+.ag-drop{border:2px dashed rgba(0,153,255,.45);border-radius:9px;padding:12px;text-align:center;background:rgba(0,153,255,.06);cursor:pointer;font-size:12px;color:var(--acc2);line-height:1.5}
+.ag-drop.on{background:rgba(0,153,255,.15);border-color:var(--acc2)}
+.ag-fs{border:1px solid var(--bord);border-radius:8px;padding:4px 10px 10px;margin:8px 0}
+.ag-fs legend{font-size:11px;color:var(--mut);padding:0 4px}
+.ag-ta{width:100%;min-height:56px;background:var(--surf);border:1px solid var(--bord);border-radius:7px;padding:8px 11px;font-size:13px;color:var(--txt);font-family:var(--font);resize:vertical}
+.ag-note{font-size:11px;color:var(--mut);margin-top:10px;line-height:1.5}
+.ag-al{margin-top:8px;padding:9px 10px;border-radius:7px;font-size:12px;line-height:1.5}
+.ag-al.ok{background:rgba(0,212,170,.1);color:var(--acc);border:1px solid rgba(0,212,170,.3)}
+.ag-al.warn{background:rgba(255,165,2,.1);color:var(--warn);border:1px solid rgba(255,165,2,.3)}
+.ag-al.bad{background:rgba(255,71,87,.1);color:var(--red);border:1px solid rgba(255,71,87,.3)}
+.ag-al button{padding:4px 8px;margin:4px 4px 0 0;background:var(--surf2);border:1px solid currentColor;color:inherit;font-size:11px;border-radius:5px;cursor:pointer;font-family:var(--font)}
+.ag-calhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.ag-calhead b{font-size:15px;text-transform:capitalize}
+.ag-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.ag-dow{text-align:center;font-size:10px;color:var(--mut);padding:4px 0;font-weight:600;text-transform:uppercase}
+.ag-day{min-height:58px;border:1px solid var(--bord);border-radius:7px;padding:5px;cursor:pointer;background:var(--surf2);display:flex;flex-direction:column;justify-content:space-between}
+.ag-day:hover{border-color:var(--acc2)}
+.ag-day .n{font-size:12px;font-weight:600}
+.ag-day .c{font-size:12px;font-weight:700;border-radius:5px;padding:1px 6px;align-self:flex-end;font-family:var(--mono)}
+.ag-day.g .c{background:rgba(0,212,170,.18);color:var(--acc)}
+.ag-day.y{border-color:rgba(255,165,2,.5)}.ag-day.y .c{background:rgba(255,165,2,.18);color:var(--warn)}
+.ag-day.r{border-color:rgba(255,71,87,.6)}.ag-day.r .c{background:rgba(255,71,87,.2);color:var(--red)}
+.ag-day.off{background:#0a0c10;color:#3a404c;cursor:not-allowed;border-color:#15181e}
+.ag-day.off .h{font-size:9px;line-height:1.1;color:#4b5260}
+.ag-day.past{opacity:.45}
+.ag-day.sel{outline:2px solid var(--acc2);outline-offset:1px}
+.ag-day.today .n{background:var(--acc);color:#000;border-radius:4px;padding:0 4px;align-self:flex-start}
+.ag-day.empty{visibility:hidden}
+.ag-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--mut);margin-top:10px}
+.ag-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+.ag-tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.ag-tabs button{background:var(--surf2);color:var(--mut);border:1px solid var(--bord);border-radius:7px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font)}
+.ag-tabs button.on{background:var(--acc);color:#000;border-color:var(--acc)}
+.ag-sec{font-weight:600;margin:14px 0 6px;font-size:13px}
+.ag-sec.bad{color:var(--red)}
+.ag-tag{font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(0,153,255,.12);color:var(--acc2);white-space:nowrap}
+.ag-small{font-size:11px;color:var(--mut)}
+.ag-wa{background:#25d366;color:#04230f;font-weight:600;padding:5px 9px;font-size:11px;text-decoration:none;border-radius:6px;display:inline-block;margin:2px 4px 2px 0;white-space:nowrap}
+.ag-wa.dis{background:var(--surf2);color:var(--mut);pointer-events:none}
+.ag-bt{padding:5px 9px;font-size:11px;margin:2px 4px 2px 0;white-space:nowrap;border-radius:6px;cursor:pointer;font-family:var(--font);border:1px solid var(--bord);background:var(--surf2);color:var(--txt)}
+.ag-bt.ok{border-color:rgba(0,212,170,.4);color:var(--acc)}
+.ag-bt.del{border-color:rgba(255,71,87,.3);color:var(--red)}
+#ag-painel tr.feito td{opacity:.45}
+#ag-painel tr.atras td:first-child{box-shadow:inset 3px 0 0 var(--red)}
+.ag-reag{background:var(--surf2);border:1px solid var(--bord);border-radius:8px;padding:10px;margin:6px 0;font-size:12px}
+.ag-reag input{background:var(--surf);border:1px solid var(--bord);border-radius:6px;padding:5px 8px;color:var(--txt);font-family:var(--font);color-scheme:dark}
+#ag_data{color-scheme:dark}
 </style>
 </head>
 <body>
@@ -179,6 +230,9 @@ tr:hover td{background:var(--surf2)}
   <button class="modbtn" data-mod="recursos" onclick="modulo('recursos')">
     <span class="mod-ico">⚖</span> Recursos de Multa e Suspensão de CNH
     <span id="badge-prazos" class="badge-alerta" style="display:none">0</span></button>
+  <button class="modbtn" data-mod="agenda" onclick="modulo('agenda')">
+    <span class="mod-ico">📅</span> Agenda de Prazos
+    <span id="badge-agenda" class="badge-alerta" style="display:none">0</span></button>
   <button class="modbtn" data-mod="relatorios" onclick="modulo('relatorios')">
     <span class="mod-ico">📊</span> Relatórios</button>
   <button class="modbtn" data-mod="config" onclick="modulo('config')">
@@ -612,6 +666,86 @@ tr:hover td{background:var(--surf2)}
     </div>
   </div>
 
+  <!-- AGENDA DE PRAZOS -->
+  <div id="fc-agenda" class="ftc fields">
+    <div class="ag-wrap">
+      <!-- formulário -->
+      <div class="ag-card">
+        <div class="fb-title">📅 Novo lembrete</div>
+        <div class="ag-drop" id="ag-drop" onclick="document.getElementById('ag-arq').click()">📄 <b>Arraste aqui o PDF da OS do BitDesp</b><br>ou clique para escolher — preenche os campos sozinho</div>
+        <input type="file" id="ag-arq" accept="application/pdf" style="display:none" onchange="agImportar(this.files[0]);this.value=''">
+        <div id="ag-imp"></div>
+        <div class="g2" style="margin-top:10px">
+          <div class="fg"><label>Nº OS (BitDesp)</label><input id="ag_os" placeholder="22440" onblur="agChecaOS(this.value)"></div>
+          <div class="fg"><label>Tipo</label>
+            <select id="ag_tipo">
+              <option>Defesa prévia – suspensão CNH</option><option>Defesa suspensão CNH – JARI</option><option>Defesa suspensão CNH – CETRAN</option>
+              <option>Multa – defesa prévia</option><option>Multa – JARI</option><option>Multa – CETRAN</option>
+              <option>Cassação</option><option>Transferência</option><option>Outro</option>
+            </select></div>
+        </div>
+        <div class="fg"><label>Cliente (proprietário)</label><input id="ag_cli" placeholder="Nome do cliente"></div>
+        <div class="g2">
+          <div class="fg"><label>WhatsApp do cliente</label><input id="ag_tel" placeholder="(62) 9xxxx-xxxx"></div>
+          <div class="fg"><label>Nº do processo</label><input id="ag_proc" placeholder="242500000345896"></div>
+        </div>
+        <fieldset class="ag-fs"><legend>Responsável / despachante parceiro (se houver)</legend>
+          <div class="g2">
+            <div class="fg"><label>Nome</label><input id="ag_resp" placeholder="Ex.: Cida Despachante" oninput="agAutoQuem()"></div>
+            <div class="fg"><label>WhatsApp</label><input id="ag_fresp" placeholder="(62) 9xxxx-xxxx"></div>
+          </div>
+        </fieldset>
+        <div class="fg"><label>O que fazer nesse dia</label>
+          <select id="ag_acao">
+            <option>Olhar andamento do processo</option><option>Informar protocolo ao cliente</option>
+            <option>Vencimento de prazo</option><option>Cobrar documento do cliente</option>
+          </select></div>
+        <div class="fg"><label>Prazo sugerido a partir de hoje</label>
+          <div class="g2">
+            <select id="ag_mais"><option value="15">+15 dias</option><option value="30" selected>+30 dias</option><option value="45">+45 dias</option><option value="60">+60 dias</option><option value="90">+90 dias</option></select>
+            <button class="btn-sec" style="padding:8px" onclick="agSugerir()">Sugerir dia livre</button>
+          </div></div>
+        <div class="fg"><label>Data do lembrete</label><input id="ag_data" type="date" onchange="agValidar(this.value,true)"></div>
+        <div id="ag-aviso"></div>
+        <div class="fg"><label>Observação</label><textarea id="ag_obs" class="ag-ta" placeholder="Ex.: defesa protocolada 25/11 — tentar ganhar na JARI"></textarea></div>
+        <div class="fg"><label>Quem avisar nesse dia</label>
+          <select id="ag_quem"><option value="cli">Cliente</option><option value="resp">Responsável (despachante parceiro)</option><option value="ambos">Os dois</option><option value="nin">Ninguém — só conferir</option></select></div>
+        <input type="hidden" id="ag_id">
+        <div style="margin-top:14px;display:flex;gap:8px">
+          <button class="btn-main" id="ag-salvar" onclick="agSalvar()">Salvar lembrete</button>
+          <button class="btn-sec" id="ag-cancelar" style="display:none" onclick="agLimparForm()">Cancelar edição</button>
+        </div>
+        <p class="ag-note">Sábado, domingo e feriado ficam bloqueados. Se cair num deles, o sistema mostra o dia útil anterior e o próximo, com quantos processos cada um já tem.</p>
+      </div>
+
+      <!-- calendário + listas -->
+      <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+        <div class="ag-card">
+          <div class="ag-calhead">
+            <button class="btn-sec" style="padding:6px 12px" onclick="agMes(-1)">◀</button>
+            <b id="ag-mestit"></b>
+            <button class="btn-sec" style="padding:6px 12px" onclick="agMes(1)">▶</button>
+          </div>
+          <div class="ag-cal" id="ag-cal"></div>
+          <div class="ag-legend">
+            <span><i style="background:rgba(0,212,170,.2);border:1px solid var(--acc)"></i>Até 4 (tranquilo)</span>
+            <span><i style="background:rgba(255,165,2,.2);border:1px solid var(--warn)"></i>5 a 9 (cheio)</span>
+            <span><i style="background:rgba(255,71,87,.2);border:1px solid var(--red)"></i>10+ (lotado)</span>
+            <span><i style="background:#0a0c10"></i>Fim de semana / feriado</span>
+          </div>
+        </div>
+        <div class="ag-card">
+          <div class="ag-tabs">
+            <button id="ag-t1" class="on" onclick="agAba(1)">Hoje</button>
+            <button id="ag-t2" onclick="agAba(2)">Dia selecionado</button>
+            <button id="ag-t3" onclick="agAba(3)">Próximos 15 dias</button>
+          </div>
+          <div id="ag-painel">Carregando...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- CONFIG -->
   <div id="fc-config" class="ftc fields">
     <div class="fb">
@@ -709,6 +843,7 @@ tr:hover td{background:var(--surf2)}
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
 <!-- MODAL: CONFIRMAR ENVIO PARA ASSINATURA -->
 <div class="modal-overlay" id="modal-nivel">
@@ -972,6 +1107,7 @@ function modulo(m){
   var alvo=document.getElementById('fc-'+m);
   if(alvo) alvo.classList.add('active');
   if(m==='recursos')   carregarRecursos();
+  if(m==='agenda')     agCarregar();
   if(m==='relatorios'){ carregarRelatorio(); relTab(relTabAtual||'atendimentos'); }
 }
 
@@ -2797,12 +2933,324 @@ function testarAlertaTelegram(){
   }).catch(function(){ showAlert('Falha ao enviar.','err'); });
 }
 
+// ═══ AGENDA DE PRAZOS ═════════════════════════════════════════
+var AG = {hoje:null, cont:{}, mes:null, sel:null, aba:1, reagId:null, itens:{}, painel:null};
+var AG_FONE = '(62) 99110-1506', AG_AMARELO = 5, AG_VERMELHO = 10;
+var AG_DIAS = ['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
+function agPad(n){ return String(n).padStart(2,'0'); }
+function agIso(d){ return d.getFullYear()+'-'+agPad(d.getMonth()+1)+'-'+agPad(d.getDate()); }
+function agBr(s){ var p=s.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
+function agParse(s){ var p=s.split('-').map(Number); return new Date(p[0],p[1]-1,p[2]); }
+function agAdd(d,n){ var x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function agEsc(t){ return String(t==null?'':t).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+function agHojeD(){ return agParse(AG.hoje || agIso(new Date())); }
+
+// feriados (mesma regra do servidor)
+function agPascoa(y){var a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;return new Date(y,mo-1,da);}
+var AG_FER = {};
+function agFeriados(y){
+  if(AG_FER[y]) return AG_FER[y];
+  var f={}; [['01-01','Confraternização'],['04-21','Tiradentes'],['05-01','Dia do Trabalho'],['07-26',"Sant'Ana (Anápolis)"],['07-31','Aniv. Anápolis'],
+    ['09-07','Independência'],['10-12','N. Sra. Aparecida'],['11-02','Finados'],['11-15','Proclamação'],['11-20','Consciência Negra'],['12-25','Natal']]
+    .forEach(function(x){ f[y+'-'+x[0]]=x[1]; });
+  var p=agPascoa(y);
+  f[agIso(agAdd(p,-48))]='Carnaval'; f[agIso(agAdd(p,-47))]='Carnaval';
+  f[agIso(agAdd(p,-2))]='Sexta-feira Santa'; f[agIso(agAdd(p,60))]='Corpus Christi';
+  return AG_FER[y]=f;
+}
+function agBloqueio(s){ var d=agParse(s), w=d.getDay(); if(w===6) return 'Sábado'; if(w===0) return 'Domingo'; return agFeriados(d.getFullYear())[s]||null; }
+function agUtil(s){ return !agBloqueio(s); }
+function agQtd(s){ return AG.cont[s]||0; }
+function agCor(n){ return n>=AG_VERMELHO?'r':n>=AG_AMARELO?'y':'g'; }
+
+function agApi(url, metodo, corpo){
+  var o={method:metodo||'GET',headers:{'Content-Type':'application/json'}};
+  if(corpo) o.body=JSON.stringify(corpo);
+  return fetch(url,o).then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error(j.erro||'Erro'); return j; }); });
+}
+
+// ── carga ──
+function agCarregar(){
+  return Promise.all([agApi('/api/agenda/contagem'), agApi('/api/agenda/painel')]).then(function(res){
+    AG.hoje = res[0].hoje; AG.cont = res[0].contagem||{}; AG.painel = res[1];
+    if(!AG.mes){ var h=agHojeD(); AG.mes=new Date(h.getFullYear(),h.getMonth(),1); }
+    var dt=document.getElementById('ag_data'); if(dt) dt.min=AG.hoje;
+    agBadgeSet(res[1]); agDesenha();
+  }).catch(function(e){ showAlert('Agenda: '+e.message,'err'); });
+}
+function agBadgeSet(p){
+  var b=document.getElementById('badge-agenda'); if(!b||!p) return;
+  var n=(p.pendentes||0)+(p.n_atrasados||0);
+  b.textContent=n; b.style.display=n>0?'inline-block':'none';
+  b.style.background=(p.n_atrasados||0)>0?'var(--red)':'var(--warn)';
+}
+function agBadge(){ agApi('/api/agenda/painel').then(agBadgeSet).catch(function(){}); }
+
+// ── calendário ──
+function agMes(n){ AG.mes=new Date(AG.mes.getFullYear(),AG.mes.getMonth()+n,1); agDesenha(); }
+function agDesenha(){
+  var m=AG.mes; if(!m) return;
+  document.getElementById('ag-mestit').textContent=m.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+  var h=''; ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].forEach(function(x){ h+='<div class="ag-dow">'+x+'</div>'; });
+  var ini=m.getDay(), fim=new Date(m.getFullYear(),m.getMonth()+1,0).getDate();
+  for(var i=0;i<ini;i++) h+='<div class="ag-day empty"></div>';
+  for(var d=1; d<=fim; d++){
+    var s=agIso(new Date(m.getFullYear(),m.getMonth(),d)), b=agBloqueio(s), n=agQtd(s);
+    var cls=['ag-day', b?'off':agCor(n), s<AG.hoje?'past':'', s===AG.sel?'sel':'', s===AG.hoje?'today':''].join(' ');
+    h+='<div class="'+cls+'" onclick="agClicaDia(\''+s+'\')" title="'+agEsc(b||(n+' processo(s)'))+'"><span class="n">'+d+'</span>'+
+       (b?'<span class="h">'+(b==='Sábado'||b==='Domingo'?'':agEsc(b))+'</span>':(n?'<span class="c">'+n+'</span>':''))+'</div>';
+  }
+  document.getElementById('ag-cal').innerHTML=h;
+  agPainel();
+}
+function agClicaDia(s){
+  if(agBloqueio(s)){ agValidar(s,true); return; }
+  var d=agParse(s); AG.mes=new Date(d.getFullYear(),d.getMonth(),1);
+  AG.sel=s; document.getElementById('ag_data').value=s;
+  agValidar(s,false); agAba(2);
+}
+
+// ── validação de data ──
+function agVizinho(s,dir){ var d=agParse(s); for(var i=0;i<30;i++){ d=agAdd(d,dir); var x=agIso(d); if(agUtil(x)) return x; } }
+function agBtnDia(s,seta,acao){ var w=AG_DIAS[agParse(s).getDay()]; return '<button onclick="'+acao+'(\''+s+'\')">'+(seta<0?'◀ ':'')+w+' '+agBr(s)+' · '+agQtd(s)+' proc.'+(seta>0?' ▶':'')+'</button>'; }
+function agValidar(s, mover){
+  var av=document.getElementById('ag-aviso'), bt=document.getElementById('ag-salvar');
+  if(!s){ av.innerHTML=''; return; }
+  var d=agParse(s), b=agBloqueio(s);
+  if(mover){ AG.mes=new Date(d.getFullYear(),d.getMonth(),1); }
+  var editando=!!document.getElementById('ag_id').value;
+  if(s<AG.hoje && !editando){ av.innerHTML='<div class="ag-al bad">Data no passado.</div>'; bt.disabled=true; if(mover) agDesenha(); return; }
+  if(b){
+    var a=agVizinho(s,-1), p=agVizinho(s,1);
+    av.innerHTML='<div class="ag-al bad"><b>'+agBr(s)+' é '+agEsc(b)+'.</b> Não dá pra marcar. Escolha:<br>'+
+      (a>=AG.hoje?agBtnDia(a,-1,'agClicaDia'):'')+agBtnDia(p,1,'agClicaDia')+'</div>';
+    bt.disabled=true; AG.sel=null; document.getElementById('ag_data').value='';
+  } else {
+    AG.sel=s; var n=agQtd(s), c=agCor(n);
+    var txt = c==='g'?'Tranquilo: '+n+' processo(s) nesse dia.':c==='y'?'Atenção: já tem '+n+' processos nesse dia.':'Lotado: '+n+' processos. Melhor escolher outro dia.';
+    av.innerHTML='<div class="ag-al '+(c==='g'?'ok':c==='y'?'warn':'bad')+'"><b>'+AG_DIAS[d.getDay()]+', '+agBr(s)+'</b> — '+txt+'</div>';
+    bt.disabled=false;
+  }
+  if(mover) agDesenha();
+}
+function agProxLivre(n){ var d=agAdd(agHojeD(),n); for(var i=0;i<60;i++){ var s=agIso(agAdd(d,i)); if(agUtil(s)&&agQtd(s)<AG_AMARELO) return s; } return null; }
+function agSugerir(){
+  var s=agProxLivre(+document.getElementById('ag_mais').value); if(!s) return;
+  var d=agParse(s); AG.mes=new Date(d.getFullYear(),d.getMonth(),1); agClicaDia(s);
+}
+
+// ── formulário ──
+function agG(id){ return document.getElementById(id); }
+function agAutoQuem(){ agG('ag_quem').value = agG('ag_resp').value.trim() ? 'resp' : 'cli'; }
+function agLimparForm(){
+  ['ag_id','ag_os','ag_cli','ag_tel','ag_proc','ag_resp','ag_fresp','ag_obs','ag_data'].forEach(function(i){ agG(i).value=''; });
+  agG('ag_quem').value='cli'; agG('ag-imp').innerHTML=''; agG('ag-aviso').innerHTML='';
+  agG('ag-salvar').textContent='Salvar lembrete'; agG('ag-salvar').disabled=false; agG('ag-cancelar').style.display='none';
+}
+function agSalvar(){
+  var id=agG('ag_id').value, data=agG('ag_data').value;
+  if(!agG('ag_cli').value.trim()){ showAlert('Preencha o cliente.','err'); return; }
+  if(!data){ showAlert('Escolha a data do lembrete.','err'); return; }
+  var dados={os:agG('ag_os').value, tipo:agG('ag_tipo').value, cliente_nome:agG('ag_cli').value, cliente_tel:agG('ag_tel').value,
+    processo:agG('ag_proc').value, resp_nome:agG('ag_resp').value, resp_tel:agG('ag_fresp').value, quem:agG('ag_quem').value,
+    acao:agG('ag_acao').value, data:data, obs:agG('ag_obs').value};
+  agApi('/api/agenda'+(id?'/'+id:''), id?'PUT':'POST', dados).then(function(){
+    showAlert(id?'✓ Lembrete atualizado!':'✓ Lembrete salvo para '+agBr(data)+'!','ok');
+    AG.sel=data; agLimparForm(); AG.aba=2; return agCarregar();
+  }).catch(function(e){ showAlert(e.message,'err'); });
+}
+function agEditar(id){
+  var r=AG.itens[id]; if(!r) return;
+  agG('ag_id').value=r.id; agG('ag_os').value=r.os; agG('ag_tipo').value=r.tipo; agG('ag_cli').value=r.cliente_nome;
+  agG('ag_tel').value=r.cliente_tel; agG('ag_proc').value=r.processo; agG('ag_resp').value=r.resp_nome; agG('ag_fresp').value=r.resp_tel;
+  agG('ag_quem').value=r.quem; agG('ag_acao').value=r.acao; agG('ag_obs').value=r.obs; agG('ag_data').value=r.data;
+  agG('ag-salvar').textContent='Salvar alterações'; agG('ag-cancelar').style.display='inline-block';
+  agValidar(r.data,true); window.scrollTo({top:0,behavior:'smooth'});
+}
+function agChecaOS(os){
+  os=(os||'').trim(); if(!os) return Promise.resolve([]);
+  return agApi('/api/agenda/os/'+encodeURIComponent(os)).then(function(d){
+    var l=d.itens||[]; var box=agG('ag-imp');
+    var id=agG('ag_id').value;
+    l=l.filter(function(r){ return String(r.id)!==String(id); });
+    var old=box.querySelector('.ag-dup'); if(old) old.remove();
+    if(l.length) box.insertAdjacentHTML('beforeend','<div class="ag-al warn ag-dup">⚠ Essa OS já tem lembrete em: <b>'+l.map(function(r){return agBr(r.data);}).join(', ')+'</b></div>');
+    return l;
+  }).catch(function(){ return []; });
+}
+
+// ── ações ──
+function agFeito(id,val){ agApi('/api/agenda/'+id+'/feito','POST',{feito:val}).then(agCarregar).catch(function(e){ showAlert(e.message,'err'); }); }
+function agExcluir(id){
+  var r=AG.itens[id]; if(!confirm('Excluir o lembrete de '+(r?r.cliente_nome:'')+'?')) return;
+  agApi('/api/agenda/'+id,'DELETE').then(agCarregar).catch(function(e){ showAlert(e.message,'err'); });
+}
+function agReagendar(id){ AG.reagId = AG.reagId===id ? null : id; agPainel(); }
+function agBoxReag(r){
+  return '<tr><td colspan="7"><div class="ag-reag"><b>Reagendar OS '+agEsc(r.os||'—')+'</b> — nova data: <input type="date" id="ag_rg" min="'+AG.hoje+'" onchange="agChecaReag(this.value)"> '+
+    '<button class="ag-bt" onclick="agSugReag(7)">+7 dias</button><button class="ag-bt" onclick="agSugReag(15)">+15</button><button class="ag-bt" onclick="agSugReag(30)">+30</button>'+
+    '<div id="ag_rg_av"></div></div></td></tr>';
+}
+function agSugReag(n){ var s=agProxLivre(n); if(s){ agG('ag_rg').value=s; agChecaReag(s); } }
+function agPegaReag(s){ agG('ag_rg').value=s; agChecaReag(s); }
+function agChecaReag(s){
+  var av=agG('ag_rg_av'); if(!s) return;
+  if(s<AG.hoje){ av.innerHTML='<div class="ag-al bad">Data no passado.</div>'; return; }
+  var b=agBloqueio(s);
+  if(b){ var a=agVizinho(s,-1), p=agVizinho(s,1);
+    av.innerHTML='<div class="ag-al bad"><b>'+agBr(s)+' é '+agEsc(b)+'.</b> Escolha:<br>'+(a>=AG.hoje?agBtnDia(a,-1,'agPegaReag'):'')+agBtnDia(p,1,'agPegaReag')+'</div>'; return; }
+  var n=agQtd(s), c=agCor(n);
+  av.innerHTML='<div class="ag-al '+(c==='g'?'ok':c==='y'?'warn':'bad')+'">'+AG_DIAS[agParse(s).getDay()]+', '+agBr(s)+' — já tem '+n+' processo(s). <button onclick="agConfReag(\''+s+'\')"><b>Confirmar</b></button></div>';
+}
+function agConfReag(s){
+  var id=AG.reagId;
+  agApi('/api/agenda/'+id,'PUT',{data:s}).then(function(){ AG.reagId=null; showAlert('✓ Reagendado para '+agBr(s),'ok'); return agCarregar(); })
+    .catch(function(e){ showAlert(e.message,'err'); });
+}
+
+// ── mensagens de WhatsApp ──
+function agPrimeiro(n){ n=(n||'').trim().split(/\s+/)[0]||''; return n.charAt(0).toUpperCase()+n.slice(1).toLowerCase(); }
+function agMsgCliente(r){
+  var nome=agPrimeiro(r.cliente_nome), proc=r.processo||'—';
+  if((r.acao||'').indexOf('Informar')===0)
+    return 'Olá, '+nome+'! Aqui é do *Diego Despachante*.\n\nSeu processo ('+r.tipo+') foi protocolado sob o nº *'+proc+'*. Guarde esse número.\n\nVamos acompanhar o andamento e te avisamos de qualquer novidade.\nDúvidas: '+AG_FONE;
+  if((r.acao||'').indexOf('Cobrar')===0)
+    return 'Olá, '+nome+'! Aqui é do *Diego Despachante*.\n\nPara darmos andamento ao seu processo ('+r.tipo+') nº '+proc+', precisamos de um documento seu. Pode nos chamar hoje?\n\n'+AG_FONE;
+  return 'Olá, '+nome+'! Aqui é do *Diego Despachante*.\n\nHoje ('+agBr(AG.hoje)+') estamos verificando o andamento do seu processo *'+r.tipo+'* nº *'+proc+'*.\n\nAssim que tiver novidade, te avisamos por aqui.\nDúvidas: '+AG_FONE;
+}
+function agMsgResp(r){
+  var nome=agPrimeiro(r.resp_nome), proc=r.processo||'—', a=r.acao||'';
+  var fazer = a.indexOf('Informar')===0 ? 'foi protocolado sob o nº *'+proc+'*.' :
+              a.indexOf('Cobrar')===0   ? 'está aguardando documento do cliente para seguir.' :
+              a.indexOf('Vencimento')===0 ? 'tem prazo vencendo hoje ('+agBr(AG.hoje)+'). Estamos acompanhando.' :
+              'está sendo verificado hoje ('+agBr(AG.hoje)+').';
+  return 'Olá, '+nome+'! Aqui é do *Diego Despachante*.\n\nReferente ao seu cliente *'+r.cliente_nome+'*'+(r.os?' — OS '+r.os:'')+':\nO processo *'+r.tipo+'* nº *'+proc+'* '+fazer+'\n\nQualquer novidade te avisamos. '+AG_FONE;
+}
+function agWaLink(tel,txt){
+  var d=(tel||'').replace(/\D/g,''); if(d.length===10||d.length===11) d='55'+d;
+  return d.length>=12 ? 'https://web.whatsapp.com/send?phone='+d+'&text='+encodeURIComponent(txt) : '';
+}
+function agBotoesWA(r){
+  var h='';
+  if(r.quem==='cli'||r.quem==='ambos'){ var u=agWaLink(r.cliente_tel,agMsgCliente(r));
+    h+='<a class="ag-wa '+(u?'':'dis')+'" target="whatsapp" href="'+(u||'#')+'" title="'+(u?'Abre o WhatsApp Web com a mensagem pronta':'Sem WhatsApp do cliente — clique em Editar')+'">WhatsApp cliente</a>'; }
+  if(r.quem==='resp'||r.quem==='ambos'){ var u2=agWaLink(r.resp_tel,agMsgResp(r));
+    h+='<a class="ag-wa '+(u2?'':'dis')+'" target="whatsapp" href="'+(u2||'#')+'" title="'+(u2?'Abre o WhatsApp Web com a mensagem pronta':'Sem WhatsApp do parceiro — clique em Editar')+'">WhatsApp '+agEsc(agPrimeiro(r.resp_nome)||'parceiro')+'</a>'; }
+  return h;
+}
+
+// ── painel (abas) ──
+function agAba(n){
+  AG.aba=n; AG.reagId=null;
+  [1,2,3].forEach(function(i){ agG('ag-t'+i).classList.toggle('on',i===n); });
+  agDesenha();
+}
+function agLinhas(l, comData){
+  l.forEach(function(r){ AG.itens[r.id]=r; });
+  return '<div class="table-wrap"><table><thead><tr>'+(comData?'<th>Data</th>':'')+'<th>OS</th><th>Cliente</th><th>Processo</th><th>Fazer</th><th>Ações</th></tr></thead><tbody>'+
+    l.map(function(r){
+      var at = r.data<AG.hoje && !r.feito;
+      return '<tr class="'+(r.feito?'feito ':'')+(at?'atras':'')+'">'+(comData?'<td>'+agBr(r.data).slice(0,5)+'</td>':'')+
+        '<td>'+agEsc(r.os||'—')+'</td>'+
+        '<td>'+agEsc(r.cliente_nome)+(r.resp_nome?'<br><span class="ag-small">via '+agEsc(r.resp_nome)+'</span>':'')+'</td>'+
+        '<td><span class="ag-tag">'+agEsc(r.tipo)+'</span><br><span style="font-family:var(--mono);font-size:12px">'+agEsc(r.processo||'—')+'</span></td>'+
+        '<td>'+agEsc(r.acao)+(r.obs?'<br><span class="ag-small">'+agEsc(r.obs.split('\n')[0].slice(0,70))+'</span>':'')+
+          (r.feito?'<br><span class="ag-small" style="color:var(--acc)">✓ '+agEsc(r.feito_por||'')+' '+agEsc(r.feito_em||'')+'</span>':'')+'</td>'+
+        '<td style="min-width:200px">'+(r.feito?'':agBotoesWA(r))+
+          '<button class="ag-bt ok" onclick="agFeito('+r.id+','+(!r.feito)+')">'+(r.feito?'↺ Desfazer':'✓ Feito')+'</button>'+
+          '<button class="ag-bt" onclick="agReagendar('+r.id+')">Reagendar</button>'+
+          '<button class="ag-bt" onclick="agEditar('+r.id+')">Editar</button>'+
+          '<button class="ag-bt del" title="Excluir" onclick="agExcluir('+r.id+')">✕</button></td></tr>'+
+        (AG.reagId===r.id?agBoxReag(r):'');
+    }).join('')+'</tbody></table></div>';
+}
+function agPainel(){
+  var p=agG('ag-painel'); if(!p||!AG.hoje) return;
+  if(AG.aba===1){
+    var d=AG.painel||{}, at=d.atrasados||[], h=d.itens_hoje||[];
+    var pend=h.filter(function(r){return !r.feito;}).length;
+    p.innerHTML=(at.length?'<div class="ag-sec bad">⚠ Atrasados ('+at.length+') — ficaram para trás e ninguém marcou como feito</div>'+agLinhas(at,true):'')+
+      '<div class="ag-sec">Hoje — '+AG_DIAS[agHojeD().getDay()]+', '+agBr(AG.hoje)+' ('+pend+' pendente(s) de '+h.length+')</div>'+
+      (agBloqueio(AG.hoje)?'<span class="ag-small">Hoje não é dia útil.</span>':h.length?agLinhas(h,false):'<span class="ag-small">Nada marcado para hoje.</span>')+
+      '<p class="ag-note">“WhatsApp” abre o WhatsApp Web na conversa da pessoa com a mensagem já escrita — é só conferir e apertar Enter. Depois clique em “✓ Feito”. O que não for marcado como feito aparece em Atrasados no dia seguinte.</p>';
+    return;
+  }
+  var de, ate, titulo;
+  if(AG.aba===3){ de=agIso(agAdd(agHojeD(),1)); ate=agIso(agAdd(agHojeD(),15)); titulo='Próximos 15 dias'; }
+  else {
+    if(!AG.sel){ p.innerHTML='<span class="ag-small">Clique num dia do calendário ou escolha uma data no formulário.</span>'; return; }
+    de=ate=AG.sel; titulo=AG_DIAS[agParse(AG.sel).getDay()]+', '+agBr(AG.sel);
+  }
+  var pedido = de+'|'+ate; AG._pedido = pedido;
+  if(!AG.reagId) p.innerHTML='<span class="ag-small">Carregando...</span>';
+  agApi('/api/agenda?de='+de+'&ate='+ate).then(function(r){
+    if(AG._pedido!==pedido) return;
+    var l=r.itens||[];
+    p.innerHTML='<div class="ag-sec">'+titulo+' — '+l.length+' processo(s)</div>'+(l.length?agLinhas(l,AG.aba===3):'<span class="ag-small">Nenhum processo marcado.</span>');
+  }).catch(function(e){ p.innerHTML='<span class="ag-small">'+agEsc(e.message)+'</span>'; });
+}
+
+// ── importar PDF da OS (BitDesp) ──
+function agLinhasPdf(items){
+  var ls=[];
+  items.filter(function(i){return i.str.trim();}).forEach(function(i){
+    var y=i.transform[5], x=i.transform[4], l=null;
+    for(var k=0;k<ls.length;k++){ if(Math.abs(ls[k].y-y)<3){ l=ls[k]; break; } }
+    if(!l){ l={y:y,its:[]}; ls.push(l); } l.its.push({x:x,w:i.width,s:i.str});
+  });
+  ls.sort(function(a,b){return b.y-a.y;});
+  return ls.map(function(l){ l.its.sort(function(a,b){return a.x-b.x;}); var t='',fim=null;
+    l.its.forEach(function(it){ if(fim!==null) t+=(it.x-fim>6)?'\t':(it.x-fim>0.5?' ':''); t+=it.s; fim=it.x+it.w; });
+    return t.replace(/ +/g,' ').trim(); });
+}
+function agParseOS(linhas){
+  var T=linhas.join('\n');
+  function campo(rot){ var m=T.match(new RegExp(rot+'\\s*\\t?([^\\t\\n]*)')); return m?m[1].trim():''; }
+  var os=(T.match(/ORDEM DE SERVI\S*\s*N\S*\s*\t?\s*(\d{3,})/i)||[])[1]||'';
+  var lc=linhas.filter(function(l){return /^Cidade:/.test(l);})[0]||'';
+  var foneCli=((lc.match(/Telefone\(s\):\s*\t?([^\t]*)/)||[])[1]||'').trim();
+  var i0=-1,i1=-1,j0=-1,j1=-1;
+  linhas.forEach(function(l,i){ if(i0<0&&/^OBSERVAC/i.test(l)) i0=i; if(i1<0&&/Autorizo a execu/i.test(l)) i1=i; if(j0<0&&/^Descricao/i.test(l)) j0=i; if(j1<0&&/^Custos/i.test(l)) j1=i; });
+  var obs=(i0>=0?linhas.slice(i0+1,i1>i0?i1:undefined):[]).join('\n').replace(/\t/g,'  ').trim();
+  var desc=j0>=0?linhas.slice(j0+1,j1>j0?j1:undefined).map(function(l){return l.split('\t')[0];}):[];
+  var d=desc.join(' ').toUpperCase(), sus=/SUSPENS/.test(d);
+  var tipo=/CASSA/.test(d)?'Cassação':sus&&/CETRAN/.test(d)?'Defesa suspensão CNH – CETRAN':sus&&/JARI/.test(d)?'Defesa suspensão CNH – JARI':sus?'Defesa prévia – suspensão CNH':
+    /CETRAN/.test(d)?'Multa – CETRAN':/JARI/.test(d)?'Multa – JARI':/MULTA|AUTUA|INFRA/.test(d)?'Multa – defesa prévia':/TRANSF/.test(d)?'Transferência':'Outro';
+  var proc=(obs.match(/PROTOCOLAD\S*[^\n]*?(\d{12,})/i)||obs.match(/(\d{12,})(?![\s\S]*\d{12,})/)||[])[1]||'';
+  return {os:os, nome:campo('Nome\\/Razao Social:'), resp:campo('Responsavel\\/Revenda:'), foneResp:campo('Fone Responsavel\\/Revenda:'),
+          foneCli:foneCli, tipo:tipo, proc:proc, obs:obs, servicos:desc};
+}
+function agImportar(f){
+  var box=agG('ag-imp'); if(!f) return;
+  if(!window.pdfjsLib){ box.innerHTML='<div class="ag-al bad">Leitor de PDF não carregou. Atualize a página.</div>'; return; }
+  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  f.arrayBuffer().then(function(buf){ return pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise; })
+   .then(function(doc){ return doc.getPage(1); }).then(function(pg){ return pg.getTextContent(); })
+   .then(function(tc){
+     var o=agParseOS(agLinhasPdf(tc.items));
+     if(!o.os){ box.innerHTML='<div class="ag-al bad">Não reconheci esse PDF como OS do BitDesp.</div>'; return; }
+     agG('ag_os').value=o.os; agG('ag_cli').value=o.nome; agG('ag_tel').value=o.foneCli; agG('ag_proc').value=o.proc;
+     agG('ag_resp').value=o.resp; agG('ag_fresp').value=o.foneResp; agG('ag_obs').value=o.obs; agG('ag_tipo').value=o.tipo; agAutoQuem();
+     var falta=[(!o.foneCli&&!o.resp)?'WhatsApp do cliente':'', !o.proc?'nº do processo':''].filter(Boolean);
+     box.innerHTML='<div class="ag-al ok">✔ OS <b>'+agEsc(o.os)+'</b> importada — '+agEsc(o.nome)+(o.resp?' · via '+agEsc(o.resp):'')+
+       '<br>Serviços: '+agEsc(o.servicos.join(', ')||'—')+(falta.length?'<br><b style="color:var(--warn)">Falta preencher: '+falta.join(', ')+'</b>':'')+'<br>Agora é só escolher a data.</div>';
+     agChecaOS(o.os);
+   }).catch(function(e){ box.innerHTML='<div class="ag-al bad">Erro ao ler o PDF: '+agEsc(e.message)+'</div>'; });
+}
+(function(){
+  var dz=document.getElementById('ag-drop'); if(!dz) return;
+  ['dragover','dragenter'].forEach(function(ev){ dz.addEventListener(ev,function(e){ e.preventDefault(); dz.classList.add('on'); }); });
+  ['dragleave','drop'].forEach(function(ev){ dz.addEventListener(ev,function(e){ e.preventDefault(); dz.classList.remove('on'); }); });
+  dz.addEventListener('drop',function(e){ agImportar(e.dataTransfer.files[0]); });
+})();
+
 // ═══ INIT ════════════════════════════════════════════════════
 document.getElementById('user-badge') && (document.getElementById('user-badge').textContent = window.location.hostname||'local');
 carregarMe();
 carregarHist();
 gerarPreview();
 carregarPrazos();
+agBadge();
 carregarConfig();
 modulo('atpv');
 setInterval(carregarHist,300000);
