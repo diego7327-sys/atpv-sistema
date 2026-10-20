@@ -687,8 +687,9 @@ tr:hover td{background:var(--surf2)}
         <div class="fg"><label>Cliente (proprietário)</label><input id="ag_cli" placeholder="Nome do cliente"></div>
         <div class="g2">
           <div class="fg"><label>WhatsApp do cliente</label><input id="ag_tel" placeholder="(62) 9xxxx-xxxx"></div>
-          <div class="fg"><label>Nº do processo</label><input id="ag_proc" placeholder="242500000345896"></div>
+          <div class="fg"><label>Nº do processo (instauração)</label><input id="ag_proc" placeholder="262500000206395"></div>
         </div>
+        <div class="fg"><label>Nº do protocolo (preencha quando protocolar)</label><input id="ag_protoc" placeholder="Ex.: 242500000345896"></div>
         <fieldset class="ag-fs"><legend>Responsável / despachante parceiro (se houver)</legend>
           <div class="g2">
             <div class="fg"><label>Nome</label><input id="ag_resp" placeholder="Ex.: Cida Despachante" oninput="agAutoQuem()"></div>
@@ -3043,7 +3044,7 @@ function agSugerir(){
 function agG(id){ return document.getElementById(id); }
 function agAutoQuem(){ agG('ag_quem').value = agG('ag_resp').value.trim() ? 'resp' : 'cli'; }
 function agLimparForm(){
-  ['ag_id','ag_os','ag_cli','ag_tel','ag_proc','ag_resp','ag_fresp','ag_obs','ag_data'].forEach(function(i){ agG(i).value=''; });
+  ['ag_id','ag_os','ag_cli','ag_tel','ag_proc','ag_protoc','ag_resp','ag_fresp','ag_obs','ag_data'].forEach(function(i){ agG(i).value=''; });
   agG('ag_quem').value='cli'; agG('ag-imp').innerHTML=''; agG('ag-aviso').innerHTML='';
   agG('ag-salvar').textContent='Salvar lembrete'; agG('ag-salvar').disabled=false; agG('ag-cancelar').style.display='none';
 }
@@ -3052,7 +3053,7 @@ function agSalvar(){
   if(!agG('ag_cli').value.trim()){ showAlert('Preencha o cliente.','err'); return; }
   if(!data){ showAlert('Escolha a data do lembrete.','err'); return; }
   var dados={os:agG('ag_os').value, tipo:agG('ag_tipo').value, cliente_nome:agG('ag_cli').value, cliente_tel:agG('ag_tel').value,
-    processo:agG('ag_proc').value, resp_nome:agG('ag_resp').value, resp_tel:agG('ag_fresp').value, quem:agG('ag_quem').value,
+    processo:agG('ag_proc').value, protocolo:agG('ag_protoc').value, resp_nome:agG('ag_resp').value, resp_tel:agG('ag_fresp').value, quem:agG('ag_quem').value,
     acao:agG('ag_acao').value, data:data, obs:agG('ag_obs').value};
   agApi('/api/agenda'+(id?'/'+id:''), id?'PUT':'POST', dados).then(function(){
     showAlert(id?'✓ Lembrete atualizado!':'✓ Lembrete salvo para '+agBr(data)+'!','ok');
@@ -3062,7 +3063,7 @@ function agSalvar(){
 function agEditar(id){
   var r=AG.itens[id]; if(!r) return;
   agG('ag_id').value=r.id; agG('ag_os').value=r.os; agG('ag_tipo').value=r.tipo; agG('ag_cli').value=r.cliente_nome;
-  agG('ag_tel').value=r.cliente_tel; agG('ag_proc').value=r.processo; agG('ag_resp').value=r.resp_nome; agG('ag_fresp').value=r.resp_tel;
+  agG('ag_tel').value=r.cliente_tel; agG('ag_proc').value=r.processo; agG('ag_protoc').value=r.protocolo||''; agG('ag_resp').value=r.resp_nome; agG('ag_fresp').value=r.resp_tel;
   agG('ag_quem').value=r.quem; agG('ag_acao').value=r.acao; agG('ag_obs').value=r.obs; agG('ag_data').value=r.data;
   agG('ag-salvar').textContent='Salvar alterações'; agG('ag-cancelar').style.display='inline-block';
   agValidar(r.data,true); window.scrollTo({top:0,behavior:'smooth'});
@@ -3084,6 +3085,13 @@ function agFeito(id,val){ agApi('/api/agenda/'+id+'/feito','POST',{feito:val}).t
 function agExcluir(id){
   var r=AG.itens[id]; if(!confirm('Excluir o lembrete de '+(r?r.cliente_nome:'')+'?')) return;
   agApi('/api/agenda/'+id,'DELETE').then(agCarregar).catch(function(e){ showAlert(e.message,'err'); });
+}
+function agProtocolo(id){
+  var r=AG.itens[id]; if(!r) return;
+  var n=prompt('Nº do protocolo de '+r.cliente_nome+':', r.protocolo||'');
+  if(n===null) return;
+  agApi('/api/agenda/'+id,'PUT',{protocolo:n.trim()}).then(function(){ showAlert('✓ Protocolo salvo','ok'); return agCarregar(); })
+    .catch(function(e){ showAlert(e.message,'err'); });
 }
 function agReagendar(id){ AG.reagId = AG.reagId===id ? null : id; agPainel(); }
 function agBoxReag(r){
@@ -3111,16 +3119,16 @@ function agConfReag(s){
 // ── mensagens de WhatsApp ──
 function agPrimeiro(n){ n=(n||'').trim().split(/\s+/)[0]||''; return n.charAt(0).toUpperCase()+n.slice(1).toLowerCase(); }
 function agMsgCliente(r){
-  var nome=agPrimeiro(r.cliente_nome), proc=r.processo||'—';
+  var nome=agPrimeiro(r.cliente_nome), proc=r.processo||'—', prot=r.protocolo||proc;
   if((r.acao||'').indexOf('Informar')===0)
-    return 'Olá, '+nome+'! Aqui é do *Diego Despachante*.\n\nSeu processo ('+r.tipo+') foi protocolado sob o nº *'+proc+'*. Guarde esse número.\n\nVamos acompanhar o andamento e te avisamos de qualquer novidade.\nDúvidas: '+AG_FONE;
+    return 'Olá, '+nome+'! Aqui é do *Diego Despachante*.\n\nSeu processo ('+r.tipo+') foi protocolado sob o nº *'+prot+'*. Guarde esse número.\n\nVamos acompanhar o andamento e te avisamos de qualquer novidade.\nDúvidas: '+AG_FONE;
   if((r.acao||'').indexOf('Cobrar')===0)
     return 'Olá, '+nome+'! Aqui é do *Diego Despachante*.\n\nPara darmos andamento ao seu processo ('+r.tipo+') nº '+proc+', precisamos de um documento seu. Pode nos chamar hoje?\n\n'+AG_FONE;
   return 'Olá, '+nome+'! Aqui é do *Diego Despachante*.\n\nHoje ('+agBr(AG.hoje)+') estamos verificando o andamento do seu processo *'+r.tipo+'* nº *'+proc+'*.\n\nAssim que tiver novidade, te avisamos por aqui.\nDúvidas: '+AG_FONE;
 }
 function agMsgResp(r){
   var nome=agPrimeiro(r.resp_nome), proc=r.processo||'—', a=r.acao||'';
-  var fazer = a.indexOf('Informar')===0 ? 'foi protocolado sob o nº *'+proc+'*.' :
+  var fazer = a.indexOf('Informar')===0 ? 'foi protocolado sob o nº *'+(r.protocolo||proc)+'*.' :
               a.indexOf('Cobrar')===0   ? 'está aguardando documento do cliente para seguir.' :
               a.indexOf('Vencimento')===0 ? 'tem prazo vencendo hoje ('+agBr(AG.hoje)+'). Estamos acompanhando.' :
               'está sendo verificado hoje ('+agBr(AG.hoje)+').';
@@ -3153,12 +3161,14 @@ function agLinhas(l, comData){
       return '<tr class="'+(r.feito?'feito ':'')+(at?'atras':'')+'">'+(comData?'<td>'+agBr(r.data).slice(0,5)+'</td>':'')+
         '<td>'+agEsc(r.os||'—')+'</td>'+
         '<td>'+agEsc(r.cliente_nome)+(r.resp_nome?'<br><span class="ag-small">via '+agEsc(r.resp_nome)+'</span>':'')+'</td>'+
-        '<td><span class="ag-tag">'+agEsc(r.tipo)+'</span><br><span style="font-family:var(--mono);font-size:12px">'+agEsc(r.processo||'—')+'</span></td>'+
+        '<td><span class="ag-tag">'+agEsc(r.tipo)+'</span><br><span class="ag-small">Proc.</span> <span style="font-family:var(--mono);font-size:12px">'+agEsc(r.processo||'—')+'</span>'+
+          '<br><span class="ag-small">Prot.</span> '+(r.protocolo?'<span style="font-family:var(--mono);font-size:12px;color:var(--acc)">'+agEsc(r.protocolo)+'</span>':'<a href="#" style="color:var(--warn);font-size:11px" onclick="agProtocolo('+r.id+');return false">+ informar</a>')+'</td>'+
         '<td>'+agEsc(r.acao)+(r.obs?'<br><span class="ag-small">'+agEsc(r.obs.split('\n')[0].slice(0,70))+'</span>':'')+
           (r.feito?'<br><span class="ag-small" style="color:var(--acc)">✓ '+agEsc(r.feito_por||'')+' '+agEsc(r.feito_em||'')+'</span>':'')+'</td>'+
         '<td style="min-width:200px">'+(r.feito?'':agBotoesWA(r))+
           '<button class="ag-bt ok" onclick="agFeito('+r.id+','+(!r.feito)+')">'+(r.feito?'↺ Desfazer':'✓ Feito')+'</button>'+
           '<button class="ag-bt" onclick="agReagendar('+r.id+')">Reagendar</button>'+
+          '<button class="ag-bt" onclick="agProtocolo('+r.id+')">Protocolo</button>'+
           '<button class="ag-bt" onclick="agEditar('+r.id+')">Editar</button>'+
           '<button class="ag-bt del" title="Excluir" onclick="agExcluir('+r.id+')">✕</button></td></tr>'+
         (AG.reagId===r.id?agBoxReag(r):'');
@@ -3205,20 +3215,22 @@ function agLinhasPdf(items){
 }
 function agParseOS(linhas){
   var T=linhas.join('\n');
-  function campo(rot){ var m=T.match(new RegExp(rot+'\\s*\\t?([^\\t\\n]*)')); return m?m[1].trim():''; }
+  function campo(rot){ var m=T.match(new RegExp(rot+'\\s*\\t?([^\\t\\n]*)')); var v=m?m[1].trim():''; return /:\s*$/.test(v)?'':v; }
   var os=(T.match(/ORDEM DE SERVI\S*\s*N\S*\s*\t?\s*(\d{3,})/i)||[])[1]||'';
   var lc=linhas.filter(function(l){return /^Cidade:/.test(l);})[0]||'';
   var foneCli=((lc.match(/Telefone\(s\):\s*\t?([^\t]*)/)||[])[1]||'').trim();
   var i0=-1,i1=-1,j0=-1,j1=-1;
-  linhas.forEach(function(l,i){ if(i0<0&&/^OBSERVAC/i.test(l)) i0=i; if(i1<0&&/Autorizo a execu/i.test(l)) i1=i; if(j0<0&&/^Descricao/i.test(l)) j0=i; if(j1<0&&/^Custos/i.test(l)) j1=i; });
+  linhas.forEach(function(l,i){ if(i0<0&&/^OBSERVA[CÇ]/i.test(l)) i0=i; if(i1<0&&/Autorizo a execu/i.test(l)) i1=i; if(j0<0&&/^Descri[cç][aã]o/i.test(l)) j0=i; if(j1<0&&/^Custos/i.test(l)) j1=i; });
   var obs=(i0>=0?linhas.slice(i0+1,i1>i0?i1:undefined):[]).join('\n').replace(/\t/g,'  ').trim();
   var desc=j0>=0?linhas.slice(j0+1,j1>j0?j1:undefined).map(function(l){return l.split('\t')[0];}):[];
-  var d=desc.join(' ').toUpperCase(), sus=/SUSPENS/.test(d);
+  var d=desc.join(' ').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''), sus=/SUSPENS/.test(d);
   var tipo=/CASSA/.test(d)?'Cassação':sus&&/CETRAN/.test(d)?'Defesa suspensão CNH – CETRAN':sus&&/JARI/.test(d)?'Defesa suspensão CNH – JARI':sus?'Defesa prévia – suspensão CNH':
     /CETRAN/.test(d)?'Multa – CETRAN':/JARI/.test(d)?'Multa – JARI':/MULTA|AUTUA|INFRA/.test(d)?'Multa – defesa prévia':/TRANSF/.test(d)?'Transferência':'Outro';
-  var proc=(obs.match(/PROTOCOLAD\S*[^\n]*?(\d{12,})/i)||obs.match(/(\d{12,})(?![\s\S]*\d{12,})/)||[])[1]||'';
-  return {os:os, nome:campo('Nome\\/Razao Social:'), resp:campo('Responsavel\\/Revenda:'), foneResp:campo('Fone Responsavel\\/Revenda:'),
-          foneCli:foneCli, tipo:tipo, proc:proc, obs:obs, servicos:desc};
+  var prot=(obs.match(/PROTOCOLAD\S*[^\n]*?(\d{12,})/i)||[])[1]||'';
+  var proc=(obs.match(/INSTAURA\S*\s*:?\s*(\d{12,})/i)||[])[1]||'';
+  if(!proc){ var todos=obs.match(/\d{12,}/g)||[]; proc=todos.filter(function(n){return n!==prot;})[0]||''; }
+  return {os:os, nome:campo('Nome\\/Raz[aã]o Social:'), resp:campo('Respons[aá]vel\\/Revenda:'), foneResp:campo('Fone Respons[aá]vel\\/Revenda:'),
+          foneCli:foneCli, tipo:tipo, proc:proc, prot:prot, obs:obs, servicos:desc};
 }
 function agImportar(f){
   var box=agG('ag-imp'); if(!f) return;
@@ -3229,7 +3241,7 @@ function agImportar(f){
    .then(function(tc){
      var o=agParseOS(agLinhasPdf(tc.items));
      if(!o.os){ box.innerHTML='<div class="ag-al bad">Não reconheci esse PDF como OS do BitDesp.</div>'; return; }
-     agG('ag_os').value=o.os; agG('ag_cli').value=o.nome; agG('ag_tel').value=o.foneCli; agG('ag_proc').value=o.proc;
+     agG('ag_os').value=o.os; agG('ag_cli').value=o.nome; agG('ag_tel').value=o.foneCli; agG('ag_proc').value=o.proc; agG('ag_protoc').value=o.prot;
      agG('ag_resp').value=o.resp; agG('ag_fresp').value=o.foneResp; agG('ag_obs').value=o.obs; agG('ag_tipo').value=o.tipo; agAutoQuem();
      var falta=[(!o.foneCli&&!o.resp)?'WhatsApp do cliente':'', !o.proc?'nº do processo':''].filter(Boolean);
      box.innerHTML='<div class="ag-al ok">✔ OS <b>'+agEsc(o.os)+'</b> importada — '+agEsc(o.nome)+(o.resp?' · via '+agEsc(o.resp):'')+
