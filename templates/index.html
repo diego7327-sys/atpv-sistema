@@ -740,6 +740,7 @@ tr:hover td{background:var(--surf2)}
             <button id="ag-t1" class="on" onclick="agAba(1)">Hoje</button>
             <button id="ag-t2" onclick="agAba(2)">Dia selecionado</button>
             <button id="ag-t3" onclick="agAba(3)">Próximos 15 dias</button>
+            <button id="ag-t4" onclick="agAba(4)">🔎 Buscar / Todos</button>
           </div>
           <div id="ag-painel">Carregando...</div>
         </div>
@@ -3150,7 +3151,7 @@ function agBotoesWA(r){
 // ── painel (abas) ──
 function agAba(n){
   AG.aba=n; AG.reagId=null;
-  [1,2,3].forEach(function(i){ agG('ag-t'+i).classList.toggle('on',i===n); });
+  [1,2,3,4].forEach(function(i){ agG('ag-t'+i).classList.toggle('on',i===n); });
   agDesenha();
 }
 function agLinhas(l, comData){
@@ -3158,7 +3159,7 @@ function agLinhas(l, comData){
   return '<div class="table-wrap"><table><thead><tr>'+(comData?'<th>Data</th>':'')+'<th>OS</th><th>Cliente</th><th>Processo</th><th>Fazer</th><th>Ações</th></tr></thead><tbody>'+
     l.map(function(r){
       var at = r.data<AG.hoje && !r.feito;
-      return '<tr class="'+(r.feito?'feito ':'')+(at?'atras':'')+'">'+(comData?'<td>'+agBr(r.data).slice(0,5)+'</td>':'')+
+      return '<tr class="'+(r.feito?'feito ':'')+(at?'atras':'')+'">'+(comData?'<td>'+(comData==='full'?agBr(r.data):agBr(r.data).slice(0,5))+'</td>':'')+
         '<td>'+agEsc(r.os||'—')+'</td>'+
         '<td>'+agEsc(r.cliente_nome)+(r.resp_nome?'<br><span class="ag-small">via '+agEsc(r.resp_nome)+'</span>':'')+'</td>'+
         '<td><span class="ag-tag">'+agEsc(r.tipo)+'</span><br><span class="ag-small">Proc.</span> <span style="font-family:var(--mono);font-size:12px">'+agEsc(r.processo||'—')+'</span>'+
@@ -3185,6 +3186,15 @@ function agPainel(){
       '<p class="ag-note">“WhatsApp” abre o WhatsApp Web na conversa da pessoa com a mensagem já escrita — é só conferir e apertar Enter. Depois clique em “✓ Feito”. O que não for marcado como feito aparece em Atrasados no dia seguinte.</p>';
     return;
   }
+  if(AG.aba===4){
+    if(!agG('ag-bq')){
+      p.innerHTML='<div class="g2" style="grid-template-columns:2fr 1fr;margin-bottom:6px">'+
+        '<div class="fg"><label>Buscar</label><input id="ag-bq" placeholder="Cliente, OS, processo, protocolo ou parceiro" oninput="agBuscaDepois()"></div>'+
+        '<div class="fg"><label>Situação</label><select id="ag-bs" onchange="agBuscar()"><option value="pendentes">Pendentes (não feitos)</option><option value="feitos">Já feitos</option><option value="todos">Todos</option></select></div></div>'+
+        '<div id="ag-bres"><span class="ag-small">Carregando...</span></div>';
+    }
+    agBuscar(); return;
+  }
   var de, ate, titulo;
   if(AG.aba===3){ de=agIso(agAdd(agHojeD(),1)); ate=agIso(agAdd(agHojeD(),15)); titulo='Próximos 15 dias'; }
   else {
@@ -3198,6 +3208,20 @@ function agPainel(){
     var l=r.itens||[];
     p.innerHTML='<div class="ag-sec">'+titulo+' — '+l.length+' processo(s)</div>'+(l.length?agLinhas(l,AG.aba===3):'<span class="ag-small">Nenhum processo marcado.</span>');
   }).catch(function(e){ p.innerHTML='<span class="ag-small">'+agEsc(e.message)+'</span>'; });
+}
+
+// ── busca / rastreio ──
+var AG_BT=null;
+function agBuscaDepois(){ clearTimeout(AG_BT); AG_BT=setTimeout(agBuscar,300); }
+function agBuscar(){
+  var q=agG('ag-bq'), sel=agG('ag-bs'), box=agG('ag-bres'); if(!q||!box) return;
+  var pedido='b|'+q.value+'|'+sel.value; AG._pedido=pedido;
+  agApi('/api/agenda/busca?q='+encodeURIComponent(q.value)+'&situacao='+sel.value).then(function(r){
+    if(AG._pedido!==pedido) return;
+    var l=r.itens||[];
+    box.innerHTML='<div class="ag-sec">'+l.length+(l.length>=300?'+':'')+' lembrete(s) encontrado(s)</div>'+
+      (l.length?agLinhas(l,'full'):'<span class="ag-small">Nada encontrado.</span>');
+  }).catch(function(e){ box.innerHTML='<span class="ag-small">'+agEsc(e.message)+'</span>'; });
 }
 
 // ── importar PDF da OS (BitDesp) ──
