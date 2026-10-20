@@ -2018,6 +2018,30 @@ def api_ag_contagem():
         cont = {r['data'].isoformat(): r['n'] for r in cur.fetchall()}
     return jsonify({"hoje": hoje.isoformat(), "contagem": cont})
 
+@app.route("/api/agenda/busca", methods=["GET"])
+@login_required
+def api_ag_busca():
+    """Rastreio: procura por cliente, OS, processo, protocolo ou parceiro.
+    ?q=texto&situacao=pendentes|feitos|todos"""
+    q   = (request.args.get("q") or "").strip().lower()
+    sit = (request.args.get("situacao") or "pendentes").strip()
+    cond, params = _escopo_proc()
+    if q:
+        cond += (" AND (lower(cliente_nome) LIKE %s OR lower(os) LIKE %s OR lower(processo) LIKE %s"
+                 " OR lower(protocolo) LIKE %s OR lower(resp_nome) LIKE %s OR lower(obs) LIKE %s)")
+        params += ['%' + q + '%'] * 6
+    if sit == "pendentes":
+        cond += " AND NOT feito"; ordem = "data ASC, id"
+    elif sit == "feitos":
+        cond += " AND feito"; ordem = "data DESC, id DESC"
+    else:
+        ordem = "data DESC, id DESC"
+    with db() as cur:
+        cur.execute("SELECT " + CAMPOS_AG + " FROM agenda WHERE TRUE" + cond +
+                    " ORDER BY " + ordem + " LIMIT 300", params)
+        itens = [_ag_saida(r) for r in cur.fetchall()]
+    return jsonify({"itens": itens, "total": len(itens)})
+
 @app.route("/api/agenda/os/<path:os_num>", methods=["GET"])
 @login_required
 def api_ag_por_os(os_num):
