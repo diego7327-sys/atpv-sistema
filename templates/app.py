@@ -224,6 +224,33 @@ CREATE TABLE IF NOT EXISTS migracoes (
     nome     TEXT PRIMARY KEY,
     aplicada TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- AGENDA DE PRAZOS: lembretes por data (olhar processo, informar protocolo...)
+CREATE TABLE IF NOT EXISTS agenda (
+    id            BIGSERIAL PRIMARY KEY,
+    criado        TIMESTAMPTZ DEFAULT NOW(),
+    atualizado    TIMESTAMPTZ DEFAULT NOW(),
+    os            TEXT DEFAULT '',
+    tipo          TEXT DEFAULT '',
+    cliente_nome  TEXT DEFAULT '',
+    cliente_tel   TEXT DEFAULT '',
+    processo      TEXT DEFAULT '',
+    resp_nome     TEXT DEFAULT '',
+    resp_tel      TEXT DEFAULT '',
+    quem          TEXT DEFAULT 'cli',
+    acao          TEXT DEFAULT '',
+    data          DATE NOT NULL,
+    obs           TEXT DEFAULT '',
+    feito         BOOLEAN DEFAULT FALSE,
+    feito_em      TIMESTAMPTZ,
+    feito_por     TEXT DEFAULT '',
+    user_nome     TEXT DEFAULT '',
+    empresa_id    TEXT
+);
+CREATE INDEX IF NOT EXISTS agenda_data_idx  ON agenda (data);
+CREATE INDEX IF NOT EXISTS agenda_feito_idx ON agenda (feito, data);
+CREATE INDEX IF NOT EXISTS agenda_os_idx    ON agenda (os);
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS protocolo TEXT DEFAULT '';
 """
 
 def _ler_blob(cur, chave):
@@ -1235,9 +1262,14 @@ def api_assinatura():
                                 "Preencha o campo Celular e tente de novo."}), 400
     if regra.get("exige_email") and not email:
         return jsonify({"erro": "Para este nível o e-mail do cliente é obrigatório."}), 400
-    if regra.get("exige_cpf") and len(cpf) != 11:
-        return jsonify({"erro": "Para este nível o CPF do cliente é obrigatório "
-                                "(e precisa ser CPF, não CNPJ)."}), 400
+    # Vendedor pessoa jurídica: quem assina pela empresa é sempre uma pessoa
+    # física (sócio ou representante legal). A ZapSign não tem campo de CNPJ,
+    # então o documento sai com o CPF em branco e ela pede o CPF de quem
+    # estiver assinando, na hora da assinatura.
+    pj = len(cpf) == 14
+    if regra.get("exige_cpf") and not pj and len(cpf) != 11:
+        return jsonify({"erro": "Para este nível o CPF do cliente é obrigatório. "
+                                "Preencha o campo CPF / CNPJ na aba Vendedor."}), 400
 
     signer = {"name": nome, "auth_mode": regra["auth_mode"],
               "send_automatic_email": False, "send_automatic_whatsapp": False}
@@ -1250,6 +1282,13 @@ def api_assinatura():
         signer["cpf"] = cpf
     for chave, valor in regra.get("extras", {}).items():
         signer[chave] = valor
+    if pj:
+        # A consulta à Receita cruza CPF + nome + nascimento. Com o nome da
+        # empresa no documento ela reprovaria sempre, então fica desligada;
+        # o CPF continua sendo pedido e registrado no comprovante.
+        signer.pop("validate_cpf", None)
+        signer.pop("selfie_validation_type", None)
+        signer["require_cpf"] = True
 
     resp, erro = _zapsign("/docs/", {
         "name": (data.get("titulo") or "Procuração ATPV-e")[:255],
@@ -1871,6 +1910,223 @@ def api_alerta_teste():
         texto, quantos = "<b>⚖️ Teste do alerta de prazos</b>\nNenhum prazo vencendo nos próximos 7 dias.", 0
     ok, detalhe = _telegram(texto)
     return jsonify({"ok": ok, "processos": quantos, "detalhe": detalhe})
+
+
+# ══ AGENDA DE PRAZOS ═════════════════════════════════════════
+# Lembretes por data. Sábado, domingo e feriado não são aceitos.
+# O contato com o cliente é feito pelo próprio usuário (botão que abre o
+# WhatsApp Web com a mensagem pronta); aqui só guardamos e marcamos "feito".
+
+def _hoje_br():
+    """Data de hoje no horário de Brasília (o servidor roda em UTC)."""
+    return (datetime.utcnow() - timedelta(hours=3)).date()
+
+def _pascoa(y):
+    a = y % 19; b = y // 100; c = y % 100; d = b // 4; e = b % 4
+    f = (b + 8) // 25; g = (b - f + 1) // 3; h = (19*a + b - d - g + 15) % 30
+    i = c // 4; k = c % 4; l = (32 + 2*e + 2*i - h - k) % 7
+    m = (a + 11*h + 22*l) // 451
+    mes = (h + l - 7*m + 114) // 31; dia = ((h + l - 7*m + 114) % 31) + 1
+    return date(y, mes, dia)
+
+_FERIADOS_CACHE = {}
+def _feriados(y):
+    if y in _FERIADOS_CACHE:
+        return _FERIADOS_CACHE[y]
+    f = {date(y,1,1):"Confraternização", date(y,4,21):"Tiradentes", date(y,5,1):"Dia do Trabalho",
+         date(y,7,26):"Sant'Ana (Anápolis)", date(y,7,31):"Aniv. Anápolis",
+         date(y,9,7):"Independência", date(y,10,12):"N. Sra. Aparecida", date(y,11,2):"Finados",
+         date(y,11,15):"Proclamação", date(y,11,20):"Consciência Negra", date(y,12,25):"Natal"}
+    p = _pascoa(y)
+    f[p - timedelta(days=48)] = "Carnaval"; f[p - timedelta(days=47)] = "Carnaval"
+    f[p - timedelta(days=2)] = "Sexta-feira Santa"; f[p + timedelta(days=60)] = "Corpus Christi"
+    _FERIADOS_CACHE[y] = f
+    return f
+
+def _bloqueio(d):
+    """Devolve o motivo se a data não é dia útil, ou None."""
+    if d.weekday() == 5: return "Sábado"
+    if d.weekday() == 6: return "Domingo"
+    return _feriados(d.year).get(d)
+
+CAMPOS_AG = """id, os, tipo, cliente_nome, cliente_tel, processo, protocolo, resp_nome, resp_tel,
+               quem, acao, data, obs, feito, feito_em, feito_por, user_nome, criado"""
+
+def _ag_saida(r):
+    d = dict(r)
+    d['data'] = d['data'].isoformat() if d.get('data') else None
+    d['feito_em'] = d['feito_em'].strftime('%d/%m/%Y %H:%M') if d.get('feito_em') else ''
+    d['criado'] = d['criado'].strftime('%d/%m/%Y %H:%M') if d.get('criado') else ''
+    return d
+
+def _ag_dados(d):
+    """Normaliza e valida o que vem do formulário."""
+    data_ag = _data_iso(d.get("data"))
+    if not data_ag:
+        return None, "Informe a data do lembrete."
+    motivo = _bloqueio(data_ag)
+    if motivo:
+        return None, "%s é %s — escolha um dia útil." % (data_ag.strftime("%d/%m/%Y"), motivo)
+    quem = d.get("quem") if d.get("quem") in ("cli", "resp", "ambos", "nin") else "cli"
+    t = lambda k: (d.get(k) or "").strip()
+    return {"os": t("os"), "tipo": t("tipo"), "cliente_nome": t("cliente_nome"),
+            "cliente_tel": t("cliente_tel"), "processo": t("processo"), "protocolo": t("protocolo"),
+            "resp_nome": t("resp_nome"), "resp_tel": t("resp_tel"), "quem": quem,
+            "acao": t("acao"), "data": data_ag, "obs": t("obs")}, None
+
+@app.route("/api/agenda/painel", methods=["GET"])
+@login_required
+def api_ag_painel():
+    """Tela 'Hoje': o que é para hoje e o que ficou atrasado."""
+    cond, params = _escopo_proc()
+    hoje = _hoje_br()
+    with db() as cur:
+        cur.execute("SELECT " + CAMPOS_AG + " FROM agenda WHERE data = %s" + cond +
+                    " ORDER BY feito, id", [hoje] + params)
+        de_hoje = [_ag_saida(r) for r in cur.fetchall()]
+        cur.execute("SELECT " + CAMPOS_AG + " FROM agenda WHERE data < %s AND NOT feito" + cond +
+                    " ORDER BY data, id LIMIT 300", [hoje] + params)
+        atrasados = [_ag_saida(r) for r in cur.fetchall()]
+    return jsonify({"hoje": hoje.isoformat(), "itens_hoje": de_hoje, "atrasados": atrasados,
+                    "pendentes": sum(1 for x in de_hoje if not x['feito']),
+                    "n_atrasados": len(atrasados)})
+
+@app.route("/api/agenda", methods=["GET"])
+@login_required
+def api_ag_lista():
+    """Lembretes entre duas datas (?de=AAAA-MM-DD&ate=AAAA-MM-DD)."""
+    de  = _data_iso(request.args.get("de"))  or _hoje_br()
+    ate = _data_iso(request.args.get("ate")) or (de + timedelta(days=15))
+    cond, params = _escopo_proc()
+    with db() as cur:
+        cur.execute("SELECT " + CAMPOS_AG + " FROM agenda WHERE data BETWEEN %s AND %s" + cond +
+                    " ORDER BY data, feito, id LIMIT 1000", [de, ate] + params)
+        itens = [_ag_saida(r) for r in cur.fetchall()]
+    return jsonify({"itens": itens})
+
+@app.route("/api/agenda/contagem", methods=["GET"])
+@login_required
+def api_ag_contagem():
+    """Quantos lembretes cada dia já tem — para pintar o calendário."""
+    hoje = _hoje_br()
+    de  = _data_iso(request.args.get("de"))  or (hoje - timedelta(days=90))
+    ate = _data_iso(request.args.get("ate")) or (hoje + timedelta(days=500))
+    cond, params = _escopo_proc()
+    with db() as cur:
+        cur.execute("SELECT data, COUNT(*) AS n, COUNT(*) FILTER (WHERE NOT feito) AS p"
+                    " FROM agenda WHERE data BETWEEN %s AND %s" + cond +
+                    " GROUP BY data", [de, ate] + params)
+        linhas = cur.fetchall()
+    cont = {r['data'].isoformat(): r['n'] for r in linhas}
+    pend = {r['data'].isoformat(): r['p'] for r in linhas if r['p']}
+    return jsonify({"hoje": hoje.isoformat(), "contagem": cont, "pendentes": pend})
+
+@app.route("/api/agenda/busca", methods=["GET"])
+@login_required
+def api_ag_busca():
+    """Rastreio: procura por cliente, OS, processo, protocolo ou parceiro.
+    ?q=texto&situacao=pendentes|feitos|todos"""
+    q   = (request.args.get("q") or "").strip().lower()
+    sit = (request.args.get("situacao") or "pendentes").strip()
+    cond, params = _escopo_proc()
+    if q:
+        cond += (" AND (lower(cliente_nome) LIKE %s OR lower(os) LIKE %s OR lower(processo) LIKE %s"
+                 " OR lower(protocolo) LIKE %s OR lower(resp_nome) LIKE %s OR lower(obs) LIKE %s)")
+        params += ['%' + q + '%'] * 6
+    if sit == "pendentes":
+        cond += " AND NOT feito"; ordem = "data ASC, id"
+    elif sit == "feitos":
+        cond += " AND feito"; ordem = "data DESC, id DESC"
+    else:
+        ordem = "data DESC, id DESC"
+    with db() as cur:
+        cur.execute("SELECT " + CAMPOS_AG + " FROM agenda WHERE TRUE" + cond +
+                    " ORDER BY " + ordem + " LIMIT 300", params)
+        itens = [_ag_saida(r) for r in cur.fetchall()]
+    return jsonify({"itens": itens, "total": len(itens)})
+
+@app.route("/api/agenda/os/<path:os_num>", methods=["GET"])
+@login_required
+def api_ag_por_os(os_num):
+    """Lembretes futuros (não feitos) da mesma OS — evita cadastrar 2 vezes."""
+    cond, params = _escopo_proc()
+    with db() as cur:
+        cur.execute("SELECT " + CAMPOS_AG + " FROM agenda WHERE os = %s AND data >= %s AND NOT feito" +
+                    cond + " ORDER BY data", [os_num.strip(), _hoje_br()] + params)
+        itens = [_ag_saida(r) for r in cur.fetchall()]
+    return jsonify({"itens": itens})
+
+@app.route("/api/agenda", methods=["POST"])
+@login_required
+def api_ag_criar():
+    v, erro = _ag_dados(request.get_json() or {})
+    if erro:
+        return jsonify({"erro": erro}), 400
+    if not v["cliente_nome"]:
+        return jsonify({"erro": "Informe o cliente."}), 400
+    if v["data"] < _hoje_br():
+        return jsonify({"erro": "A data não pode estar no passado."}), 400
+    with db(commit=True) as cur:
+        cur.execute("""INSERT INTO agenda (os,tipo,cliente_nome,cliente_tel,processo,protocolo,resp_nome,resp_tel,
+                           quem,acao,data,obs,user_nome,empresa_id)
+                       VALUES (%(os)s,%(tipo)s,%(cliente_nome)s,%(cliente_tel)s,%(processo)s,%(protocolo)s,%(resp_nome)s,
+                           %(resp_tel)s,%(quem)s,%(acao)s,%(data)s,%(obs)s,%(user_nome)s,%(empresa_id)s)
+                       RETURNING id""",
+                    dict(v, user_nome=session.get('user_nome') or '', empresa_id=session.get('empresa_id')))
+        nid = cur.fetchone()['id']
+    return jsonify({"ok": True, "id": nid})
+
+@app.route("/api/agenda/<int:aid>", methods=["PUT"])
+@login_required
+def api_ag_editar(aid):
+    """Edita ou reagenda. Se só vier 'data', é reagendamento."""
+    d = request.get_json() or {}
+    cond, params = _escopo_proc()
+    with db(commit=True) as cur:
+        cur.execute("SELECT " + CAMPOS_AG + " FROM agenda WHERE id = %s" + cond, [aid] + params)
+        atual = cur.fetchone()
+        if not atual:
+            return jsonify({"erro": "Não encontrado"}), 404
+        base = _ag_saida(atual); base.update(d)
+        v, erro = _ag_dados(base)
+        if erro:
+            return jsonify({"erro": erro}), 400
+        mudou_data = v["data"].isoformat() != _ag_saida(atual)["data"]
+        if mudou_data and v["data"] < _hoje_br():
+            return jsonify({"erro": "A nova data não pode estar no passado."}), 400
+        cur.execute("""UPDATE agenda SET os=%(os)s, tipo=%(tipo)s, cliente_nome=%(cliente_nome)s,
+                         cliente_tel=%(cliente_tel)s, processo=%(processo)s, protocolo=%(protocolo)s, resp_nome=%(resp_nome)s,
+                         resp_tel=%(resp_tel)s, quem=%(quem)s, acao=%(acao)s, data=%(data)s, obs=%(obs)s,
+                         feito = CASE WHEN %(mudou)s THEN FALSE ELSE feito END,
+                         feito_em = CASE WHEN %(mudou)s THEN NULL ELSE feito_em END,
+                         atualizado=NOW()
+                       WHERE id=%(id)s""", dict(v, mudou=mudou_data, id=aid))
+    return jsonify({"ok": True})
+
+@app.route("/api/agenda/<int:aid>/feito", methods=["POST"])
+@login_required
+def api_ag_feito(aid):
+    feito = bool((request.get_json() or {}).get("feito", True))
+    cond, params = _escopo_proc()
+    with db(commit=True) as cur:
+        cur.execute("""UPDATE agenda SET feito=%s,
+                         feito_em = CASE WHEN %s THEN NOW() ELSE NULL END,
+                         feito_por = CASE WHEN %s THEN %s ELSE '' END, atualizado=NOW()
+                       WHERE id=%s""" + cond,
+                    [feito, feito, feito, session.get('user_nome') or '', aid] + params)
+        if cur.rowcount == 0:
+            return jsonify({"erro": "Não encontrado"}), 404
+    return jsonify({"ok": True})
+
+@app.route("/api/agenda/<int:aid>", methods=["DELETE"])
+@login_required
+def api_ag_excluir(aid):
+    cond, params = _escopo_proc()
+    with db(commit=True) as cur:
+        cur.execute("DELETE FROM agenda WHERE id=%s" + cond, [aid] + params)
+        if cur.rowcount == 0:
+            return jsonify({"erro": "Não encontrado"}), 404
+    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":
