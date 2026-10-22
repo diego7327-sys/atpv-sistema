@@ -205,6 +205,13 @@ tr:hover td{background:var(--surf2)}
 .ag-reag{background:var(--surf2);border:1px solid var(--bord);border-radius:8px;padding:10px;margin:6px 0;font-size:12px}
 .ag-reag input{background:var(--surf);border:1px solid var(--bord);border-radius:6px;padding:5px 8px;color:var(--txt);font-family:var(--font);color-scheme:dark}
 #ag_data{color-scheme:dark}
+.ag-day.atr{opacity:1;background:rgba(255,71,87,.14);border-color:var(--red)}
+.ag-day.atr .c{background:var(--red);color:#fff}
+.ag-tabs button.atr{background:rgba(255,71,87,.12);color:var(--red);border-color:rgba(255,71,87,.5)}
+.ag-tabs button.atr.on{background:var(--red);color:#fff;border-color:var(--red)}
+.ag-faixa{display:none;background:var(--red);color:#fff;padding:9px 24px;font-size:13px;font-weight:600;align-items:center;gap:12px;flex-wrap:wrap}
+.ag-faixa button{background:#fff;color:var(--red);border:none;border-radius:6px;padding:5px 12px;font-weight:700;cursor:pointer;font-family:var(--font)}
+.ag-atraso{color:var(--red);font-weight:700;font-size:11px}
 </style>
 </head>
 <body>
@@ -238,6 +245,8 @@ tr:hover td{background:var(--surf2)}
   <button class="modbtn" data-mod="config" onclick="modulo('config')">
     <span class="mod-ico">⚙</span> Configurações</button>
 </nav>
+<div class="ag-faixa" id="ag-faixa">⚠ <span id="ag-faixa-txt"></span>
+  <button onclick="modulo('agenda');agAba(0)">Ver atrasados agora</button></div>
 
 <div class="app">
 <div class="left">
@@ -737,6 +746,7 @@ tr:hover td{background:var(--surf2)}
         </div>
         <div class="ag-card">
           <div class="ag-tabs">
+            <button id="ag-t0" class="atr" onclick="agAba(0)">⚠ Atrasados <b id="ag-n-atr">0</b></button>
             <button id="ag-t1" class="on" onclick="agAba(1)">Hoje</button>
             <button id="ag-t2" onclick="agAba(2)">Dia selecionado</button>
             <button id="ag-t3" onclick="agAba(3)">Próximos 15 dias</button>
@@ -2974,7 +2984,8 @@ function agApi(url, metodo, corpo){
 // ── carga ──
 function agCarregar(){
   return Promise.all([agApi('/api/agenda/contagem'), agApi('/api/agenda/painel')]).then(function(res){
-    AG.hoje = res[0].hoje; AG.cont = res[0].contagem||{}; AG.painel = res[1];
+    AG.hoje = res[0].hoje; AG.cont = res[0].contagem||{}; AG.pend = res[0].pendentes||{}; AG.painel = res[1];
+    if(!AG.abriu){ AG.abriu=true; if((res[1].n_atrasados||0)>0){ AG.aba=0; [0,1,2,3,4].forEach(function(i){ agG('ag-t'+i).classList.toggle('on',i===0); }); } }
     if(!AG.mes){ var h=agHojeD(); AG.mes=new Date(h.getFullYear(),h.getMonth(),1); }
     var dt=document.getElementById('ag_data'); if(dt) dt.min=AG.hoje;
     agBadgeSet(res[1]); agDesenha();
@@ -2985,6 +2996,10 @@ function agBadgeSet(p){
   var n=(p.pendentes||0)+(p.n_atrasados||0);
   b.textContent=n; b.style.display=n>0?'inline-block':'none';
   b.style.background=(p.n_atrasados||0)>0?'var(--red)':'var(--warn)';
+  var na=p.n_atrasados||0, f=document.getElementById('ag-faixa');
+  var na_el=document.getElementById('ag-n-atr'); if(na_el) na_el.textContent=na;
+  if(f){ f.style.display = na>0 ? 'flex' : 'none';
+    document.getElementById('ag-faixa-txt').textContent = na+' lembrete(s) ATRASADO(S) na Agenda de Prazos — passou do dia de olhar e ninguém marcou como feito.'; }
 }
 function agBadge(){ agApi('/api/agenda/painel').then(agBadgeSet).catch(function(){}); }
 
@@ -2998,14 +3013,16 @@ function agDesenha(){
   for(var i=0;i<ini;i++) h+='<div class="ag-day empty"></div>';
   for(var d=1; d<=fim; d++){
     var s=agIso(new Date(m.getFullYear(),m.getMonth(),d)), b=agBloqueio(s), n=agQtd(s);
-    var cls=['ag-day', b?'off':agCor(n), s<AG.hoje?'past':'', s===AG.sel?'sel':'', s===AG.hoje?'today':''].join(' ');
+    var atr = s<AG.hoje && (AG.pend||{})[s];
+    var cls=['ag-day', b?'off':agCor(n), atr?'atr':(s<AG.hoje?'past':''), s===AG.sel?'sel':'', s===AG.hoje?'today':''].join(' ');
     h+='<div class="'+cls+'" onclick="agClicaDia(\''+s+'\')" title="'+agEsc(b||(n+' processo(s)'))+'"><span class="n">'+d+'</span>'+
-       (b?'<span class="h">'+(b==='Sábado'||b==='Domingo'?'':agEsc(b))+'</span>':(n?'<span class="c">'+n+'</span>':''))+'</div>';
+       (b?'<span class="h">'+(b==='Sábado'||b==='Domingo'?'':agEsc(b))+'</span>':(atr?'<span class="c">⚠ '+atr+'</span>':(n?'<span class="c">'+n+'</span>':'')))+'</div>';
   }
   document.getElementById('ag-cal').innerHTML=h;
   agPainel();
 }
 function agClicaDia(s){
+  if(AG.hoje && s<AG.hoje && !agBloqueio(s)){ AG.sel=s; agAba(2); return; }
   if(agBloqueio(s)){ agValidar(s,true); return; }
   var d=agParse(s); AG.mes=new Date(d.getFullYear(),d.getMonth(),1);
   AG.sel=s; document.getElementById('ag_data').value=s;
@@ -3151,7 +3168,7 @@ function agBotoesWA(r){
 // ── painel (abas) ──
 function agAba(n){
   AG.aba=n; AG.reagId=null;
-  [1,2,3,4].forEach(function(i){ agG('ag-t'+i).classList.toggle('on',i===n); });
+  [0,1,2,3,4].forEach(function(i){ agG('ag-t'+i).classList.toggle('on',i===n); });
   agDesenha();
 }
 function agLinhas(l, comData){
@@ -3159,7 +3176,7 @@ function agLinhas(l, comData){
   return '<div class="table-wrap"><table><thead><tr>'+(comData?'<th>Data</th>':'')+'<th>OS</th><th>Cliente</th><th>Processo</th><th>Fazer</th><th>Ações</th></tr></thead><tbody>'+
     l.map(function(r){
       var at = r.data<AG.hoje && !r.feito;
-      return '<tr class="'+(r.feito?'feito ':'')+(at?'atras':'')+'">'+(comData?'<td>'+(comData==='full'?agBr(r.data):agBr(r.data).slice(0,5))+'</td>':'')+
+      return '<tr class="'+(r.feito?'feito ':'')+(at?'atras':'')+'">'+(comData?'<td>'+(comData==='full'?agBr(r.data):agBr(r.data).slice(0,5))+(at?'<br><span class="ag-atraso">'+Math.round((agHojeD()-agParse(r.data))/86400000)+' dia(s) de atraso</span>':'')+'</td>':'')+
         '<td>'+agEsc(r.os||'—')+'</td>'+
         '<td>'+agEsc(r.cliente_nome)+(r.resp_nome?'<br><span class="ag-small">via '+agEsc(r.resp_nome)+'</span>':'')+'</td>'+
         '<td><span class="ag-tag">'+agEsc(r.tipo)+'</span><br><span class="ag-small">Proc.</span> <span style="font-family:var(--mono);font-size:12px">'+agEsc(r.processo||'—')+'</span>'+
@@ -3177,6 +3194,14 @@ function agLinhas(l, comData){
 }
 function agPainel(){
   var p=agG('ag-painel'); if(!p||!AG.hoje) return;
+  if(AG.aba===0){
+    var at0=(AG.painel||{}).atrasados||[];
+    p.innerHTML = at0.length ?
+      '<div class="ag-sec bad">⚠ '+at0.length+' lembrete(s) atrasado(s) — passaram do dia de olhar e ninguém marcou como feito</div>'+agLinhas(at0,'full')+
+      '<p class="ag-note">Resolva cada um: avise o cliente e clique em “✓ Feito”, ou use “Reagendar” para jogar para outro dia. Enquanto houver atrasado, aparece a faixa vermelha no topo do sistema.</p>'
+      : '<div class="ag-al ok">✓ Nenhum lembrete atrasado. Tudo em dia!</div>';
+    return;
+  }
   if(AG.aba===1){
     var d=AG.painel||{}, at=d.atrasados||[], h=d.itens_hoje||[];
     var pend=h.filter(function(r){return !r.feito;}).length;
@@ -3287,6 +3312,7 @@ carregarHist();
 gerarPreview();
 carregarPrazos();
 agBadge();
+setInterval(agBadge,300000);
 carregarConfig();
 modulo('atpv');
 setInterval(carregarHist,300000);
