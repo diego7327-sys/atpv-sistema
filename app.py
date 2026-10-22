@@ -2013,10 +2013,13 @@ def api_ag_contagem():
     ate = _data_iso(request.args.get("ate")) or (hoje + timedelta(days=500))
     cond, params = _escopo_proc()
     with db() as cur:
-        cur.execute("SELECT data, COUNT(*) AS n FROM agenda WHERE data BETWEEN %s AND %s" + cond +
+        cur.execute("SELECT data, COUNT(*) AS n, COUNT(*) FILTER (WHERE NOT feito) AS p"
+                    " FROM agenda WHERE data BETWEEN %s AND %s" + cond +
                     " GROUP BY data", [de, ate] + params)
-        cont = {r['data'].isoformat(): r['n'] for r in cur.fetchall()}
-    return jsonify({"hoje": hoje.isoformat(), "contagem": cont})
+        linhas = cur.fetchall()
+    cont = {r['data'].isoformat(): r['n'] for r in linhas}
+    pend = {r['data'].isoformat(): r['p'] for r in linhas if r['p']}
+    return jsonify({"hoje": hoje.isoformat(), "contagem": cont, "pendentes": pend})
 
 @app.route("/api/agenda/busca", methods=["GET"])
 @login_required
