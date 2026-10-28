@@ -115,6 +115,16 @@ tr:hover td{background:var(--surf2)}
 .alert.warn{background:rgba(255,165,2,.1);color:var(--warn);border:1px solid rgba(255,165,2,.3)}
 .fb{margin-bottom:20px}
 .fb-title{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--acc);font-family:var(--mono);margin-bottom:12px;padding-bottom:7px;border-bottom:1px solid var(--bord)}
+.opt-linha{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px}
+.opt{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--txt);cursor:pointer;
+     padding:10px 14px;border:1px solid var(--bord);border-radius:8px;flex:1;min-width:230px;
+     background:rgba(255,255,255,.02);transition:border-color .15s,background .15s}
+.opt:hover{border-color:var(--acc)}
+.opt input{accent-color:var(--acc);width:15px;height:15px;cursor:pointer}
+.opt:has(input:checked){border-color:var(--acc);background:rgba(0,212,170,.08)}
+.aviso-proc{font-size:12px;line-height:1.5;color:var(--mut);background:rgba(0,212,170,.06);
+            border:1px solid rgba(0,212,170,.25);border-radius:8px;padding:10px 12px;margin:12px 0}
+.aviso-proc b{color:var(--acc)}
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
 .g1{display:grid;grid-template-columns:1fr;gap:10px}
@@ -319,6 +329,52 @@ tr:hover td{background:var(--surf2)}
         <div class="fg"><label>Município / UF</label><input id="v_cidade" oninput="atualizar()"></div>
         <div class="fg"><label>CEP <span id="v_cep_spin" style="display:none;color:var(--acc);font-size:10px">buscando...</span></label><input id="v_cep" oninput="maskCep(this,'v');atualizar()" placeholder="00000-000"></div>
         <div class="fg"><label>E-mail</label><input id="v_email" oninput="atualizar()"></div>
+      </div>
+    </div>
+
+    <!-- QUEM ASSINA: proprietário ou procurador dele -->
+    <div class="fb">
+      <div class="fb-title">Quem vai assinar esta procuração
+        <span class="fill-count" id="cnt-assina">o próprio proprietário</span></div>
+      <div class="opt-linha">
+        <label class="opt"><input type="radio" name="quem_assina" value="dono" checked
+                onchange="alternarProcurador()"> O próprio proprietário</label>
+        <label class="opt"><input type="radio" name="quem_assina" value="proc"
+                onchange="alternarProcurador()"> Um procurador do proprietário</label>
+      </div>
+
+      <div id="bloco-procurador" style="display:none">
+        <div class="aviso-proc">
+          O link de assinatura vai para o <b>celular do procurador</b>, e é o CPF dele que será
+          conferido. Anexe ao processo a procuração que dá poderes a ele.
+        </div>
+        <div class="g2">
+          <div class="fg">
+            <label>Nome completo do procurador</label>
+            <input id="p_nome" oninput="atualizar();acBuscar('p_nome','pessoa','p')" autocomplete="off" placeholder="Digite para buscar...">
+            <div class="ac-drop" id="ac-p_nome"></div>
+          </div>
+          <div class="fg">
+            <label>CPF do procurador <button class="btn-cpf-consulta" onclick="consultarCPF('p')">🔍 Receita</button></label>
+            <input id="p_cpf" oninput="atualizar();acBuscar('p_cpf','pessoa','p')" autocomplete="off" placeholder="000.000.000-00">
+            <div class="ac-drop" id="ac-p_cpf"></div>
+          </div>
+        </div>
+        <div class="g3">
+          <div class="fg"><label>RG</label><input id="p_rg" oninput="atualizar()"></div>
+          <div class="fg"><label>Órgão exp.</label><input id="p_rg_org" oninput="atualizar()"></div>
+          <div class="fg"><label>Data de nascimento</label><input id="p_nasc" placeholder="DD/MM/AAAA" oninput="atualizar()"></div>
+        </div>
+        <div class="g2">
+          <div class="fg"><label>Celular do procurador</label><input id="p_cel" oninput="atualizar()" placeholder="(62) 90000-0000"></div>
+          <div class="fg"><label>E-mail</label><input id="p_email" oninput="atualizar()"></div>
+        </div>
+        <div class="g2">
+          <div class="fg"><label>Instrumento que dá os poderes (opcional)</label>
+            <input id="p_instr" oninput="atualizar()" placeholder="Procuração pública, 2º Tabelionato de Anápolis-GO, Livro 123, Fls. 45"></div>
+          <div class="fg"><label>Data do instrumento (opcional)</label>
+            <input id="p_instr_data" oninput="atualizar()" placeholder="DD/MM/AAAA"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -1081,10 +1137,11 @@ var AC = {}; // cache de listas autocomplete: AC['pessoa_v'], AC['pessoa_c'], AC
 var _timers = {};
 
 var CAMPOS_V = ['v_nome','v_cpf','v_rg','v_rg_org','v_ecivil','v_nasc','v_end','v_bairro','v_cidade','v_cep','v_cel','v_email'];
+var CAMPOS_P = ['p_nome','p_cpf','p_rg','p_rg_org','p_nasc','p_cel','p_email','p_instr','p_instr_data'];
 var CAMPOS_VE= ['ve_modelo','ve_ano','ve_placa','ve_chassi'];
 var CAMPOS_C = ['c_nome','c_cpf','c_rg','c_nasc','c_valor','c_end','c_bairro','c_cidade','c_cep','c_email'];
 var CAMPOS_CT= ['ct_nome','ct_cpf','ct_tipo','ct_pgto','ct_tel','ct_valor_servico','ct_status_pgto','ct_obs'];
-var CAMPOS_TODOS = CAMPOS_V.concat(CAMPOS_VE).concat(CAMPOS_C).concat(CAMPOS_CT);
+var CAMPOS_TODOS = CAMPOS_V.concat(CAMPOS_P).concat(CAMPOS_VE).concat(CAMPOS_C).concat(CAMPOS_CT);
 
 function g(id){ return (document.getElementById(id)||{}).value||''; }
 function setVal(id,val){ var el=document.getElementById(id); if(el&&val&&val.trim()){ el.value=val.trim(); el.classList.add('ia'); } }
@@ -1226,7 +1283,7 @@ function acRenderPessoa(lista, pref, dropId){
   });
   var salvar=document.createElement('div');
   salvar.className='ac-salvar';
-  salvar.textContent='+ Salvar '+(pref==='v'?'vendedor':'comprador')+' no cadastro';
+  salvar.textContent='+ Salvar '+({v:'vendedor',c:'comprador',p:'procurador'}[pref]||'cadastro')+' no cadastro';
   salvar.setAttribute('data-salvar','1');
   salvar.setAttribute('data-pref', pref);
   drop.appendChild(salvar);
@@ -1412,6 +1469,38 @@ function atualizarContadores(){
 }
 function atualizar(){ atualizarContadores(); }
 
+// ═══ PROCURADOR DO PROPRIETÁRIO ══════════════════════════════
+// Quando a procuração é assinada por um procurador, é ele quem recebe o
+// link, é o CPF dele que a ZapSign confere e é o nome dele que vai no PDF.
+function ehProcurador(){
+  var r=document.querySelector('input[name="quem_assina"]:checked');
+  return !!(r && r.value==='proc');
+}
+
+// Quem efetivamente assina: o procurador, quando houver; senão o proprietário.
+function quemAssina(){
+  if(ehProcurador()){
+    return {proc:true, nome:g('p_nome'), cpf:g('p_cpf'), cel:g('p_cel'), email:g('p_email'),
+            rg:g('p_rg'), rg_org:g('p_rg_org'), rotulo:'procurador'};
+  }
+  return {proc:false, nome:g('v_nome'), cpf:g('v_cpf'), cel:g('v_cel'), email:g('v_email'),
+          rg:g('v_rg'), rg_org:g('v_rg_org'), rotulo:'proprietário'};
+}
+
+// Volta a opção para "o próprio proprietário" (novo atendimento, limpar aba).
+function voltarParaProprietario(){
+  var r=document.querySelector('input[name="quem_assina"][value="dono"]');
+  if(r){ r.checked=true; alternarProcurador(); }
+}
+
+function alternarProcurador(){
+  var proc=ehProcurador();
+  document.getElementById('bloco-procurador').style.display = proc ? '' : 'none';
+  var c=document.getElementById('cnt-assina');
+  if(c) c.textContent = proc ? 'um procurador' : 'o próprio proprietário';
+  atualizar();
+}
+
 // ═══ PRÉ-VISUALIZAÇÃO ════════════════════════════════════════
 function gerarPreview(){
   var cfg=getCfg(); var d=new Date();
@@ -1428,6 +1517,14 @@ function gerarPreview(){
 'Bairro:    '+blank(g('v_bairro'),22)+'   CEP: '+blank(g('v_cep'),10)+'\n'+
 'Município: '+blank(g('v_cidade'),22)+'   Cel: '+blank(g('v_cel'),14)+'\n'+
 'E-mail:    '+blank(g('v_email'),32)+'\n\n'+
+(ehProcurador() ?
+'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'+
+'REPRESENTADO POR PROCURADOR (quem assina)\n\n'+
+'Nome:      '+blank(g('p_nome'),35)+'\n'+
+'CPF:       '+blank(g('p_cpf'),20)+'   RG: '+blank(g('p_rg'),10)+' '+blank(g('p_rg_org'),8)+'\n'+
+'Celular:   '+blank(g('p_cel'),14)+'   E-mail: '+blank(g('p_email'),28)+'\n'+
+(g('p_instr') ? 'Instrumento: '+g('p_instr')+(g('p_instr_data')?', de '+g('p_instr_data'):'')+'\n' : '')+
+'\n' : '')+
 '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'+
 'Nomeia: '+cfg.nome+' (cód. '+cfg.cod+')\n'+
 'Sede: '+cfg.end+' — CEP '+cfg.cep+'\n'+
@@ -1446,7 +1543,10 @@ function gerarPreview(){
 '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'+
 cfg.cidade+', '+dt+'\n\n\n'+
 '_________________________________________________\n'+
-'Assinatura do Outorgante (Proprietário Vendedor)';
+(ehProcurador()
+  ? 'Assinatura do Procurador — '+(g('p_nome')||'—')+'\n'+
+    'CPF '+(g('p_cpf')||'—')+' — na qualidade de procurador de '+(g('v_nome')||'—')
+  : 'Assinatura do Outorgante (Proprietário Vendedor)');
   document.getElementById('prev-box').textContent=txt;
 }
 
@@ -1463,24 +1563,53 @@ function montarPDF(){
   function bar(t){doc.setFillColor(26,26,46);doc.roundedRect(ML,y,TW,5.8,1.5,1.5,'F');doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(255,255,255);doc.text(t,W/2,y+4.1,{align:'center'});doc.setTextColor(30,30,30);y+=8.6;}
   function cam(lb,val,x,cy,w){doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(120,120,120);doc.text(lb,x,cy);doc.setFontSize(9.5);doc.setTextColor(25,25,25);doc.text((val&&val.trim())?val:'_'.repeat(Math.max(4,Math.floor(w/2.2))),x,cy+4.5,{maxWidth:w});return cy+9;}
   function par(txt,x,cy,w,sz){doc.setFont('helvetica','normal');doc.setFontSize(sz||8.5);doc.setTextColor(40,40,40);var lines=doc.splitTextToSize(txt,w);doc.text(lines,x,cy);return cy+lines.length*3.9+1.5;}
+  // Quando quem assina é um procurador, o documento ganha um bloco a mais.
+  // O espaço entre as linhas encolhe um pouco para tudo continuar em 1 página.
+  var A=quemAssina(), repTxt='';
+  var LN = A.proc ? 8.5 : 9.6;             // passo de uma linha de campos
   doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(26,26,46);doc.text('PROCURAÇÃO',W/2,y,{align:'center'});y+=5.4;
   doc.setFontSize(9);doc.setTextColor(80,80,80);doc.text('INTENÇÃO DE VENDA E EMISSÃO ATPV-E',W/2,y,{align:'center'});y+=6;lnE();
   bar('DADOS DO PROPRIETÁRIO / VENDEDOR (OUTORGANTE)');
-  cam('Nome completo',g('v_nome'),ML,y,108);cam('CPF / CNPJ',g('v_cpf'),ML+112,y,58);y+=9.6;
-  cam('RG',g('v_rg'),ML,y,38);cam('Órgão exp.',g('v_rg_org'),ML+42,y,35);cam('Estado civil',g('v_ecivil'),ML+81,y,89);y+=9.6;
-  cam('Endereço',g('v_end'),ML,y,108);cam('Bairro',g('v_bairro'),ML+112,y,58);y+=9.6;
-  cam('Município / UF',g('v_cidade'),ML,y,58);cam('CEP',g('v_cep'),ML+62,y,34);cam('Celular',g('v_cel'),ML+100,y,70);y+=9.6;
-  cam('E-mail',g('v_email'),ML,y,TW);y+=10;lnC();
-  y=par('Nomeia como procurador: '+cfg.nome+', código '+cfg.cod+', sito à '+cfg.end+' — CEP: '+cfg.cep+', para representá-lo junto ao DETRAN/GO para INCLUSÃO DE INTENÇÃO DE VENDA ou CANCELAMENTO ATPV e/ou EMISSÃO DA ATPV-E do veículo abaixo, podendo para tanto praticar quaisquer atos necessários para o fiel cumprimento deste Mandato, o que desde já fica dado por firme e valioso.',ML,y,TW,8.5);y+=2.5;
+  cam('Nome completo',g('v_nome'),ML,y,108);cam('CPF / CNPJ',g('v_cpf'),ML+112,y,58);y+=LN;
+  cam('RG',g('v_rg'),ML,y,38);cam('Órgão exp.',g('v_rg_org'),ML+42,y,35);cam('Estado civil',g('v_ecivil'),ML+81,y,89);y+=LN;
+  cam('Endereço',g('v_end'),ML,y,108);cam('Bairro',g('v_bairro'),ML+112,y,58);y+=LN;
+  if(A.proc){
+    // Com o bloco do procurador o documento cresce, então o e-mail do
+    // proprietário entra na mesma linha em vez de ocupar uma só dele.
+    cam('Município / UF',g('v_cidade'),ML,y,44);cam('CEP',g('v_cep'),ML+46,y,28);
+    cam('Celular',g('v_cel'),ML+76,y,38);cam('E-mail',g('v_email'),ML+116,y,54);y+=LN+0.4;lnC();
+  } else {
+    cam('Município / UF',g('v_cidade'),ML,y,58);cam('CEP',g('v_cep'),ML+62,y,34);cam('Celular',g('v_cel'),ML+100,y,70);y+=9.6;
+    cam('E-mail',g('v_email'),ML,y,TW);y+=10;lnC();
+  }
+
+  if(A.proc){
+    bar('REPRESENTADO POR PROCURADOR (QUEM ASSINA ESTE INSTRUMENTO)');
+    cam('Nome completo do procurador',g('p_nome'),ML,y,108);cam('CPF',g('p_cpf'),ML+112,y,58);y+=LN;
+    cam('RG',g('p_rg'),ML,y,34);cam('Órgão exp.',g('p_rg_org'),ML+38,y,30);
+    cam('Celular',g('p_cel'),ML+72,y,40);cam('E-mail',g('p_email'),ML+116,y,54);y+=LN-0.6;
+    if(g('p_instr')){
+      doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(120,120,120);
+      doc.text('Instrumento de mandato:',ML,y);
+      doc.setFontSize(7.6);doc.setTextColor(25,25,25);
+      doc.text(g('p_instr')+(g('p_instr_data')?', de '+g('p_instr_data'):''),ML+30,y,{maxWidth:TW-30});
+      y+=3.4;
+    }
+    lnC();
+    repTxt = 'O outorgante acima, neste ato representado por seu procurador '+
+             (g('p_nome')||'—')+', CPF '+(g('p_cpf')||'—')+', nomeia como procurador: ';
+  }
+
+  y=par((repTxt || 'Nomeia como procurador: ')+cfg.nome+', código '+cfg.cod+', sito à '+cfg.end+' — CEP: '+cfg.cep+', para representá-lo junto ao DETRAN/GO para INCLUSÃO DE INTENÇÃO DE VENDA ou CANCELAMENTO ATPV e/ou EMISSÃO DA ATPV-E do veículo abaixo, podendo para tanto praticar quaisquer atos necessários para o fiel cumprimento deste Mandato, o que desde já fica dado por firme e valioso.',ML,y,TW,8.5);y+=2.5;
   bar('DADOS DO VEÍCULO');
-  cam('Marca / Modelo',g('ve_modelo'),ML,y,108);cam('Ano fabricação / Modelo',g('ve_ano'),ML+112,y,58);y+=9.6;
-  cam('Placa',g('ve_placa'),ML,y,52);cam('Chassi',g('ve_chassi'),ML+56,y,TW-56);y+=11;
+  cam('Marca / Modelo',g('ve_modelo'),ML,y,108);cam('Ano fabricação / Modelo',g('ve_ano'),ML+112,y,58);y+=LN;
+  cam('Placa',g('ve_placa'),ML,y,52);cam('Chassi',g('ve_chassi'),ML+56,y,TW-56);y+=LN+1.4;
   bar('DADOS DO COMPRADOR');
-  y=par('Declaro que os dados abaixo são verdadeiros, assumindo inteira responsabilidade, isentando o despachante de qualquer infortúnio.',ML,y,TW,8);y+=2;
-  cam('Nome completo do comprador',g('c_nome'),ML,y,108);cam('CPF / CNPJ',g('c_cpf'),ML+112,y,58);y+=9.6;
-  cam('RG',g('c_rg'),ML,y,52);cam('Valor da venda',g('c_valor'),ML+56,y,114);y+=9.6;
-  cam('Endereço completo',g('c_end'),ML,y,108);cam('Bairro',g('c_bairro'),ML+112,y,58);y+=9.6;
-  cam('Cidade / UF',g('c_cidade'),ML,y,58);cam('CEP',g('c_cep'),ML+62,y,34);cam('E-mail',g('c_email'),ML+100,y,70);y+=11;
+  y=par('Declaro que os dados abaixo são verdadeiros, assumindo inteira responsabilidade, isentando o despachante de qualquer infortúnio.',ML,y,TW,A.proc?7.4:8);y+=A.proc?0.5:2;
+  cam('Nome completo do comprador',g('c_nome'),ML,y,108);cam('CPF / CNPJ',g('c_cpf'),ML+112,y,58);y+=LN;
+  cam('RG',g('c_rg'),ML,y,52);cam('Valor da venda',g('c_valor'),ML+56,y,114);y+=LN;
+  cam('Endereço completo',g('c_end'),ML,y,108);cam('Bairro',g('c_bairro'),ML+112,y,58);y+=LN;
+  cam('Cidade / UF',g('c_cidade'),ML,y,58);cam('CEP',g('c_cep'),ML+62,y,34);cam('E-mail',g('c_email'),ML+100,y,70);y+=LN+1.4;
   lnC();y+=4;
   doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(50,50,50);doc.text(cfg.cidade+', '+dt,ML,y);
 
@@ -1490,13 +1619,35 @@ function montarPDF(){
   var decTxt='Declaro, sob as penas da lei, que a assinatura aposta neste instrumento foi colhida em '+
              'conformidade com o procedimento adotado, assumindo a responsabilidade civil e criminal '+
              'pelas informações e atos declaratórios aqui consignados, nos limites da atuação profissional.';
+  // Com procurador o documento é mais longo: a declaração e o carimbo ficam
+  // lado a lado em vez de um sob o outro, e assim tudo continua em 1 página.
+  var cbW=70, cbH=21;
+  var ladoALado = A.proc;
+  var decW = ladoALado ? TW-cbW-6 : TW;
+  var cbX  = ladoALado ? ML+decW+6 : (W-cbW)/2;
   doc.setFont('helvetica','normal');doc.setFontSize(7.2);
-  var decLin=doc.splitTextToSize(decTxt,TW-10);
+  var decLin=doc.splitTextToSize(decTxt,decW-10);
   var decH=7+decLin.length*3.1;
-  var cbW=70, cbH=21, cbX=(W-cbW)/2;
-  var fimH=4+5+decH+3.5+cbH+3+10.4;        // rótulo + folga + declaração + carimbo + assinatura
+
+  // Rótulo sob a linha de assinatura. Com procurador ele ganha uma segunda
+  // linha (CPF e de quem ele é procurador), que entra na conta do espaço.
+  var subLin=[];
+  if(A.proc){
+    doc.setFont('helvetica','normal');doc.setFontSize(6.5);
+    subLin=doc.splitTextToSize('CPF '+(g('p_cpf')||'—')+' — na qualidade de procurador de '+
+                               ((g('v_nome')||'').toUpperCase()), TW/2-8);
+  }
+  var rotH=4+subLin.length*2.9;            // rótulo + linhas extras do procurador
+  var meioH = ladoALado ? Math.max(decH,cbH) : decH+3.5+cbH;
+  var fimH=rotH+5+meioH+3+10.4;            // rótulo + folga + declaração/carimbo + assinatura
   var TOPO_RODAPE=281.5;                   // o rodapé do documento começa em 285
-  y=Math.max(y+8, TOPO_RODAPE-fimH);       // a linha do outorgante fica aqui
+  // Folga acima da linha: a assinatura do cliente é desenhada aí. Com
+  // procurador o documento é mais longo, então a folga mínima é menor.
+  var folga=A.proc?6:8;
+  // Diagnóstico de layout: diz se o conteúdo coube na página sem apertar.
+  PDF_LAYOUT = {y_antes_assinatura:+y.toFixed(1), fim_bloco:+(Math.max(y+folga,TOPO_RODAPE-fimH)+fimH).toFixed(1),
+                limite:TOPO_RODAPE, folga_sobrando:+((TOPO_RODAPE-fimH)-(y+folga)).toFixed(1)};
+  y=Math.max(y+folga, TOPO_RODAPE-fimH);
 
   doc.setDrawColor(120,120,120);doc.setLineWidth(0.3);doc.line(W/2+8,y,ML+TW,y);
 
@@ -1517,8 +1668,17 @@ function montarPDF(){
     relative_size_y: 9.42
   };
 
-  doc.setFontSize(7.5);doc.setTextColor(100,100,100);doc.text('Assinatura do Outorgante (Proprietário Vendedor)',W/2+8,y+4);
-  y+=9;
+  doc.setTextColor(100,100,100);
+  if(A.proc){
+    doc.setFontSize(7.2);
+    doc.text('Assinatura do Procurador — '+((g('p_nome')||'').toUpperCase()),W/2+8,y+3.6,{maxWidth:TW/2});
+    doc.setFontSize(6.5);doc.setTextColor(130,130,130);
+    doc.text(subLin,W/2+8,y+6.6);
+  } else {
+    doc.setFontSize(7.5);
+    doc.text('Assinatura do Outorgante (Proprietário Vendedor)',W/2+8,y+4);
+  }
+  y+=rotH+5;
 
   // ── BLOCO DO DESPACHANTE (declaração + carimbo + assinatura) ──
   // Escreve o texto centralizado encolhendo a fonte até caber na largura pedida.
@@ -1530,13 +1690,15 @@ function montarPDF(){
   }
 
   // Declaração
+  var yDec=y;
   doc.setDrawColor(190,190,190);doc.setLineWidth(0.3);
-  doc.roundedRect(ML,y,TW,decH,1.5,1.5,'D');
+  doc.roundedRect(ML,yDec,decW,decH,1.5,1.5,'D');
   doc.setFont('helvetica','bold');doc.setFontSize(7);doc.setTextColor(40,40,40);
-  doc.text('DECLARAÇÃO DO DESPACHANTE',ML+5,y+4.6);
+  doc.text('DECLARAÇÃO DO DESPACHANTE',ML+5,yDec+4.6);
   doc.setFont('helvetica','normal');doc.setFontSize(7.2);doc.setTextColor(50,50,50);
-  doc.text(decLin,ML+5,y+8.4);
-  y+=decH+3.5;
+  doc.text(decLin,ML+5,yDec+8.4);
+  // Lado a lado: o carimbo sobe para a altura da declaração.
+  y = ladoALado ? yDec : yDec+decH+3.5;
 
   // Carimbo: atesto em cima, assinatura no meio, nome e código embaixo da linha
   doc.setDrawColor(70,70,70);doc.setLineWidth(0.4);
@@ -1544,8 +1706,8 @@ function montarPDF(){
   doc.setFont('helvetica','normal');doc.setFontSize(4.6);doc.setTextColor(30,30,30);
   var atesto=['ATESTO SOB AS PENAS DA LEI CIVIL E CRIMINAL',
               'QUE A ASSINATURA NA PROCURAÇÃO É',
-              'DE PRÓPRIO PUNHO DO OUTORGANTE.'];
-  atesto.forEach(function(l,i){ doc.text(l,W/2,y+3.4+i*2.5,{align:'center'}); });
+              A.proc ? 'DE PRÓPRIO PUNHO DO PROCURADOR.' : 'DE PRÓPRIO PUNHO DO OUTORGANTE.'];
+  atesto.forEach(function(l,i){ doc.text(l,cbX+cbW/2,y+3.4+i*2.5,{align:'center'}); });
   if(cfg.assinatura){
     // 'FAST' comprime a imagem dentro do PDF: o arquivo final fica pequeno
     // o bastante para subir no sistema do DETRAN.
@@ -1555,10 +1717,10 @@ function montarPDF(){
   doc.setDrawColor(70,70,70);doc.setLineWidth(0.25);
   doc.line(cbX+6,y+16.2,cbX+cbW-6,y+16.2);
   doc.setFont('helvetica','bold');
-  txtFit((cfg.nome||'').toUpperCase(),W/2,y+18.5,cbW-10,5.2,3.4);
+  txtFit((cfg.nome||'').toUpperCase(),cbX+cbW/2,y+18.5,cbW-10,5.2,3.4);
   doc.setFont('helvetica','normal');doc.setFontSize(4.8);
-  doc.text('CÓD.: '+(cfg.cod||'—'),W/2,y+20.4,{align:'center'});
-  y+=cbH+3;
+  doc.text('CÓD.: '+(cfg.cod||'—'),cbX+cbW/2,y+20.4,{align:'center'});
+  y = (ladoALado ? yDec+meioH : y+cbH) + 3;
 
   // Linha de assinatura do despachante
   doc.setDrawColor(110,110,110);doc.setLineWidth(0.3);
@@ -1584,19 +1746,22 @@ function gerarPDF(){
 }
 
 // ═══ ASSINATURA ELETRÔNICA (ZapSign) ═════════════════════════
-var ASSIN_TOKEN='', ASSIN_POS=null;
+var ASSIN_TOKEN='', ASSIN_POS=null, PDF_LAYOUT=null;
 
 function enviarAssinatura(){
-  var nome=g('v_nome');
-  if(!nome){ showAlert('Preencha o nome do vendedor antes de enviar para assinatura.','warn'); ftab('vendedor'); return; }
-  abrirNivel(nome);
+  if(!g('v_nome')){ showAlert('Preencha o nome do vendedor antes de enviar para assinatura.','warn'); ftab('vendedor'); return; }
+  var A=quemAssina();
+  if(A.proc && !A.nome){ showAlert('Preencha o nome do procurador — é ele quem vai assinar.','warn'); ftab('vendedor'); return; }
+  abrirNivel(A.nome);
 }
 
 // ── confirmacao e escolha do nivel ──
 function abrirNivel(nome){
+  var A=quemAssina();
   document.getElementById('niv-cliente').textContent=nome;
-  var cpf=g('v_cpf'), cel=g('v_cel'), email=g('v_email');
+  var cpf=A.cpf, cel=A.cel, email=A.email;
   document.getElementById('niv-dados').innerHTML=
+    (A.proc ? '<b style="color:var(--acc)">Procurador de '+(g('v_nome')||'—')+'</b><br>' : '')+
     'CPF: '+(cpf||'<span style="color:var(--red)">não preenchido</span>')+'<br>'+
     'Celular: '+(cel||'<span style="color:var(--red)">não preenchido</span>')+'<br>'+
     'E-mail: '+(email||'<span style="color:var(--red)">não preenchido</span>');
@@ -1613,7 +1778,8 @@ function fecharNivel(){ document.getElementById('modal-nivel').classList.remove(
 
 function avaliarNivel(){
   var n=document.getElementById('niv-escolha').value;
-  var cpf=(g('v_cpf')||'').replace(/\D/g,''), cel=(g('v_cel')||'').replace(/\D/g,''), email=g('v_email');
+  var _A=quemAssina();
+  var cpf=(_A.cpf||'').replace(/\D/g,''), cel=(_A.cel||'').replace(/\D/g,''), email=_A.email;
   var regras={
     simples:   {fone:false, email:false, cpf:false, custo:'Sem custo além do documento.',
                 nota:'Não confere identidade: quem receber o link consegue assinar.', cor:'var(--warn)'},
@@ -1634,9 +1800,10 @@ function avaliarNivel(){
   // A ZapSign não tem campo de CNPJ, então ela pede o CPF de quem assinar.
   var pj = cpf.length===14;
   var r=regras[n]||regras.whatsapp, faltas=[];
-  if(r.fone  && cel.length<10) faltas.push('Celular');
-  if(r.email && !email)        faltas.push('E-mail');
-  if(r.cpf   && !pj && cpf.length!==11) faltas.push('CPF do vendedor (11 dígitos)');
+  var deQuem = _A.proc ? ' do procurador' : ' do vendedor';
+  if(r.fone  && cel.length<10) faltas.push('Celular'+deQuem);
+  if(r.email && !email)        faltas.push('E-mail'+deQuem);
+  if(r.cpf   && !pj && cpf.length!==11) faltas.push('CPF'+deQuem+' (11 dígitos)');
 
   var box=document.getElementById('niv-explica');
   var btn=document.getElementById('niv-confirmar');
@@ -1649,6 +1816,10 @@ function avaliarNivel(){
     box.style.borderColor='var(--bord)';
     box.innerHTML='<b style="color:'+r.cor+'">'+r.nota+'</b><br>'+
       '<span style="color:var(--mut)">'+r.custo+'</span>'+
+      (_A.proc ? '<br><br><b style="color:var(--acc2)">Quem assina é o procurador.</b>'+
+        '<br><span style="color:var(--mut)">O link vai para o celular de '+(_A.nome||'—')+
+        ', e é o CPF dele que será conferido. O proprietário '+(g('v_nome')||'—')+
+        ' não recebe nada.</span>' : '')+
       (pj && r.cpf ? '<br><br><b style="color:var(--acc2)">Vendedor é empresa (CNPJ).</b>'+
         '<br><span style="color:var(--mut)">A ZapSign vai pedir o CPF de quem assinar pela empresa '+
         '(sócio ou representante legal) e registrar no comprovante. A conferência na Receita '+
@@ -1665,7 +1836,8 @@ function confirmarEnvio(){
 }
 
 function dispararAssinatura(nivel){
-  var nome=g('v_nome');
+  var A=quemAssina();
+  var nome=A.nome;
   var btn=document.getElementById('btn-assin');
   var txtOrig=btn?btn.textContent:'';
   if(btn){ btn.disabled=true; btn.textContent='Enviando...'; }
@@ -1677,16 +1849,16 @@ function dispararAssinatura(nivel){
 
   var placa=g('ve_placa');
   fetch('/api/assinatura',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({pdf_base64:b64,nome:nome,email:g('v_email'),telefone:g('v_cel'),
+    body:JSON.stringify({pdf_base64:b64,nome:nome,email:A.email,telefone:A.cel,
       titulo:'Procuração ATPV-e'+(placa?' — '+placa:''),
-      cpf:g('v_cpf'), nivel:nivel, atendimento_id:ATEND_ATUAL,
+      cpf:A.cpf, nivel:nivel, atendimento_id:ATEND_ATUAL,
       posicao_assinatura:ASSIN_POS})})
   .then(function(r){ return r.json(); })
   .then(function(d){
     restaurar();
     if(d.erro){ showAlert(d.erro,'err'); return; }
     if(!d.sign_url){ showAlert('A ZapSign não devolveu o link de assinatura.','err'); return; }
-    abrirModalAssin(d.sign_url,nome,g('v_cel'),d.doc_token);
+    abrirModalAssin(d.sign_url,nome,A.cel,d.doc_token);
     showAlert('✓ Enviado! '+(d.nivel_rotulo||''),'ok');
   })
   .catch(function(){ restaurar(); showAlert('Falha de conexão ao enviar para assinatura.','err'); });
@@ -2053,6 +2225,9 @@ function carregarItem(i){
     if(d.erro){ showAlert(d.erro,'err'); return; }
     var snap=d.snap||{};
     CAMPOS_TODOS.forEach(function(k){var el=document.getElementById(k);if(el)el.value=snap[k]||'';});
+    // Quem assinou: volta o atendimento no mesmo estado em que foi salvo.
+    var qa=document.querySelector('input[name="quem_assina"][value="'+(snap._quem_assina==='proc'?'proc':'dono')+'"]');
+    if(qa){ qa.checked=true; alternarProcurador(); }
     atualizarContadores();gerarPreview();ftab('vendedor');
     showAlert('Atendimento carregado!','ok');
   }).catch(function(){ showAlert('Falha ao abrir o atendimento.','err'); });
@@ -2068,6 +2243,7 @@ function salvar(){
   var igual=todosHist.slice(0,2).some(function(h){return h.nome===nome&&h.placa===placa;});
   if(igual){showAlert('Já está salvo no histórico.','warn');return;}
   var snap={};CAMPOS_TODOS.forEach(function(k){snap[k]=g(k);});
+  snap._quem_assina = ehProcurador() ? 'proc' : 'dono';
   fetch('/api/historico',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({
       nome:nome||'—',placa:placa||'—',modelo:g('ve_modelo'),snap:snap,
@@ -2099,8 +2275,9 @@ function salvarCadastros(){
 
 // ═══ LIMPAR ══════════════════════════════════════════════════
 function limparAba(){
-  var mapa={vendedor:CAMPOS_V,veiculo:CAMPOS_VE,comprador:CAMPOS_C,contratante:CAMPOS_CT};
+  var mapa={vendedor:CAMPOS_V.concat(CAMPOS_P),veiculo:CAMPOS_VE,comprador:CAMPOS_C,contratante:CAMPOS_CT};
   (mapa[tabAtual]||[]).forEach(function(k){var el=document.getElementById(k);if(el){el.value='';el.classList.remove('ia');}});
+  if(tabAtual==='vendedor') voltarParaProprietario();
   document.getElementById('paste-txt').value='';
   atualizarContadores();
   showAlert('Campos da aba "'+tabAtual+'" limpos!','ok');
@@ -2108,6 +2285,7 @@ function limparAba(){
 function limparTudo(){
   ATEND_ATUAL=null;
   CAMPOS_TODOS.forEach(function(k){var el=document.getElementById(k);if(el){el.value='';el.classList.remove('ia');}});
+  voltarParaProprietario();
   document.getElementById('paste-txt').value='';
   atualizarContadores();gerarPreview();
   showAlert('Pronto para novo atendimento!','ok');
