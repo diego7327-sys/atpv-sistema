@@ -2140,7 +2140,7 @@ from urllib.parse import quote as _quote
 DOE_BASE   = "https://diariooficial.abc.go.gov.br"
 DOE_API    = DOE_BASE + "/busca/busca/buscar/query/{pag}/di:{di}/df:{df}/?1=1&q={q}"
 DOE_PAGINA = DOE_BASE + "/portal/edicoes/download/{diario}/{pagina}"
-DOE_BUSCAS = ["CPASCNH", '"Suspensão do Direito de Dirigir"', '"Cassação do Direito de Dirigir"',
+DOE_BUSCAS = ["CPASCNH", '"Suspensão do Direito de Dirigir"', '"Suspensão de CNH"', '"Cassação do Direito de Dirigir"',
               '"Processo Administrativo de Suspensão"', '"Processo Administrativo de Cassação"']
 DOE_DIAS_PADRAO = 15          # janela de cada conferência automática
 DOE_INTERVALO_H = 20          # roda sozinho se a última conferência tiver mais que isso
@@ -2266,15 +2266,17 @@ def _doe_tipo(texto):
         return "CETRAN – julgamento de recurso"
     if "RECURSO A JARI" in t or "PENALIDADE IMPOSTA" in t:
         return "Penalidade aplicada – prazo p/ recurso à JARI"
-    if "APRESENTAR DEFESA" in t or "FOI INSTAURADO" in t or "INSTAURACAO DO PROCESSO" in t:
-        return "Instauração – prazo p/ defesa prévia"
+    if "APRESENTAR DEFESA" in t or "FOI INSTAURADO" in t or "INSTAURACAO DO PROCESSO" in t or "INSTAURACAO DE PROCESSO" in t:
+        return ("Instauração (pontuação) – prazo p/ defesa prévia" if "PONTUACAO" in t or "SOMATORIO DE PONTOS" in t
+                else "Instauração – prazo p/ defesa prévia")
     if "JARI" in t:
         return "JARI – resultado de recurso"
     if "CASSACAO" in t:
         return "Cassação do direito de dirigir"
     return "Publicação DETRAN (conferir)"
 
-_DOE_PRAZO = re.compile(r"at[eé] o dia (\d{2}/\d{2}/\d{4})", re.I)
+# "até o dia 14/12/2026" ou "ATÉ A DATA DO DIA 23/11/2026" (edital de pontuação)
+_DOE_PRAZO = re.compile(r"at[eé]\s+(?:a\s+data\s+do|o)\s+dia\s+(\d{2}/\d{2}/\d{4})", re.I)
 
 def _doe_paginas_do_dia(dia, cache):
     """Todas as páginas do Diário de um dia (para achar o cabeçalho do edital
