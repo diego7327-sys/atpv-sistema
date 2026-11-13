@@ -3529,6 +3529,9 @@ function agDoe(){
     if(st.rodando) DOE.timer=setTimeout(function(){ if(AG.aba===5) agDoe(); else agDoeBadge(); },8000);
   }).catch(function(e){ var box=agG('doe-box'); if(box) box.innerHTML='<span class="ag-small">'+agEsc(e.message)+'</span>'; });
 }
+function agDoeLinkEdital(x){
+  return (x.pagina_edital && x.pagina_edital!==x.pagina) ? String(x.link||'').replace(/\/\d+$/,'/'+x.pagina_edital) : '';
+}
 function agDoeTabela(l){
   return '<div class="table-wrap"><table><thead><tr><th>Publicado</th><th>Cliente</th><th>Publicação</th><th>Prazo</th><th>Ações</th></tr></thead><tbody>'+
     l.map(function(x){
@@ -3542,7 +3545,8 @@ function agDoeTabela(l){
         '<td>'+agEsc(x.tipo_pub)+(x.trecho?'<br><span class="ag-small" title="'+agEsc(x.trecho)+'">“'+agEsc(x.trecho.slice(0,90))+'…”</span>':'')+'</td>'+
         '<td style="white-space:nowrap">'+(x.prazo?'<b style="color:'+corPr+'">'+agBr(x.prazo)+'</b><br><span class="ag-small">'+(dias<0?'venceu há '+(-dias)+' dia(s)':dias===0?'vence HOJE':'faltam '+dias+' dia(s)')+'</span>':'<span class="ag-small">ver no Diário</span>')+'</td>'+
         '<td style="min-width:190px">'+
-          '<a class="ag-bt" href="'+agEsc(x.link)+'" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">📄 Abrir página</a>'+
+          (agDoeLinkEdital(x)?'<a class="ag-bt" href="'+agEsc(agDoeLinkEdital(x))+'" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">📄 Edital (pág. '+agEsc(x.pagina_edital)+')</a>':'')+
+          '<a class="ag-bt" href="'+agEsc(x.link)+'" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">📄 '+(agDoeLinkEdital(x)?'Nome do cliente (pág. '+agEsc(x.pagina)+')':'Abrir página')+'</a>'+
           (x.visto?'<button class="ag-bt" onclick="agDoeVisto('+x.id+',false)">↺ Desfazer</button><br><span class="ag-small" style="color:var(--acc)">✓ '+agEsc(x.visto_por||'')+' '+agEsc(x.visto_em||'')+'</span>'
                   :'<button class="ag-bt" onclick="agDoeAgendar('+x.id+')">📅 Agendar prazo</button><button class="ag-bt ok" onclick="agDoeVisto('+x.id+',true)">✓ Conferido</button>')+
         '</td></tr>';
@@ -3562,7 +3566,8 @@ function agDoeAgendar(id){
   var tipo=/CETRAN/.test(t)?'Defesa suspensão CNH – CETRAN':/JARI/.test(t)?'Defesa suspensão CNH – JARI':/Cassa/.test(t)?'Cassação':'Defesa prévia – suspensão CNH';
   agG('ag_tipo').value=tipo; agG('ag_cli').value=x.cliente_nome||''; agG('ag_proc').value=x.processo||'';
   agG('ag_acao').value='Vencimento de prazo';
-  agG('ag_obs').value='Diário Oficial '+(x.data_pub?agBr(x.data_pub):'')+' pág. '+x.pagina+' — '+t+(x.prazo?' — prazo até '+agBr(x.prazo):'')+'\n'+x.link;
+  agG('ag_obs').value='Diário Oficial '+(x.data_pub?agBr(x.data_pub):'')+' pág. '+x.pagina+' — '+t+(x.prazo?' — prazo até '+agBr(x.prazo):'')+
+    (agDoeLinkEdital(x)?'\nEdital (pág. '+x.pagina_edital+'): '+agDoeLinkEdital(x)+'\nNome do cliente (pág. '+x.pagina+'): '+x.link:'\n'+x.link);
   if(x.prazo){                                         // lembrete 5 dias úteis antes do prazo
     var d=agParse(x.prazo), n=0, lim=agHojeD();
     while(n<5){ d=agAdd(d,-1); if(agUtil(agIso(d))) n++; }
