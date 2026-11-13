@@ -2170,6 +2170,7 @@ CREATE TABLE IF NOT EXISTS diario_achados (
     empresa_id   TEXT
 );
 CREATE INDEX IF NOT EXISTS diario_visto_idx ON diario_achados (visto, data_pub);
+ALTER TABLE IF EXISTS diario_achados ADD COLUMN IF NOT EXISTS pagina_edital INTEGER;
 """
 try:
     if DATABASE_URL:
@@ -2293,9 +2294,9 @@ def _doe_prazo(src, todas, cache_dia):
     da mesma edição (primeiro nas já lidas, depois buscando as páginas do dia)."""
     txt = src.get("conteudo", "") or ""
     m = _DOE_PRAZO.search(txt)
-    if m:
-        return m.group(1), txt
     pag, did = int(src.get("pagina") or 0), str(src.get("diario_id"))
+    if m:
+        return m.group(1), txt, pag
     def procura(lista):
         ant = sorted([s for s in lista if str(s.get("diario_id")) == did and pag - 15 <= int(s.get("pagina") or 0) < pag],
                      key=lambda s: -int(s.get("pagina") or 0))
@@ -2305,13 +2306,13 @@ def _doe_prazo(src, todas, cache_dia):
             juntas = c + " " + juntas
             m = _DOE_PRAZO.search(c)
             if m:
-                return m.group(1), juntas
+                return m.group(1), juntas, int(s.get("pagina") or 0)
         return None
     r = procura(todas.values())
     if r:
         return r
     r = procura(_doe_paginas_do_dia(str(src.get("data", ""))[:10], cache_dia))
-    return r or ("", txt)
+    return r or ("", txt, None)
 
 def _doe_conferir(dias=DOE_DIAS_PADRAO, quem="automático"):
     """Faz a conferência e grava os achados novos. Só uma por vez."""
@@ -2354,20 +2355,24 @@ def _doe_conferir(dias=DOE_DIAS_PADRAO, quem="automático"):
                                    else "Nome (conferir se é o mesmo cliente)")
                     if not por:
                         continue
-                    prazo_txt, ctx = _doe_prazo(s, paginas, cache_dia)
+                    prazo_txt, ctx, pag_edital = _doe_prazo(s, paginas, cache_dia)
                     chave = "%s|%s|%s" % (c["processo"] or _doe_norm(c["nome"]), s.get("diario_id"), s.get("pagina"))
                     trecho = re.sub(r"\d{3}\.\d{3}\.\d{3}-\d{2}", "***", re.sub(r"\s+", " ", trecho))[:300]
                     cur.execute("""INSERT INTO diario_achados (chave, cliente_nome, processo, por, tipo_pub, data_pub,
-                                       pagina, diario_id, prazo, link, trecho, empresa_id)
-                                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (chave) DO UPDATE
-                                     SET tipo_pub = EXCLUDED.tipo_pub, prazo = EXCLUDED.prazo
-                                   WHERE diario_achados.prazo IS NULL AND EXCLUDED.prazo IS NOT NULL
+                                       pagina, diario_id, prazo, link, trecho, empresa_id, pagina_edital)
+                                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (chave) DO UPDATE
+                                     SET tipo_pub = CASE WHEN diario_achados.prazo IS NULL THEN EXCLUDED.tipo_pub
+                                                         ELSE diario_achados.tipo_pub END,
+                                         prazo = COALESCE(diario_achados.prazo, EXCLUDED.prazo),
+                                         pagina_edital = COALESCE(diario_achados.pagina_edital, EXCLUDED.pagina_edital)
+                                   WHERE (diario_achados.prazo IS NULL AND EXCLUDED.prazo IS NOT NULL)
+                                      OR (diario_achados.pagina_edital IS NULL AND EXCLUDED.pagina_edital IS NOT NULL)
                                    RETURNING (xmax = 0) AS inserido""",
                                 (chave, c["nome"], c["processo"], por, _doe_tipo(ctx),
                                  _data_iso(str(s.get("data", ""))[:10]), int(s.get("pagina") or 0),
                                  str(s.get("diario_id") or ""), _data_iso(prazo_txt),
                                  DOE_PAGINA.format(diario=s.get("diario_id"), pagina=s.get("pagina")),
-                                 trecho, c.get("empresa_id")))
+                                 trecho, c.get("empresa_id"), pag_edital))
                     r_ins = cur.fetchone()
                     novos += 1 if (r_ins and r_ins['inserido']) else 0
         fim = datetime.utcnow() - timedelta(hours=3)
@@ -2411,7 +2416,7 @@ def api_diario():
     if sit == "novos":
         cond += " AND NOT visto"
     with db() as cur:
-        cur.execute("""SELECT id, cliente_nome, processo, por, tipo_pub, data_pub, pagina, prazo, link, trecho,
+        cur.execute("""SELECT id, cliente_nome, processo, por, tipo_pub, data_pub, pagina, pagina_edital, prazo, link, trecho,
                               agenda_id, visto, visto_por, visto_em, criado
                        FROM diario_achados WHERE TRUE""" + cond +
                     " ORDER BY visto, data_pub DESC, id DESC LIMIT 300", params)
