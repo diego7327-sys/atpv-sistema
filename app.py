@@ -2129,6 +2129,318 @@ def api_ag_excluir(aid):
     return jsonify({"ok": True})
 
 
+# ══ ROBÔ DIÁRIO OFICIAL (DOE-GO) ═════════════════════════════
+# Procura os clientes marcados na Agenda com Tipo "Aguardando Diário Oficial"
+# nas publicações do DETRAN no Diário Oficial de Goiás.
+# Roda sozinho 1x por dia (quando alguém abre o sistema) ou no botão
+# "Conferir agora". O resultado fica na aba "📰 Diário Oficial" da Agenda.
+import threading, unicodedata, time as _time
+from urllib.parse import quote as _quote
+
+DOE_BASE   = "https://diariooficial.abc.go.gov.br"
+DOE_API    = DOE_BASE + "/busca/busca/buscar/query/{pag}/di:{di}/df:{df}/?1=1&q={q}"
+DOE_PAGINA = DOE_BASE + "/portal/edicoes/download/{diario}/{pagina}"
+DOE_BUSCAS = ["CPASCNH", '"Suspensão do Direito de Dirigir"', '"Cassação do Direito de Dirigir"',
+              '"Processo Administrativo de Suspensão"', '"Processo Administrativo de Cassação"']
+DOE_DIAS_PADRAO = 15          # janela de cada conferência automática
+DOE_INTERVALO_H = 20          # roda sozinho se a última conferência tiver mais que isso
+DOE_CONECTORES  = {"DA", "DE", "DO", "DAS", "DOS", "E"}
+_DOE_TRAVA = threading.Lock()
+datetime.strptime('2000-01-01', '%Y-%m-%d')   # carrega o _strptime antes das threads (evita trava de import)
+
+SCHEMA_DIARIO = """
+CREATE TABLE IF NOT EXISTS diario_achados (
+    id           BIGSERIAL PRIMARY KEY,
+    criado       TIMESTAMPTZ DEFAULT NOW(),
+    chave        TEXT UNIQUE,
+    cliente_nome TEXT DEFAULT '',
+    processo     TEXT DEFAULT '',
+    por          TEXT DEFAULT '',
+    tipo_pub     TEXT DEFAULT '',
+    data_pub     DATE,
+    pagina       INTEGER,
+    diario_id    TEXT DEFAULT '',
+    prazo        DATE,
+    link         TEXT DEFAULT '',
+    trecho       TEXT DEFAULT '',
+    agenda_id    BIGINT,
+    visto        BOOLEAN DEFAULT FALSE,
+    visto_por    TEXT DEFAULT '',
+    visto_em     TIMESTAMPTZ,
+    empresa_id   TEXT
+);
+CREATE INDEX IF NOT EXISTS diario_visto_idx ON diario_achados (visto, data_pub);
+"""
+try:
+    if DATABASE_URL:
+        with db(commit=True) as _c:
+            _c.execute("SELECT pg_advisory_xact_lock(918273646)")
+            _c.execute(SCHEMA_DIARIO)
+except Exception as _e:
+    print("Diário Oficial: erro ao criar tabela: %s" % _e)
+
+
+def _doe_norm(t):
+    t = unicodedata.normalize("NFKD", str(t or ""))
+    return "".join(c for c in t if not unicodedata.combining(c)).upper()
+
+def _doe_dig(t):
+    return re.sub(r"\D", "", str(t or ""))
+
+def _doe_status_get():
+    try:
+        with db() as cur:
+            cur.execute("SELECT valor FROM config WHERE chave='diario_status'")
+            r = cur.fetchone()
+        return json.loads(r['valor']) if r and r['valor'] else {}
+    except Exception:
+        return {}
+
+def _doe_status_set(st):
+    with db(commit=True) as cur:
+        cur.execute("""INSERT INTO config (chave, valor, atualizado) VALUES ('diario_status', %s, NOW())
+                       ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor, atualizado = NOW()""",
+                    (json.dumps(st, ensure_ascii=False),))
+
+def _doe_buscar(q, di, df, max_pag=60):
+    """Todas as páginas de resultado de uma busca no DOE-GO, entre as datas."""
+    achados = []
+    for pag in range(max_pag):
+        url = DOE_API.format(pag=pag, di=di, df=df, q=_quote(q))
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Diego Despachante - monitor DOE)",
+                                                   "Accept": "application/json"})
+        hits = None
+        for tent in range(3):
+            try:
+                with urllib.request.urlopen(req, timeout=40) as r:
+                    hits = json.loads(r.read().decode("utf-8"))["hits"]["hits"]
+                break
+            except Exception as e:
+                if tent == 2:
+                    raise RuntimeError("não consegui consultar o Diário Oficial (%s)" % e)
+                _time.sleep(3)
+        if not hits:
+            break
+        achados += [h.get("_source", {}) for h in hits]
+        _time.sleep(0.4)
+        if len(hits) < 10:
+            break
+    return achados
+
+def _doe_clientes():
+    """Só os lembretes da Agenda marcados com Tipo "Aguardando Diário Oficial"
+    (aceita também o texto na observação). Usa o nome do cliente e o nº do processo."""
+    vistos, lista = set(), []
+    with db() as cur:
+        cur.execute("""SELECT DISTINCT cliente_nome, processo, empresa_id FROM agenda
+                       WHERE data >= CURRENT_DATE - 365
+                         AND (translate(lower(tipo), 'áàâã', 'aaaa') LIKE '%%aguardando diario oficial%%'
+                              OR translate(lower(obs), 'áàâã', 'aaaa') LIKE '%%aguardando diario oficial%%')""")
+        linhas = [dict(r) for r in cur.fetchall()]
+    for r in linhas:
+        nome = (r.get('cliente_nome') or '').strip()
+        proc = _doe_dig(r.get('processo'))
+        k = (_doe_norm(nome), proc)
+        if (not nome and not proc) or k in vistos:
+            continue
+        vistos.add(k)
+        lista.append({"nome": nome, "processo": proc, "cpf": "", "empresa_id": r.get('empresa_id')})
+    return lista
+
+def _doe_nome_bate(nome, texto_norm):
+    """Todas as palavras do nome perto uma da outra (a tabela do DOE quebra o
+    nome com CPF e nº do processo no meio). Devolve o trecho ou ''."""
+    partes = [p for p in _doe_norm(nome).split() if p not in DOE_CONECTORES]
+    if len(partes) < 2:
+        return ""
+    janela = len(nome) + 140
+    for m in re.finditer(r"\b" + re.escape(partes[0]) + r"\b", texto_norm):
+        trecho = texto_norm[m.start(): m.start() + janela]
+        if all(re.search(r"\b" + re.escape(p) + r"\b", trecho) for p in partes[1:]):
+            return trecho
+    return ""
+
+def _doe_tipo(texto):
+    t = _doe_norm(texto)
+    if "CETRAN" in t:
+        return "CETRAN – julgamento de recurso"
+    if "RECURSO A JARI" in t or "PENALIDADE IMPOSTA" in t:
+        return "Penalidade aplicada – prazo p/ recurso à JARI"
+    if "APRESENTAR DEFESA" in t or "FOI INSTAURADO" in t or "INSTAURACAO DO PROCESSO" in t:
+        return "Instauração – prazo p/ defesa prévia"
+    if "JARI" in t:
+        return "JARI – resultado de recurso"
+    if "CASSACAO" in t:
+        return "Cassação do direito de dirigir"
+    return "Publicação DETRAN (conferir)"
+
+_DOE_PRAZO = re.compile(r"at[eé] o dia (\d{2}/\d{2}/\d{4})", re.I)
+
+def _doe_prazo(src, todas):
+    """'até o dia dd/mm/aaaa' na página; se não tiver, nas páginas anteriores da mesma edição."""
+    txt = src.get("conteudo", "") or ""
+    m = _DOE_PRAZO.search(txt)
+    if m:
+        return m.group(1), txt
+    ant = sorted([s for s in todas.values() if str(s.get("diario_id")) == str(src.get("diario_id"))
+                  and int(s.get("pagina") or 0) < int(src.get("pagina") or 0)],
+                 key=lambda s: -int(s.get("pagina") or 0))
+    for s in ant:
+        m = _DOE_PRAZO.search(s.get("conteudo", "") or "")
+        if m:
+            return m.group(1), (s.get("conteudo", "") or "") + " " + txt
+    return "", txt
+
+def _doe_conferir(dias=DOE_DIAS_PADRAO, quem="automático"):
+    """Faz a conferência e grava os achados novos. Só uma por vez."""
+    if not _DOE_TRAVA.acquire(blocking=False):
+        return
+    inicio = datetime.utcnow() - timedelta(hours=3)
+    st = _doe_status_get()
+    st.update({"rodando": True, "inicio": inicio.strftime("%d/%m/%Y %H:%M"), "quem": quem, "erro": ""})
+    try:
+        _doe_status_set(st)
+        df = _hoje_br(); di = df - timedelta(days=int(dias))
+        di_s, df_s = di.isoformat(), df.isoformat()
+        clientes = _doe_clientes()
+        paginas = {}
+        def junta(lista):
+            for s in lista:
+                paginas["%s_%s" % (s.get("diario_id"), s.get("pagina"))] = s
+        for q in DOE_BUSCAS:
+            junta(_doe_buscar(q, di_s, df_s))
+        for c in clientes:                      # busca direta do nº (pega publicação fora do padrão)
+            if len(c["processo"]) >= 12:
+                junta(_doe_buscar(c["processo"], di_s, df_s, max_pag=3))
+        novos = 0
+        with db(commit=True) as cur:
+            for s in paginas.values():
+                txt = s.get("conteudo", "") or ""
+                norm = _doe_norm(txt)
+                sem_esp = re.sub(r"\s", "", txt)
+                for c in clientes:
+                    por, trecho = "", ""
+                    if len(c["processo"]) >= 12 and (c["processo"] in txt or c["processo"] in sem_esp):
+                        por = "Processo (confirmado)"
+                        i = txt.find(c["processo"]); trecho = txt[max(0, i - 80): i + 120] if i >= 0 else ""
+                    elif c["nome"]:
+                        trecho = _doe_nome_bate(c["nome"], norm)
+                        if trecho:
+                            cpf = c["cpf"]
+                            por = ("Nome + CPF (confirmado)" if len(cpf) == 11 and cpf[3:9] in _doe_dig(trecho)
+                                   else "Nome (conferir se é o mesmo cliente)")
+                    if not por:
+                        continue
+                    prazo_txt, ctx = _doe_prazo(s, paginas)
+                    chave = "%s|%s|%s" % (c["processo"] or _doe_norm(c["nome"]), s.get("diario_id"), s.get("pagina"))
+                    trecho = re.sub(r"\d{3}\.\d{3}\.\d{3}-\d{2}", "***", re.sub(r"\s+", " ", trecho))[:300]
+                    cur.execute("""INSERT INTO diario_achados (chave, cliente_nome, processo, por, tipo_pub, data_pub,
+                                       pagina, diario_id, prazo, link, trecho, empresa_id)
+                                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (chave) DO NOTHING""",
+                                (chave, c["nome"], c["processo"], por, _doe_tipo(ctx),
+                                 _data_iso(str(s.get("data", ""))[:10]), int(s.get("pagina") or 0),
+                                 str(s.get("diario_id") or ""), _data_iso(prazo_txt),
+                                 DOE_PAGINA.format(diario=s.get("diario_id"), pagina=s.get("pagina")),
+                                 trecho, c.get("empresa_id")))
+                    novos += cur.rowcount
+        fim = datetime.utcnow() - timedelta(hours=3)
+        st.update({"rodando": False, "ultima": fim.strftime("%d/%m/%Y %H:%M"), "ultima_iso": fim.isoformat(),
+                   "periodo": "%s a %s" % (di.strftime("%d/%m/%Y"), df.strftime("%d/%m/%Y")),
+                   "clientes": len(clientes), "paginas": len(paginas), "novos": novos, "erro": ""})
+    except Exception as e:
+        fim = datetime.utcnow() - timedelta(hours=3)
+        st.update({"rodando": False, "erro": str(e), "erro_em": fim.strftime("%d/%m/%Y %H:%M"),
+                   "ultima_iso": fim.isoformat()})
+        print("Diário Oficial: %s" % e)
+    finally:
+        try:
+            _doe_status_set(st)
+        finally:
+            _DOE_TRAVA.release()
+
+def _doe_disparar(dias=DOE_DIAS_PADRAO, quem="automático"):
+    threading.Thread(target=_doe_conferir, args=(dias, quem), daemon=True).start()
+
+def _doe_precisa_rodar(st):
+    if st.get("rodando") and not _DOE_TRAVA.locked():
+        return True                                  # ficou marcado de um deploy que caiu no meio
+    try:
+        ult = datetime.fromisoformat(st.get("ultima_iso") or "")
+    except ValueError:
+        return True
+    return (datetime.utcnow() - timedelta(hours=3)) - ult > timedelta(hours=DOE_INTERVALO_H)
+
+@app.route("/api/diario", methods=["GET"])
+@login_required
+def api_diario():
+    """Relatório: achados + situação da última conferência. Dispara a conferência
+    automática se a última tiver mais de DOE_INTERVALO_H horas."""
+    st = _doe_status_get()
+    if not _DOE_TRAVA.locked() and _doe_precisa_rodar(st):
+        _doe_disparar()
+        st["rodando"] = True
+    sit = (request.args.get("situacao") or "novos").strip()
+    cond, params = _escopo_proc()
+    if sit == "novos":
+        cond += " AND NOT visto"
+    with db() as cur:
+        cur.execute("""SELECT id, cliente_nome, processo, por, tipo_pub, data_pub, pagina, prazo, link, trecho,
+                              agenda_id, visto, visto_por, visto_em, criado
+                       FROM diario_achados WHERE TRUE""" + cond +
+                    " ORDER BY visto, data_pub DESC, id DESC LIMIT 300", params)
+        itens = []
+        for r in cur.fetchall():
+            d = dict(r)
+            d['data_pub'] = d['data_pub'].isoformat() if d['data_pub'] else None
+            d['prazo'] = d['prazo'].isoformat() if d['prazo'] else None
+            d['visto_em'] = d['visto_em'].strftime('%d/%m/%Y %H:%M') if d['visto_em'] else ''
+            d['criado'] = d['criado'].strftime('%d/%m/%Y %H:%M') if d['criado'] else ''
+            itens.append(d)
+        c2, p2 = _escopo_proc()
+        cur.execute("SELECT COUNT(*) AS n FROM diario_achados WHERE NOT visto" + c2, p2)
+        n_novos = cur.fetchone()['n']
+    return jsonify({"status": st, "itens": itens, "novos": n_novos})
+
+@app.route("/api/diario/conferir", methods=["POST"])
+@login_required
+def api_diario_conferir():
+    """Botão 'Conferir agora'. Roda em segundo plano; a tela acompanha pelo /api/diario."""
+    try:
+        dias = max(1, min(int((request.get_json() or {}).get("dias") or DOE_DIAS_PADRAO), 365))
+    except (TypeError, ValueError):
+        dias = DOE_DIAS_PADRAO
+    if _DOE_TRAVA.locked():
+        return jsonify({"ok": True, "msg": "Já existe uma conferência rodando."})
+    _doe_disparar(dias, session.get('user_nome') or 'usuário')
+    return jsonify({"ok": True, "msg": "Conferência iniciada (%d dias)." % dias})
+
+@app.route("/api/diario/<int:did>/visto", methods=["POST"])
+@login_required
+def api_diario_visto(did):
+    visto = bool((request.get_json() or {}).get("visto", True))
+    agenda_id = (request.get_json() or {}).get("agenda_id")
+    cond, params = _escopo_proc()
+    with db(commit=True) as cur:
+        cur.execute("""UPDATE diario_achados SET visto=%s,
+                         visto_por = CASE WHEN %s THEN %s ELSE '' END,
+                         visto_em  = CASE WHEN %s THEN NOW() ELSE NULL END,
+                         agenda_id = COALESCE(%s, agenda_id)
+                       WHERE id=%s""" + cond,
+                    [visto, visto, session.get('user_nome') or '', visto, agenda_id, did] + params)
+        if cur.rowcount == 0:
+            return jsonify({"erro": "Não encontrado"}), 404
+    return jsonify({"ok": True})
+
+@app.route("/api/diario-cron", methods=["GET", "POST"])
+def api_diario_cron():
+    """Para um agendador externo (ex.: cron-job.org) chamar 1x por dia. Protegido pela ALERTA_CHAVE."""
+    if not ALERTA_CHAVE or (request.args.get("chave") or "") != ALERTA_CHAVE:
+        return jsonify({"erro": "Chave inválida"}), 403
+    if not _DOE_TRAVA.locked():
+        _doe_disparar(quem="agendador")
+    return jsonify({"ok": True})
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
