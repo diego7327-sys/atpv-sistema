@@ -2276,20 +2276,40 @@ def _doe_tipo(texto):
 
 _DOE_PRAZO = re.compile(r"at[eé] o dia (\d{2}/\d{2}/\d{4})", re.I)
 
-def _doe_prazo(src, todas):
-    """'até o dia dd/mm/aaaa' na página; se não tiver, nas páginas anteriores da mesma edição."""
+def _doe_paginas_do_dia(dia, cache):
+    """Todas as páginas do Diário de um dia (para achar o cabeçalho do edital
+    quando o cliente cai numa página que só tem a continuação da tabela)."""
+    if dia not in cache:
+        try:
+            cache[dia] = _doe_buscar('"Diário Oficial"', dia, dia, max_pag=40)
+        except Exception:
+            cache[dia] = []
+    return cache[dia]
+
+def _doe_prazo(src, todas, cache_dia):
+    """'até o dia dd/mm/aaaa' na página; se não tiver, nas até 15 páginas anteriores
+    da mesma edição (primeiro nas já lidas, depois buscando as páginas do dia)."""
     txt = src.get("conteudo", "") or ""
     m = _DOE_PRAZO.search(txt)
     if m:
         return m.group(1), txt
-    ant = sorted([s for s in todas.values() if str(s.get("diario_id")) == str(src.get("diario_id"))
-                  and int(s.get("pagina") or 0) < int(src.get("pagina") or 0)],
-                 key=lambda s: -int(s.get("pagina") or 0))
-    for s in ant:
-        m = _DOE_PRAZO.search(s.get("conteudo", "") or "")
-        if m:
-            return m.group(1), (s.get("conteudo", "") or "") + " " + txt
-    return "", txt
+    pag, did = int(src.get("pagina") or 0), str(src.get("diario_id"))
+    def procura(lista):
+        ant = sorted([s for s in lista if str(s.get("diario_id")) == did and pag - 15 <= int(s.get("pagina") or 0) < pag],
+                     key=lambda s: -int(s.get("pagina") or 0))
+        juntas = txt
+        for s in ant:
+            c = s.get("conteudo", "") or ""
+            juntas = c + " " + juntas
+            m = _DOE_PRAZO.search(c)
+            if m:
+                return m.group(1), juntas
+        return None
+    r = procura(todas.values())
+    if r:
+        return r
+    r = procura(_doe_paginas_do_dia(str(src.get("data", ""))[:10], cache_dia))
+    return r or ("", txt)
 
 def _doe_conferir(dias=DOE_DIAS_PADRAO, quem="automático"):
     """Faz a conferência e grava os achados novos. Só uma por vez."""
@@ -2304,6 +2324,7 @@ def _doe_conferir(dias=DOE_DIAS_PADRAO, quem="automático"):
         di_s, df_s = di.isoformat(), df.isoformat()
         clientes = _doe_clientes()
         paginas = {}
+        cache_dia = {}
         def junta(lista):
             for s in lista:
                 paginas["%s_%s" % (s.get("diario_id"), s.get("pagina"))] = s
@@ -2331,18 +2352,22 @@ def _doe_conferir(dias=DOE_DIAS_PADRAO, quem="automático"):
                                    else "Nome (conferir se é o mesmo cliente)")
                     if not por:
                         continue
-                    prazo_txt, ctx = _doe_prazo(s, paginas)
+                    prazo_txt, ctx = _doe_prazo(s, paginas, cache_dia)
                     chave = "%s|%s|%s" % (c["processo"] or _doe_norm(c["nome"]), s.get("diario_id"), s.get("pagina"))
                     trecho = re.sub(r"\d{3}\.\d{3}\.\d{3}-\d{2}", "***", re.sub(r"\s+", " ", trecho))[:300]
                     cur.execute("""INSERT INTO diario_achados (chave, cliente_nome, processo, por, tipo_pub, data_pub,
                                        pagina, diario_id, prazo, link, trecho, empresa_id)
-                                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (chave) DO NOTHING""",
+                                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (chave) DO UPDATE
+                                     SET tipo_pub = EXCLUDED.tipo_pub, prazo = EXCLUDED.prazo
+                                   WHERE diario_achados.prazo IS NULL AND EXCLUDED.prazo IS NOT NULL
+                                   RETURNING (xmax = 0) AS inserido""",
                                 (chave, c["nome"], c["processo"], por, _doe_tipo(ctx),
                                  _data_iso(str(s.get("data", ""))[:10]), int(s.get("pagina") or 0),
                                  str(s.get("diario_id") or ""), _data_iso(prazo_txt),
                                  DOE_PAGINA.format(diario=s.get("diario_id"), pagina=s.get("pagina")),
                                  trecho, c.get("empresa_id")))
-                    novos += cur.rowcount
+                    r_ins = cur.fetchone()
+                    novos += 1 if (r_ins and r_ins['inserido']) else 0
         fim = datetime.utcnow() - timedelta(hours=3)
         st.update({"rodando": False, "ultima": fim.strftime("%d/%m/%Y %H:%M"), "ultima_iso": fim.isoformat(),
                    "periodo": "%s a %s" % (di.strftime("%d/%m/%Y"), df.strftime("%d/%m/%Y")),
