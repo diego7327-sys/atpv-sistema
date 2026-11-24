@@ -498,6 +498,10 @@ def registrar(app, db, login_required):
                     cid = ex['id']  # mesmo documento: atualiza o cadastro existente
             cols = list(CAMPOS_CLIENTE)
             if cid:
+                # só altera o que veio na tela (não apaga campos que a tela não mostra)
+                cols = [c for c in CAMPOS_CLIENTE if c in d or c == 'nome']
+                if 'tipo' not in d and 'cpf_cnpj' not in d and 'tipo' in cols:
+                    cols.remove('tipo')
                 cur.execute("UPDATE clientes SET " + ", ".join(c + "=%s" for c in cols) +
                             ", atualizado = NOW() WHERE id = %s RETURNING id",
                             [vals[c] for c in cols] + [cid])
@@ -562,10 +566,14 @@ def registrar(app, db, login_required):
                 vid = ex['id']
             cols = list(CAMPOS_VEICULO)
             if vid:
-                cur.execute("UPDATE veiculos SET " + ", ".join(c + "=%s" for c in cols) +
-                            ", proprietario_id=%s, ano = CASE WHEN %s <> '' THEN %s ELSE ano END,"
+                cols = [c for c in CAMPOS_VEICULO if c in d or c == 'placa']
+                extra, ev = "", []
+                if 'proprietario_id' in d:
+                    extra += ", proprietario_id=%s"; ev.append(prop)
+                cur.execute("UPDATE veiculos SET " + ", ".join(c + "=%s" for c in cols) + extra +
+                            ", ano = CASE WHEN %s <> '' THEN %s ELSE ano END,"
                             " atualizado=%s WHERE id = %s RETURNING id",
-                            [vals[c] for c in cols] + [prop, ano, ano,
+                            [vals[c] for c in cols] + ev + [ano, ano,
                              _agora().strftime("%d/%m/%Y %H:%M"), vid])
                 row = cur.fetchone()
                 if not row:
