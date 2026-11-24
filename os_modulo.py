@@ -158,6 +158,12 @@ CREATE TABLE IF NOT EXISTS os_documentos (
     nome TEXT DEFAULT '', url TEXT DEFAULT '',
     enviado TIMESTAMPTZ DEFAULT NOW(), user_nome TEXT DEFAULT '');
 
+CREATE TABLE IF NOT EXISTS processo_tipos (
+    id BIGSERIAL PRIMARY KEY, nome TEXT NOT NULL, ativo BOOLEAN DEFAULT TRUE);
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS processo_tipo_id BIGINT REFERENCES processo_tipos(id) ON DELETE SET NULL;
+ALTER TABLE servicos       ADD COLUMN IF NOT EXISTS processo_tipo_id BIGINT REFERENCES processo_tipos(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS os_ptipo_idx ON ordens_servico (processo_tipo_id);
+
 ALTER TABLE IF EXISTS processos ADD COLUMN IF NOT EXISTS os_id BIGINT REFERENCES ordens_servico(id) ON DELETE SET NULL;
 ALTER TABLE IF EXISTS usuarios  ADD COLUMN IF NOT EXISTS conta_padrao_id BIGINT;
 ALTER TABLE IF EXISTS usuarios  ADD COLUMN IF NOT EXISTS forma_padrao_id BIGINT;
@@ -182,6 +188,12 @@ SEED_SERVICOS = [  # (nome, valor, custo, centro)
     ("MUDANÇA CATEGORIA", "188.00", "135.00", "SERVIÇOS PRESTADOS"),
     ("CANCELAR COMUNICADO SP", "120.00", "50.00", "SERVIÇOS PRESTADOS"),
 ]
+# Tipo de processo da OS (para puxar depois). Transferência de nome e de município = TRANSFERÊNCIA.
+SEED_TIPOS_PROCESSO = ["TRANSFERÊNCIA", "ALTERAÇÃO DE CARACTERÍSTICA", "LEILÃO", "ATPV",
+                       "COMUNICAÇÃO DE VENDA", "SUSPENSÃO DE CNH", "RECURSO DE MULTA",
+                       "CADASTRO ANTT", "REGULARIZAÇÃO DE REBAIXADO", "OUTROS"]
+SEED_SERVICO_TIPO = {"TRANSFERÊNCIA NOME": "TRANSFERÊNCIA", "MUDANÇA CATEGORIA": "ALTERAÇÃO DE CARACTERÍSTICA",
+                     "ATPV": "ATPV", "CANCELAR COMUNICADO SP": "COMUNICAÇÃO DE VENDA"}
 SEED_PENDENCIAS = ["PONTUAÇÃO", "SUSPENSÃO", "SUSPENSÃO CNH", "RECEBER",
                    "PROCESSO JUDICIAL", "ALT IMETRO"]
 
@@ -295,6 +307,17 @@ def registrar(app, db, login_required):
                 for n in SEED_PENDENCIAS:
                     cur.execute("INSERT INTO pendencia_tipos (nome) VALUES (%s)", (n,))
                 cur.execute("INSERT INTO migracoes (nome) VALUES ('os_seed_v1')")
+            cur.execute("SELECT 1 FROM migracoes WHERE nome = 'os_tipos_v1'")
+            if not cur.fetchone():
+                cur.execute("SELECT COUNT(*) AS n FROM processo_tipos")
+                if cur.fetchone()['n'] == 0:
+                    for n in SEED_TIPOS_PROCESSO:
+                        cur.execute("INSERT INTO processo_tipos (nome) VALUES (%s)", (n,))
+                for sv, tp in SEED_SERVICO_TIPO.items():
+                    cur.execute("""UPDATE servicos SET processo_tipo_id =
+                                     (SELECT id FROM processo_tipos WHERE nome = %s LIMIT 1)
+                                   WHERE nome = %s AND processo_tipo_id IS NULL""", (tp, sv))
+                cur.execute("INSERT INTO migracoes (nome) VALUES ('os_tipos_v1')")
             _sincronizar_clientes(cur)
 
     def _sincronizar_clientes(cur, filtro_sql="", filtro_params=None):
@@ -565,8 +588,9 @@ def registrar(app, db, login_required):
     def os_servicos_get():
         todos = request.args.get("todos") == "1"
         with db() as cur:
-            cur.execute("""SELECT s.*, c.nome AS centro_nome FROM servicos s
-                           LEFT JOIN centros_valor c ON c.id = s.centro_id""" +
+            cur.execute("""SELECT s.*, c.nome AS centro_nome, pt.nome AS processo_tipo FROM servicos s
+                           LEFT JOIN centros_valor c ON c.id = s.centro_id
+                           LEFT JOIN processo_tipos pt ON pt.id = s.processo_tipo_id""" +
                         ("" if todos else " WHERE s.ativo") + " ORDER BY s.ativo DESC, s.nome")
             out = []
             for r in cur.fetchall():
@@ -586,18 +610,18 @@ def registrar(app, db, login_required):
         if not nome:
             return jsonify({"erro": "Informe o nome do serviço."}), 400
         vals = (nome, _num(d.get("valor_padrao")), _num(d.get("custo_padrao")),
-                d.get("centro_id") or None, _sim(d.get("ativo"), True))
+                d.get("centro_id") or None, _sim(d.get("ativo"), True), d.get("processo_tipo_id") or None)
         with db(commit=True) as cur:
             if d.get("id"):
                 cur.execute("""UPDATE servicos SET nome=%s, valor_padrao=%s, custo_padrao=%s,
-                               centro_id=%s, ativo=%s WHERE id=%s""", vals + (d["id"],))
+                               centro_id=%s, ativo=%s, processo_tipo_id=%s WHERE id=%s""", vals + (d["id"],))
             else:
-                cur.execute("""INSERT INTO servicos (nome, valor_padrao, custo_padrao, centro_id, ativo)
-                               VALUES (%s,%s,%s,%s,%s)""", vals)
+                cur.execute("""INSERT INTO servicos (nome, valor_padrao, custo_padrao, centro_id, ativo, processo_tipo_id)
+                               VALUES (%s,%s,%s,%s,%s,%s)""", vals)
         return jsonify({"ok": True})
 
     # ── CADASTROS DO FINANCEIRO + TIPOS DE PENDÊNCIA ───────────
-    TABELAS_CAD = {'contas': 'contas', 'formas': 'formas_pgto', 'centros': 'centros_valor',
+    TABELAS_CAD = {'tipos': 'processo_tipos', 'contas': 'contas', 'formas': 'formas_pgto', 'centros': 'centros_valor',
                    'pendencias': 'pendencia_tipos'}
 
     @app.route("/api/fin/cadastros", methods=["GET"])
@@ -699,6 +723,11 @@ def registrar(app, db, login_required):
             cond.append("o.status IN ('andamento','detran','disponivel')")
         elif status:
             cond.append("o.status = %s"); params.append(status)
+        if a.get("tipo_id"):
+            if a.get("tipo_id") == "sem":
+                cond.append("o.processo_tipo_id IS NULL")
+            else:
+                cond.append("o.processo_tipo_id = %s"); params.append(a.get("tipo_id"))
         if de:
             cond.append("o.data_abertura >= %s"); params.append(datetime.combine(de, datetime.min.time(), BRT))
         if ate:
@@ -715,8 +744,14 @@ def registrar(app, db, login_required):
                         "v.renavam LIKE %s"]
                 params += [dig, '%' + dig + '%', '%' + dig + '%']
             cond.append("(" + " OR ".join(sub) + ")")
+        if q:
+            sub_tipo = ("EXISTS (SELECT 1 FROM processo_tipos pt WHERE pt.id = o.processo_tipo_id AND lower(pt.nome) LIKE %s)"
+                        " OR EXISTS (SELECT 1 FROM os_itens i WHERE i.os_id = o.id AND lower(i.descricao) LIKE %s)")
+            cond[-1] = cond[-1][:-1] + " OR " + sub_tipo + ")"
+            params += ['%' + q + '%', '%' + q + '%']
         sql = ("""SELECT o.*, c.nome AS cliente_nome, c.cpf_cnpj AS cliente_doc,
                          r.nome AS responsavel_nome, v.placa, v.modelo, v.renavam,
+                         (SELECT nome FROM processo_tipos pt WHERE pt.id = o.processo_tipo_id) AS processo_tipo,
                          (SELECT string_agg(i.descricao, ' + ' ORDER BY i.id) FROM os_itens i
                            WHERE i.os_id = o.id) AS servicos, """ + SQL_TOTAIS + """
                   FROM ordens_servico o
@@ -739,6 +774,11 @@ def registrar(app, db, login_required):
             cur.execute("""SELECT status, COUNT(*) AS n FROM ordens_servico
                            WHERE excluida_em IS NULL GROUP BY status""")
             por_status = {r['status']: r['n'] for r in cur.fetchall()}
+            cur.execute("""SELECT o.processo_tipo_id AS id, COALESCE(pt.nome, 'SEM TIPO') AS nome, COUNT(*) AS n
+                           FROM ordens_servico o LEFT JOIN processo_tipos pt ON pt.id = o.processo_tipo_id
+                           WHERE o.excluida_em IS NULL AND o.status IN ('andamento','detran','disponivel')
+                           GROUP BY 1, 2 ORDER BY 3 DESC, 2""")
+            por_tipo = [dict(r) for r in cur.fetchall()]
             cur.execute("""SELECT p.id, p.limite, p.lancado, p.descricao, p.responsavel,
                                   t.nome AS tipo, o.numero, c.nome AS cliente_nome, v.placa
                            FROM os_pendencias p
@@ -768,7 +808,7 @@ def registrar(app, db, login_required):
             cur.execute("""SELECT COALESCE(SUM(valor),0) AS v FROM os_recebimentos
                            WHERE (quando AT TIME ZONE 'America/Sao_Paulo')::date = """ + HOJE_SQL)
             recebido_hoje = _f(cur.fetchone()['v'])
-        return jsonify({"por_status": por_status, "pendencias": pend,
+        return jsonify({"por_status": por_status, "por_tipo": por_tipo, "pendencias": pend,
                         "devedor_total": _f(dv['dev']), "devedor_qtd": dv['n'],
                         "recebido_hoje": recebido_hoje})
 
@@ -781,6 +821,9 @@ def registrar(app, db, login_required):
             return None
         o = _os_saida(r)
         oid = r['id']
+        cur.execute("SELECT nome FROM processo_tipos WHERE id = %s", (r['processo_tipo_id'],))
+        pt = cur.fetchone()
+        o['processo_tipo'] = pt['nome'] if pt else None
         cur.execute("SELECT * FROM clientes WHERE id = %s", (r['cliente_id'],))
         cli = _cliente_saida(cur.fetchone())
         cur.execute("SELECT * FROM clientes WHERE id = %s", (r['responsavel_id'],))
@@ -854,15 +897,15 @@ def registrar(app, db, login_required):
             numero = _proximo_numero(cur)
             cur.execute("""INSERT INTO ordens_servico
                 (numero, tipo, cliente_id, responsavel_id, veiculo_id, despachante, user_id, user_nome,
-                 status, honorario, obs, validade, empresa_id, atendimento_id)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                 status, honorario, obs, validade, empresa_id, atendimento_id, processo_tipo_id)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
                 (numero, tipo, d.get("cliente_id"), d.get("responsavel_id") or None,
                  d.get("veiculo_id") or None, (d.get("despachante") or "").strip(),
                  str(session.get('user_id') or ''), _eu(),
                  'orcamento' if tipo == 'orcamento' else 'andamento',
                  _num(d.get("honorario")), (d.get("obs") or "").strip(),
                  _data(d.get("validade")) or (_hoje() + timedelta(days=7) if tipo == 'orcamento' else None),
-                 session.get('empresa_id'), d.get("atendimento_id") or None))
+                 session.get('empresa_id'), d.get("atendimento_id") or None, d.get("processo_tipo_id") or None))
             oid = cur.fetchone()['id']
             _ocorrencia(cur, oid, 'outras', ('Orçamento criado' if tipo == 'orcamento' else 'OS aberta') +
                         ' por ' + _eu())
@@ -886,6 +929,12 @@ def registrar(app, db, login_required):
                         sets.append(k + "=%s"); vals.append(v)
                         if k != 'obs':
                             mudou.append(k)
+            if 'processo_tipo_id' in d:
+                v = d.get('processo_tipo_id') or None
+                if str(v or '') != str(o.get('processo_tipo_id') or ''):
+                    cur.execute("SELECT nome FROM processo_tipos WHERE id = %s", (v,))
+                    pn = (cur.fetchone() or {}).get('nome', 'sem tipo')
+                    sets.append("processo_tipo_id=%s"); vals.append(v); mudou.append('tipo de processo → ' + pn)
             for k in ('cliente_id', 'responsavel_id', 'veiculo_id'):
                 if k in d:
                     v = d.get(k) or None
@@ -991,7 +1040,12 @@ def registrar(app, db, login_required):
         cur.execute("""INSERT INTO os_itens (os_id, servico_id, descricao, qtd, valor, custo, user_nome)
                        VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
                     (oid, sid, desc, qtd, _num(valor), _num(custo), _eu()))
-        return cur.fetchone()['id']
+        iid = cur.fetchone()['id']
+        if sid:  # OS ainda sem tipo de processo herda o do serviço lançado
+            cur.execute("""UPDATE ordens_servico SET processo_tipo_id =
+                             (SELECT processo_tipo_id FROM servicos WHERE id = %s)
+                           WHERE id = %s AND processo_tipo_id IS NULL""", (sid, oid))
+        return iid
 
     @app.route("/api/os/<int:numero>/itens", methods=["POST"])
     @equipe

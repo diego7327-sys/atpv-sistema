@@ -9,7 +9,7 @@
 .os-card:hover{border-color:var(--acc)}
 .os-card .v{font-size:21px;font-weight:700;font-family:var(--mono);line-height:1.15}
 .os-card .l{font-size:9.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin-top:4px}
-.os-filtros{display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:10px;align-items:end}
+.os-filtros{display:grid;grid-template-columns:2fr 1.2fr 1.2fr 1fr 1fr auto;gap:10px;align-items:end}
 @media(max-width:1000px){.os-filtros{grid-template-columns:1fr 1fr}}
 .os-chk{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mut);margin-bottom:12px;white-space:nowrap;cursor:pointer}
 .os-chk input{accent-color:var(--acc)}
@@ -66,6 +66,12 @@
 .os-modal{max-width:760px}
 .os-vazio{text-align:center;color:var(--mut);padding:26px 0;font-size:13px}
 .os-soma td{font-weight:700;font-family:var(--mono);border-top:2px solid var(--bord)}
+.os-tp{display:inline-block;padding:2px 7px;border-radius:5px;font-size:10px;font-weight:700;background:rgba(0,153,255,.12);color:var(--acc2);border:1px solid rgba(0,153,255,.25);white-space:nowrap}
+.os-chips{display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 14px;align-items:center}
+.os-chips .lb{font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-right:4px}
+.os-chip{padding:5px 10px;border-radius:14px;font-size:11.5px;border:1px solid var(--bord);background:var(--surf2);color:var(--txt);cursor:pointer;font-family:var(--font)}
+.os-chip:hover,.os-chip.on{border-color:var(--acc2);color:var(--acc2)}
+.os-chip b{font-family:var(--mono);margin-left:4px}
 .os-faixa-teste{background:repeating-linear-gradient(45deg,#ffa502,#ffa502 14px,#ffb733 14px,#ffb733 28px);color:#000;text-align:center;font-weight:800;padding:6px;font-size:12px;letter-spacing:.06em}
 .os-g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
 @media(max-width:900px){.os-g4{grid-template-columns:1fr 1fr}}
@@ -93,6 +99,7 @@ input[type=date].os-dt,.fg input[type=date]{color-scheme:dark}
         <button class="os-b pri" onclick="osNova('os')">+ Nova OS</button>
       </span></div>
     <div class="os-cards" id="os-cards"></div>
+    <div class="os-chips" id="os-chips"></div>
     <div id="os-pend-painel"></div>
     <div class="os-filtros">
       <div class="fg"><label>Localizar</label>
@@ -104,6 +111,7 @@ input[type=date].os-dt,.fg input[type=date]{color-scheme:dark}
           <option value="detran">No Detran</option><option value="disponivel">Disponível p/ entrega</option>
           <option value="entregue">Entregue</option><option value="concluida">Concluída</option>
           <option value="cancelada">Cancelada</option></select></div>
+      <div class="fg"><label>Tipo de processo</label><select id="os-ftp" onchange="osLista()"></select></div>
       <div class="fg"><label>De</label><input type="date" id="os-de" onchange="osLista()"></div>
       <div class="fg"><label>Até</label><input type="date" id="os-ate" onchange="osLista()"></div>
       <div>
@@ -112,7 +120,7 @@ input[type=date].os-dt,.fg input[type=date]{color-scheme:dark}
       </div>
     </div>
     <div class="table-wrap"><table id="os-tbl">
-      <thead><tr><th>Nº OS</th><th>Data</th><th>Cliente / Responsável</th><th>Veículo</th><th>Serviços</th>
+      <thead><tr><th>Nº OS</th><th>Data</th><th>Cliente / Responsável</th><th>Veículo</th><th>Tipo / Serviços</th>
         <th>Situação</th><th style="text-align:right">Total</th><th style="text-align:right">Pago</th><th style="text-align:right">Devedor</th></tr></thead>
       <tbody id="os-tbody"><tr><td colspan="9" class="os-vazio">Carregando...</td></tr></tbody>
       <tfoot id="os-tfoot"></tfoot>
@@ -142,26 +150,27 @@ input[type=date].os-dt,.fg input[type=date]{color-scheme:dark}
   <!-- TABELA DE SERVIÇOS -->
   <div id="osv-servicos" style="display:none">
     <div class="fb-title">🏷 Tabela de serviços e taxas</div>
-    <p class="cfg-note"><b>Valor</b> = o que o cliente paga. <b>Custo</b> = o que vai para terceiros (Detran, vistoria, placa). O item lançado na OS copia os dois na hora — mudar o preço aqui não altera OS antigas.</p>
+    <p class="cfg-note"><b>Valor</b> = o que o cliente paga. <b>Custo</b> = o que vai para terceiros (Detran, vistoria, placa). O item lançado na OS copia os dois na hora — mudar o preço aqui não altera OS antigas. <b>Tipo de processo</b>: a OS sem tipo herda o tipo do serviço lançado. A lista de tipos fica em Financeiro → Cadastros.</p>
     <div class="os-box os-adm" style="display:none">
       <h4>Novo serviço</h4>
       <div class="os-linha">
         <div class="fg" style="flex:3"><label>Nome</label><input id="os-sv-nome"></div>
         <div class="fg"><label>Valor (R$)</label><input id="os-sv-valor" placeholder="0,00"></div>
         <div class="fg"><label>Custo (R$)</label><input id="os-sv-custo" placeholder="0,00"></div>
+        <div class="fg" style="flex:2"><label>Tipo de processo</label><select id="os-sv-tipo"></select></div>
         <div class="fg" style="flex:2"><label>Centro de valores</label><select id="os-sv-centro"></select></div>
         <div class="fg" style="flex:0"><button class="os-b pri" onclick="osSvSalvar()">Adicionar</button></div>
       </div>
     </div>
     <div class="table-wrap"><table><thead><tr><th>Serviço</th><th style="text-align:right">Valor</th><th style="text-align:right">Custo</th>
-      <th style="text-align:right">Margem</th><th>Centro</th><th>Ativo</th><th></th></tr></thead><tbody id="os-sv-tbody"></tbody></table></div>
+      <th style="text-align:right">Margem</th><th>Tipo de processo</th><th>Centro</th><th>Ativo</th><th></th></tr></thead><tbody id="os-sv-tbody"></tbody></table></div>
   </div>
 
   <!-- FINANCEIRO -->
   <div id="osv-fin" style="display:none">
     <div class="os-sub" style="margin-bottom:12px">
       <button id="osf-b-extrato" class="on" onclick="osFinAba('extrato')">Extrato de lançamentos</button>
-      <button id="osf-b-cad" onclick="osFinAba('cad')">Contas, formas e centros</button>
+      <button id="osf-b-cad" onclick="osFinAba('cad')">Cadastros (tipos de processo, contas, formas, centros)</button>
     </div>
     <div id="osf-extrato">
       <div class="os-g4">
@@ -283,7 +292,10 @@ function osVer(v){
   OS.vista=v;
   document.querySelectorAll('#os-sub button').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-v')===v); });
   ['lista','os','clientes','veiculos','servicos','fin'].forEach(function(k){ osE('osv-'+k).style.display = k===v?'':'none'; });
-  if(v==='lista'){ osPainel(); osLista(); }
+  if(v==='lista'){
+    var f=osE('os-ftp'), atual=f.value;
+    f.innerHTML='<option value="">Todos</option>'+osTiposOpts(atual)+'<option value="sem"'+(atual==='sem'?' selected':'')+'>(sem tipo)</option>';
+    osPainel(); osLista(); }
   if(v==='clientes') osCliLista();
   if(v==='veiculos') osVeiLista();
   if(v==='servicos') osSvLista();
@@ -303,6 +315,10 @@ function osPainel(){
     h+='<div class="os-card"><div class="v" style="color:var(--acc);font-size:16px">'+osR(p.recebido_hoje)+'</div><div class="l">Recebido hoje</div></div>';
     h+='<div class="os-card" onclick="osE(\'os-pend-painel\').scrollIntoView({behavior:\'smooth\'})"><div class="v" style="color:'+(venc?'var(--red)':'var(--mut)')+'">'+(p.pendencias||[]).length+'</div><div class="l">Pendências vencendo'+(venc?' · '+venc+' vencidas':'')+'</div></div>';
     osE('os-cards').innerHTML=h;
+    var pt=p.por_tipo||[], ftp=osE('os-ftp').value;
+    osE('os-chips').innerHTML=pt.length?'<span class="lb">Abertas por tipo</span>'+pt.map(function(t){
+      var v=t.id==null?'sem':String(t.id);
+      return '<button class="os-chip'+(ftp===v?' on':'')+'" onclick="osFiltroTipo(\''+v+'\')">'+osEsc(t.nome)+'<b>'+t.n+'</b></button>'; }).join(''):'';
     var pd=p.pendencias||[];
     if(!pd.length){ osE('os-pend-painel').innerHTML=''; return; }
     var t='<div class="os-box"><h4>⏰ Pendências vencidas e dos próximos 7 dias</h4><div class="table-wrap" style="margin:0"><table><thead><tr><th>OS</th><th>Limite</th><th>Tipo</th><th>Cliente</th><th>Placa</th><th>Descrição</th><th>Responsável</th></tr></thead><tbody>';
@@ -313,6 +329,11 @@ function osPainel(){
     osE('os-pend-painel').innerHTML=t+'</tbody></table></div></div>';
   }).catch(osErr);
 }
+function osFiltroTipo(v){
+  var sel=osE('os-ftp'); sel.value = sel.value===v ? '' : v;
+  osE('os-fst').value = sel.value ? 'abertas' : ''; osE('os-fdev').checked=false; osPainel(); osLista();
+}
+function osTiposOpts(sel, vazio){ return osOpts(OS.cad.tipos, sel, vazio); }
 function osFiltroSt(s){ osE('os-fst').value=s; osE('os-fdev').checked=false; osLista(); }
 function osFiltroDev(){ osE('os-fst').value=''; osE('os-fdev').checked=true; osLista(); }
 
@@ -321,6 +342,7 @@ function osLista(){
   var p=new URLSearchParams();
   var q=osE('os-q').value.trim(); if(q) p.set('q',q);
   if(osE('os-fst').value) p.set('status',osE('os-fst').value);
+  if(osE('os-ftp').value) p.set('tipo_id',osE('os-ftp').value);
   if(osE('os-de').value) p.set('de',osE('os-de').value);
   if(osE('os-ate').value) p.set('ate',osE('os-ate').value);
   if(osE('os-fdev').checked) p.set('devedor','1');
@@ -333,7 +355,7 @@ function osLista(){
          '<td>'+osEsc(o.data_abertura.slice(0,10))+'<div class="os-small">'+osEsc(o.user_nome)+'</div></td>'+
          '<td>'+osEsc(o.cliente_nome||'—')+(o.responsavel_nome?'<div class="os-small">resp.: '+osEsc(o.responsavel_nome)+'</div>':'')+'</td>'+
          '<td>'+osEsc(o.placa||'')+'<div class="os-small">'+osEsc(o.modelo||'')+'</div></td>'+
-         '<td style="max-width:240px">'+osEsc(o.servicos||'')+'</td><td>'+osSt(o.status)+'</td>'+
+         '<td style="max-width:260px">'+(o.processo_tipo?'<span class="os-tp">'+osEsc(o.processo_tipo)+'</span><div class="os-small" style="margin-top:3px">':'<div>')+osEsc(o.servicos||'')+'</div></td><td>'+osSt(o.status)+'</td>'+
          '<td class="os-money">'+osN(o.total)+'</td><td class="os-money">'+osN(o.pago)+'</td>'+
          '<td class="os-money '+(o.devedor>0.004?'os-dev':'os-ok')+'">'+osN(o.devedor)+'</td></tr>';
     });
@@ -393,8 +415,9 @@ function osNova(tipo){
     '<div class="os-box"><h4>Veículo</h4>'+osPickHtml('osn-vei','veiculo','','Placa, renavam ou chassi')+'<div id="osn-vei-f"></div></div>'+
     '<div class="os-box"><h4>Cliente (proprietário) *</h4>'+osPickHtml('osn-cli','cliente','','Nome, CPF/CNPJ ou celular')+'<div id="osn-cli-f"></div></div>'+
     '<div class="os-box"><h4>Cliente responsável / revenda (quem paga, se for outro)</h4>'+osPickHtml('osn-resp','cliente','','Deixe em branco se for o próprio cliente')+'</div>'+
-    '<div class="os-box"><h4>Serviço principal e honorário</h4><div class="os-linha">'+
-      '<div class="fg" style="flex:3"><label>Serviço</label><select id="osn-serv">'+sv+'</select></div>'+
+    '<div class="os-box"><h4>Tipo de processo, serviço principal e honorário</h4><div class="os-linha">'+
+      '<div class="fg" style="flex:2"><label>Tipo de processo *</label><select id="osn-tipo">'+osTiposOpts('','— escolha —')+'</select></div>'+
+      '<div class="fg" style="flex:3"><label>Serviço</label><select id="osn-serv" onchange="osNovaServ()">'+sv+'</select></div>'+
       '<div class="fg"><label>Honorário (R$)</label><input id="osn-hon" placeholder="0,00"></div></div>'+
       (tipo==='orcamento'?'<div class="fg"><label>Validade do orçamento</label><input type="date" id="osn-val"></div>':'')+
       '<div class="fg"><label>Observações</label><textarea class="os-ta" id="osn-obs"></textarea></div></div>'+
@@ -407,14 +430,20 @@ function osPickConferir(ids){
   for(var k in ids){ var el=osE(k); if(el && el.value.trim() && !el.dataset.sel){ osMsg(ids[k]+': escolha na lista ou clique em “+ Cadastrar”.','err'); el.focus(); return false; } }
   return true;
 }
+function osNovaServ(){
+  var s=OS.serv.filter(function(x){ return String(x.id)===osE('osn-serv').value; })[0];
+  if(s && s.processo_tipo_id && !osE('osn-tipo').value) osE('osn-tipo').value=s.processo_tipo_id;
+}
 function osNovaSalvar(){
   if(!osPickConferir({'osn-vei':'Veículo','osn-cli':'Cliente','osn-resp':'Responsável'})) return;
   var cid=osE('osn-cli').dataset.sel;
   if(!cid || !osE('osn-cli').value.trim()){ osMsg('Escolha o cliente (proprietário).','err'); return; }
+  osNovaServ();
+  if(!osE('osn-tipo').value){ osMsg('Escolha o tipo de processo.','err'); osE('osn-tipo').focus(); return; }
   var corpo={tipo:OS.nova.tipo, cliente_id:cid,
     responsavel_id:(osE('osn-resp').value.trim()&&osE('osn-resp').dataset.sel)||null,
     veiculo_id:(osE('osn-vei').value.trim()&&osE('osn-vei').dataset.sel)||null,
-    honorario:osE('osn-hon').value, obs:osE('osn-obs').value,
+    honorario:osE('osn-hon').value, obs:osE('osn-obs').value, processo_tipo_id:osE('osn-tipo').value,
     validade:osE('osn-val')?osE('osn-val').value:null,
     itens: osE('osn-serv').value?[{servico_id:osE('osn-serv').value}]:[]};
   osApi('/api/os','POST',corpo).then(function(r){ osFechar(); osMsg('✓ '+(corpo.tipo==='orcamento'?'Orçamento':'OS')+' nº '+r.numero+' criada.'); osAbrir(r.numero,'itens'); }).catch(osErr);
@@ -438,7 +467,8 @@ function osRender(){
   var h='<div style="margin-bottom:10px"><button class="os-b" onclick="osVer(\'lista\')">← Voltar para a lista</button></div>';
   if(exc) h+='<div class="alert err" style="display:block;margin:0 0 12px">🗑 Esta OS está na lixeira (excluída em '+osEsc(o.excluida_em)+' por '+osEsc(o.excluida_por)+').'+
     (osAdm()?' <button class="os-b" onclick="osRestaurar()">Restaurar</button>':'')+'</div>';
-  h+='<div class="os-head"><div><h2>'+(o.status==='orcamento'?'ORÇAMENTO':'OS')+' Nº '+o.numero+' '+osSt(o.status)+'</h2>'+
+  h+='<div class="os-head"><div><h2>'+(o.status==='orcamento'?'ORÇAMENTO':'OS')+' Nº '+o.numero+' '+osSt(o.status)+
+     (o.processo_tipo?' <span class="os-tp" style="font-size:11px;vertical-align:middle">'+osEsc(o.processo_tipo)+'</span>':' <span class="os-tp" style="color:var(--warn);border-color:rgba(255,165,2,.4);background:rgba(255,165,2,.1)">SEM TIPO DE PROCESSO</span>')+'</h2>'+
      '<div class="os-small">Aberta em '+osEsc(o.data_abertura)+' por '+osEsc(o.user_nome||'—')+(o.protocolo?' · Protocolo <b style="color:var(--txt)">'+osEsc(o.protocolo)+'</b>':'')+
      (o.status==='orcamento'&&o.validade?' · Válido até '+osBr(o.validade):'')+'</div>'+
      '<div style="margin-top:8px;font-size:13px"><b>'+osEsc(d.cliente?d.cliente.nome:'—')+'</b>'+(d.veiculo?' · '+osEsc(d.veiculo.placa)+' '+osEsc(d.veiculo.modelo||''):'')+
@@ -497,6 +527,7 @@ function osAbaCadastro(){
     '<div class="os-box"><h4>Veículo</h4>'+osPickHtml('osc-vei','veiculo',d.veiculo?d.veiculo.placa+' — '+(d.veiculo.modelo||''):'','Placa, renavam, chassi')+'<div id="osc-vei-f">'+osFichaVei(d.veiculo)+'</div></div></div>'+
     '<div class="os-box"><h4>Cliente responsável / revenda</h4>'+osPickHtml('osc-resp','cliente',d.responsavel?d.responsavel.nome:'','Em branco = o próprio cliente paga')+'</div>'+
     '<div class="os-box"><h4>Dados da OS</h4><div class="g3">'+
+      '<div class="fg"><label>Tipo de processo</label><select id="osc-tipo">'+osTiposOpts(o.processo_tipo_id,'— sem tipo —')+'</select></div>'+
       inp('osc-desp','Despachante responsável',o.despachante)+inp('osc-cweb','Código web',o.codigo_web)+inp('osc-prot','Protocolo',o.protocolo)+
       inp('osc-dnf','Data NF / CRV',o.data_nf_crv,'date')+inp('osc-vnf','Valor NF / CRV (R$)',o.valor_nf_crv!=null?osN(o.valor_nf_crv):'')+inp('osc-pant','Proprietário anterior',o.proprietario_anterior)+
       inp('osc-rest','Restrição financeira',o.restricao_financeira)+inp('osc-fin','Financeira',o.financeira)+
@@ -520,7 +551,7 @@ function osSalvarCadastro(){
   var c={cliente_id:sel('osc-cli'), veiculo_id:sel('osc-vei'), responsavel_id:sel('osc-resp'),
     despachante:g('osc-desp'), codigo_web:g('osc-cweb'), protocolo:g('osc-prot'), data_nf_crv:g('osc-dnf'),
     valor_nf_crv:g('osc-vnf'), proprietario_anterior:g('osc-pant'), restricao_financeira:g('osc-rest'),
-    financeira:g('osc-fin'), obs:g('osc-obs')};
+    financeira:g('osc-fin'), obs:g('osc-obs'), processo_tipo_id:g('osc-tipo')||null};
   if(osE('osc-val')) c.validade=g('osc-val');
   if(!c.cliente_id){ osMsg('A OS precisa de um cliente.','err'); return; }
   osApi('/api/os/'+OS.atual.os.numero,'PUT',c).then(function(){ osMsg('✓ Cadastro da OS salvo.'); osRecarregar(); }).catch(osErr);
@@ -738,7 +769,7 @@ function osImprimir(){
   it+='<tr><td>HONORÁRIO</td><td></td><td class="r">'+osN(o.honorario)+'</td></tr><tr><th colspan="2">TOTAL</th><th class="r">'+osR(o.total)+'</th></tr>'+
       '<tr><td colspan="2">Pago</td><td class="r">'+osR(o.pago)+'</td></tr><tr><td colspan="2"><b>Saldo devedor</b></td><td class="r"><b>'+osR(o.devedor)+'</b></td></tr>';
   osJanela((o.status==='orcamento'?'Orçamento ':'OS ')+o.numero,
-    osCabecalho()+'<div style="text-align:right"><h1>'+(o.status==='orcamento'?'ORÇAMENTO':'ORDEM DE SERVIÇO')+' Nº '+o.numero+'</h1><div>'+osEsc(o.data_abertura)+' · '+osEsc(OS_STATUS[o.status])+'</div>'+(o.protocolo?'<div>Protocolo '+osEsc(o.protocolo)+'</div>':'')+'</div></div>'+
+    osCabecalho()+'<div style="text-align:right"><h1>'+(o.status==='orcamento'?'ORÇAMENTO':'ORDEM DE SERVIÇO')+' Nº '+o.numero+'</h1><div>'+osEsc(o.data_abertura)+' · '+osEsc(OS_STATUS[o.status])+'</div>'+(o.processo_tipo?'<div><b>'+osEsc(o.processo_tipo)+'</b></div>':'')+(o.protocolo?'<div>Protocolo '+osEsc(o.protocolo)+'</div>':'')+'</div></div>'+
     '<h2>Cliente</h2><div><b>'+osEsc(c.nome||'')+'</b> — '+osEsc(c.cpf_cnpj||'')+'<br>'+osEsc([c.endereco,c.numero,c.complemento,c.bairro,c.cidade].filter(Boolean).join(', '))+' '+(c.cep?'CEP '+osEsc(c.cep):'')+'<br>'+osEsc([c.cel,c.fone,c.email].filter(Boolean).join(' · '))+'</div>'+
     (d.responsavel?'<div style="margin-top:4px">Responsável: <b>'+osEsc(d.responsavel.nome)+'</b> '+osEsc(d.responsavel.cpf_cnpj||'')+'</div>':'')+
     '<h2>Veículo</h2><div>Placa <b>'+osEsc(v.placa||'')+'</b> · Renavam '+osEsc(v.renavam||'')+' · Chassi '+osEsc(v.chassi||'')+'<br>'+osEsc(v.modelo||'')+' · '+osEsc([v.ano_fab,v.ano_mod].filter(Boolean).join('/')||v.ano||'')+' · '+osEsc(v.cor||'')+'</div>'+
@@ -904,17 +935,18 @@ function osSvLista(){
   osApi('/api/servicos?todos=1').then(function(l){
     OS.servTodos=l;
     osE('os-sv-centro').innerHTML=osOpts(OS.cad.centros,'','— nenhum —');
+    osE('os-sv-tipo').innerHTML=osTiposOpts('','— nenhum —');
     var h='';
     l.forEach(function(s){
       h+='<tr style="'+(s.ativo?'':'opacity:.45')+'"><td>'+osEsc(s.nome)+'</td><td class="os-money">'+osN(s.valor_padrao)+'</td><td class="os-money">'+osN(s.custo_padrao)+'</td>'+
-         '<td class="os-money">'+osN(s.valor_padrao-s.custo_padrao)+'</td><td class="os-small">'+osEsc(s.centro_nome||'')+'</td><td>'+(s.ativo?'Sim':'Não')+'</td>'+
+         '<td class="os-money">'+osN(s.valor_padrao-s.custo_padrao)+'</td><td>'+(s.processo_tipo?'<span class="os-tp">'+osEsc(s.processo_tipo)+'</span>':'')+'</td><td class="os-small">'+osEsc(s.centro_nome||'')+'</td><td>'+(s.ativo?'Sim':'Não')+'</td>'+
          '<td>'+(osAdm()?'<button class="os-b" onclick="osSvEditar('+s.id+')">✎</button>':'')+'</td></tr>';
     });
-    osE('os-sv-tbody').innerHTML=h||'<tr><td colspan="7" class="os-vazio">Nenhum serviço.</td></tr>';
+    osE('os-sv-tbody').innerHTML=h||'<tr><td colspan="8" class="os-vazio">Nenhum serviço.</td></tr>';
   }).catch(osErr);
 }
 function osSvSalvar(){
-  osApi('/api/servicos','POST',{nome:osE('os-sv-nome').value,valor_padrao:osE('os-sv-valor').value,custo_padrao:osE('os-sv-custo').value,centro_id:osE('os-sv-centro').value||null})
+  osApi('/api/servicos','POST',{nome:osE('os-sv-nome').value,valor_padrao:osE('os-sv-valor').value,custo_padrao:osE('os-sv-custo').value,centro_id:osE('os-sv-centro').value||null,processo_tipo_id:osE('os-sv-tipo').value||null})
     .then(function(){ osE('os-sv-nome').value=''; osE('os-sv-valor').value=''; osE('os-sv-custo').value=''; osMsg('✓ Serviço adicionado.'); osCarregarCad(true).then(osSvLista); }).catch(osErr);
 }
 function osSvEditar(id){
@@ -922,13 +954,14 @@ function osSvEditar(id){
   osModal('Editar serviço',
     '<div class="fg"><label>Nome</label><input id="ose-nome" value="'+osEsc(s.nome)+'"></div>'+
     '<div class="g2"><div class="fg"><label>Valor (R$)</label><input id="ose-valor" value="'+osN(s.valor_padrao)+'"></div><div class="fg"><label>Custo (R$)</label><input id="ose-custo" value="'+osN(s.custo_padrao)+'"></div></div>'+
+    '<div class="fg"><label>Tipo de processo (a OS herda este tipo quando o serviço é lançado)</label><select id="ose-tipo">'+osTiposOpts(s.processo_tipo_id,'— nenhum —')+'</select></div>'+
     '<div class="g2"><div class="fg"><label>Centro de valores</label><select id="ose-centro">'+osOpts(OS.cad.centros,s.centro_id,'— nenhum —')+'</select></div>'+
     '<div class="fg"><label>Ativo</label><select id="ose-ativo"><option value="1">Sim</option><option value="0"'+(s.ativo?'':' selected')+'>Não (some da lista da OS)</option></select></div></div>'+
     '<div style="text-align:right"><button class="btn-main" onclick="osSvEditSalvar('+id+')">Salvar</button></div>');
 }
 function osSvEditSalvar(id){
   osApi('/api/servicos','POST',{id:id,nome:osE('ose-nome').value,valor_padrao:osE('ose-valor').value,custo_padrao:osE('ose-custo').value,
-    centro_id:osE('ose-centro').value||null,ativo:osE('ose-ativo').value==='1'}).then(function(){ osFechar(); osCarregarCad(true).then(osSvLista); }).catch(osErr);
+    centro_id:osE('ose-centro').value||null,processo_tipo_id:osE('ose-tipo').value||null,ativo:osE('ose-ativo').value==='1'}).then(function(){ osFechar(); osCarregarCad(true).then(osSvLista); }).catch(osErr);
 }
 
 // ── FINANCEIRO ──
@@ -973,7 +1006,7 @@ function osFinCads(){
     osE('osf-mp-forma').innerHTML=osOpts(c.formas,mp.forma_id,'— nenhuma —');
     osE('osf-numini').value=c.os_numero_inicial||'';
     osE('osf-prox').textContent='Próxima OS a ser aberta: nº '+c.proximo_numero;
-    var blocos=[['contas','Contas'],['formas','Formas de pagamento'],['centros','Centros de valores'],['pendencias','Tipos de pendência']];
+    var blocos=[['tipos','Tipos de processo'],['contas','Contas'],['formas','Formas de pagamento'],['centros','Centros de valores'],['pendencias','Tipos de pendência']];
     var h='';
     blocos.forEach(function(b){
       h+='<div class="os-box"><h4>'+b[1]+'</h4><ul>';
