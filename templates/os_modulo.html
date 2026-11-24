@@ -69,6 +69,8 @@
 .os-larga .os-box h4{margin-bottom:8px}
 .os-g5{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:0 10px}
 @media(max-width:900px){.os-g5{grid-template-columns:repeat(2,minmax(0,1fr))}.os-g5 .fg{grid-column:auto!important}}
+.nv-tot{background:var(--surf2);border:1px solid var(--bord);border-radius:7px;padding:8px 11px;font-size:15px;font-weight:700;font-family:var(--mono);text-align:right}
+.nv-val{width:100%;background:var(--surf);border:1px solid var(--bord);border-radius:6px;padding:5px 8px;color:var(--txt);font-family:var(--mono);text-align:right;font-size:13px}
 .nv-st{font-family:var(--font);text-transform:none;letter-spacing:0;font-size:11px;font-weight:500;margin-left:8px}
 .os-vazio{text-align:center;color:var(--mut);padding:26px 0;font-size:13px}
 .os-soma td{font-weight:700;font-family:var(--mono);border-top:2px solid var(--bord)}
@@ -438,15 +440,31 @@ function osNova(tipo){
     '<div class="os-box"><h4>Veículo <span class="nv-st" id="nv-st"></span></h4>'+g(NV_VEI,'nv-')+'</div>'+
     '<div class="os-box"><h4>Cliente (proprietário) * <span class="nv-st" id="nc-st"></span></h4>'+g(NV_CLI,'nc-')+'</div>'+
     '<div class="os-box"><h4>Responsável / revenda — quem paga, se for outro <span class="nv-st" id="nr-st"></span></h4>'+g(NV_RESP,'nr-')+'</div>'+
-    '<div class="os-box"><h4>Tipo de processo, serviço e honorário</h4><div class="os-g5">'+
-      '<div class="fg" style="grid-column:span 2"><label>Serviço principal</label><select id="osn-serv" onchange="osNovaServ()">'+sv+'</select></div>'+
+    '<div class="os-box"><h4>Taxas / débitos / despesas — valores cobrados</h4><div class="os-g5">'+
+      '<div class="fg" style="grid-column:span 2"><label>Da tabela de serviços</label><select id="nvi-serv" onchange="nvItemServ()">'+sv+'</select></div>'+
+      '<div class="fg" style="grid-column:span 2"><label>Descrição</label><input id="nvi-desc" placeholder="ou digite um item avulso" onkeydown="nvItemTecla(event)"></div>'+
+      '<div class="fg"><label>Valor (R$)</label><input id="nvi-valor" placeholder="0,00" onkeydown="nvItemTecla(event)"></div>'+
+      '<div class="fg"><label>&nbsp;</label><button type="button" class="os-b pri" style="padding:9px" onclick="nvItemAdd()">+ Adicionar</button></div>'+
+      '</div><div style="display:flex;gap:6px;margin:-2px 0 8px"><button type="button" class="os-b" onclick="nvItemRapido(\'DESCONTO\',-1)">− Desconto</button>'+
+      '<button type="button" class="os-b" onclick="nvItemRapido(\'ACRÉSCIMO\',1)">+ Acréscimo</button><span class="os-small" style="align-self:center;margin-left:6px">Enter no valor adiciona o item.</span></div>'+
+      '<div class="table-wrap" style="margin:0 0 10px"><table><thead><tr><th>Descrição</th><th style="text-align:right;width:160px">Valor</th><th style="width:44px"></th></tr></thead><tbody id="nvi-tbody"></tbody></table></div>'+
+      '<div class="os-g5">'+
+        '<div class="fg"><label>Custos (taxas/débitos)</label><div class="nv-tot" id="nvt-custos">R$ 0,00</div></div>'+
+        '<div class="fg"><label>Honorário (R$)</label><input id="osn-hon" placeholder="0,00" oninput="nvTotais()"></div>'+
+        '<div class="fg"><label>Valor total</label><div class="nv-tot" id="nvt-total" style="color:var(--acc)">R$ 0,00</div></div>'+
+        (tipo==='orcamento'?'':
+        '<div class="fg"><label>Adiantado (R$)</label><input id="nva-valor" placeholder="0,00" oninput="nvTotais()"></div>'+
+        '<div class="fg"><label>Forma</label><select id="nva-forma">'+osOpts(OS.cad.formas,(OS.cad.meus_padroes||{}).forma_id,'— forma —')+'</select></div>'+
+        '<div class="fg"><label>Conta</label><select id="nva-conta">'+osOpts(OS.cad.contas,(OS.cad.meus_padroes||{}).conta_id||((OS.cad.contas||[]).filter(function(x){return x.ativo&&x.nome==='SICRED';})[0]||{}).id,'— conta —')+'</select></div>')+
+      '</div><div class="os-small" id="nvt-saldo" style="margin:-4px 0 8px"></div></div>'+
+    '<div class="os-box"><h4>Tipo de processo e observações</h4><div class="os-g5">'+
       '<div class="fg" style="grid-column:span 2"><label>Tipo de processo * (vem do serviço)</label><select id="osn-tipo">'+osTiposOpts('','— escolha —')+'</select></div>'+
-      '<div class="fg"><label>Honorário (R$)</label><input id="osn-hon" placeholder="0,00"></div>'+
-      (tipo==='orcamento'?'<div class="fg"><label>Validade</label><input type="date" id="osn-val"></div>':'<div></div>')+
+      (tipo==='orcamento'?'<div class="fg"><label>Validade</label><input type="date" id="osn-val"></div>':'')+
       '</div><div class="fg"><label>Observações</label><textarea class="os-ta" id="osn-obs" style="min-height:42px"></textarea></div></div>'+
     '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn-sec" onclick="osFechar()">Cancelar</button>'+
     '<button class="btn-main" id="osn-salvar" onclick="osNovaSalvar()">'+(tipo==='orcamento'?'Salvar e criar orçamento':'Salvar e abrir OS')+'</button></div>', true);
   osE('nr-tipo').value='revenda';
+  OS.nova.itens=[]; nvItensRender();
   if(tipo==='orcamento'){ var d=new Date(); d.setDate(d.getDate()+7); osE('osn-val').value=d.toISOString().slice(0,10); }
   setTimeout(function(){ osE('nv-placa').focus(); },50);
 }
@@ -534,15 +552,65 @@ function osPickConferir(ids){
   return true;
 }
 function osNovaServ(){
-  var s=OS.serv.filter(function(x){ return String(x.id)===osE('osn-serv').value; })[0];
-  if(s && s.processo_tipo_id && !osE('osn-tipo').value) osE('osn-tipo').value=s.processo_tipo_id;
+  (OS.nova.itens||[]).some(function(it){
+    var s=it.servico_id?OS.serv.filter(function(x){ return String(x.id)===String(it.servico_id); })[0]:null;
+    if(s && s.processo_tipo_id && !osE('osn-tipo').value){ osE('osn-tipo').value=s.processo_tipo_id; return true; }
+    return false; });
+}
+function nvNum(v){ if(v==null||v==='') return 0; var t=String(v).replace(/R\$|\s/g,''); if(t.indexOf(',')>=0) t=t.replace(/\./g,'').replace(',','.'); var n=parseFloat(t); return isNaN(n)?0:Math.round(n*100)/100; }
+function nvItemServ(){
+  var s=OS.serv.filter(function(x){ return String(x.id)===osE('nvi-serv').value; })[0];
+  if(!s) return;
+  osE('nvi-desc').value=s.nome; osE('nvi-valor').value=osN(s.valor_padrao); osE('nvi-valor').focus(); osE('nvi-valor').select();
+}
+function nvItemTecla(e){
+  if(e.key!=='Enter') return;
+  e.preventDefault(); e.stopPropagation();
+  if(e.target.id==='nvi-desc'){ osE('nvi-valor').focus(); osE('nvi-valor').select(); return; }
+  nvItemAdd();
+}
+function nvItemAdd(){
+  var desc=osE('nvi-desc').value.trim().toUpperCase(), sid=osE('nvi-serv').value||null;
+  var s=sid?OS.serv.filter(function(x){ return String(x.id)===String(sid); })[0]:null;
+  if(s && desc!==s.nome.toUpperCase()) s=null, sid=null;   // trocou a descrição: vira item avulso
+  if(!desc){ osMsg('Escolha da tabela ou digite a descrição do item.','err'); osE('nvi-desc').focus(); return; }
+  var it={servico_id:sid, descricao:desc, valor:nvNum(osE('nvi-valor').value), custo:s?s.custo_padrao:(/^DESCONTO|^ACR[EÉ]SCIMO/.test(desc)?0:nvNum(osE('nvi-valor').value))};
+  if(/^DESCONTO/.test(desc) && it.valor>0) it.valor=-it.valor;
+  OS.nova.itens.push(it);
+  osE('nvi-serv').value=''; osE('nvi-desc').value=''; osE('nvi-valor').value='';
+  osNovaServ(); nvItensRender(); osE('nvi-serv').focus();
+}
+function nvItemRapido(desc,sinal){ osE('nvi-serv').value=''; osE('nvi-desc').value=desc; osE('nvi-valor').value=''; osE('nvi-valor').focus(); }
+function nvItemDel(i){ OS.nova.itens.splice(i,1); nvItensRender(); }
+function nvItemValor(i,v){ OS.nova.itens[i].valor=nvNum(v); if(/^DESCONTO/.test(OS.nova.itens[i].descricao)&&OS.nova.itens[i].valor>0) OS.nova.itens[i].valor*=-1; nvTotais(); }
+function nvItensRender(){
+  var h=OS.nova.itens.map(function(it,i){
+    return '<tr><td>'+osEsc(it.descricao)+(it.servico_id?'':' <span class="os-small">(avulso)</span>')+'</td>'+
+      '<td><input class="nv-val" value="'+osN(it.valor)+'" onchange="nvItemValor('+i+',this.value);this.value=osN(OS.nova.itens['+i+'].valor)"></td>'+
+      '<td><button type="button" class="os-b del" onclick="nvItemDel('+i+')">✕</button></td></tr>'; }).join('');
+  osE('nvi-tbody').innerHTML=h||'<tr><td colspan="3" class="os-vazio" style="padding:10px">Nenhum item. Escolha da tabela ou digite e dê Enter no valor.</td></tr>';
+  nvTotais();
+}
+function nvTotais(){
+  var c=OS.nova.itens.reduce(function(a,it){ return a+it.valor; },0), h=nvNum(osE('osn-hon').value), t=c+h;
+  osE('nvt-custos').textContent=osR(c); osE('nvt-total').textContent=osR(t);
+  var ad=osE('nva-valor')?nvNum(osE('nva-valor').value):0;
+  osE('nvt-saldo').innerHTML = ad>0 ? (ad>t+0.004?'<span class="os-dev">Adiantado maior que o total.</span>':'Saldo devedor depois do adiantamento: <b class="'+(t-ad>0.004?'os-dev':'os-ok')+'">'+osR(t-ad)+'</b>') : '';
 }
 function osNovaSalvar(){
   var cli=nvDados('nc-',NV_CLI), resp=nvDados('nr-',NV_RESP), vei=nvDados('nv-',NV_VEI);
   if(!cli.nome.trim()){ osMsg('Informe o nome do cliente (proprietário).','err'); osE('nc-nome').focus(); return; }
   if(!vei.placa.trim() && (vei.renavam.trim()||vei.chassi.trim()||vei.modelo.trim())){ osMsg('Informe a placa do veículo.','err'); osE('nv-placa').focus(); return; }
+  if(osE('nvi-desc').value.trim() && osE('nvi-valor').value.trim()) nvItemAdd();   // item digitado e não adicionado
   osNovaServ();
   if(!osE('osn-tipo').value){ osMsg('Escolha o tipo de processo.','err'); osE('osn-tipo').focus(); return; }
+  var tot=OS.nova.itens.reduce(function(a,it){ return a+it.valor; },0)+nvNum(osE('osn-hon').value);
+  var adi=osE('nva-valor')?nvNum(osE('nva-valor').value):0;
+  if(adi>0){
+    if(adi>tot+0.004){ osMsg('O adiantado é maior que o valor total.','err'); osE('nva-valor').focus(); return; }
+    if(!osE('nva-forma').value){ osMsg('Escolha a forma do adiantamento.','err'); osE('nva-forma').focus(); return; }
+    if(!osE('nva-conta').value){ osMsg('Escolha a conta do adiantamento.','err'); osE('nva-conta').focus(); return; }
+  }
   var bt=osE('osn-salvar'); bt.disabled=true; var txt=bt.textContent; bt.textContent='Salvando...';
   var ids=OS.nova.ids, cid, rid=null, vid=null;
   cli.id=ids['nc-'];
@@ -558,7 +626,12 @@ function osNovaSalvar(){
   }).then(function(){
     return osApi('/api/os','POST',{tipo:OS.nova.tipo, cliente_id:cid, responsavel_id:(rid&&rid!==cid)?rid:null, veiculo_id:vid,
       honorario:osE('osn-hon').value, obs:osE('osn-obs').value, processo_tipo_id:osE('osn-tipo').value,
-      validade:osE('osn-val')?osE('osn-val').value:null, itens: osE('osn-serv').value?[{servico_id:osE('osn-serv').value}]:[]});
+      validade:osE('osn-val')?osE('osn-val').value:null,
+      itens: OS.nova.itens.map(function(it){ return {servico_id:it.servico_id, descricao:it.descricao, valor:osN(it.valor), custo:osN(it.custo), qtd:1}; })});
+  }).then(function(r){
+    if(adi<=0) return r;
+    return osApi('/api/os/'+r.numero+'/recebimentos','POST',{valor:osN(adi), forma_pgto_id:osE('nva-forma').value, conta_id:osE('nva-conta').value, obs:'Adiantamento na abertura'})
+      .then(function(){ return r; }, function(e){ osMsg('OS criada, mas o adiantamento não foi lançado: '+e.message,'err'); return r; });
   }).then(function(r){
     osFechar(); osMsg('✓ '+(OS.nova.tipo==='orcamento'?'Orçamento':'OS')+' nº '+r.numero+' criada.'); osAbrir(r.numero,'itens');
   }).catch(function(e){ bt.disabled=false; bt.textContent=txt; osErr(e); });
@@ -697,7 +770,7 @@ function osAbaItens(){
      '<div class="fg"><label>Honorário (R$)</label><input id="osi-hon" value="'+osN(o.honorario)+'" '+(ro?'disabled':'')+'></div>'+
      (ro?'':'<div class="fg" style="flex:0"><button class="os-b pri" onclick="osHonSalvar()">Salvar</button></div>')+'</div></div>'+
      '<div class="os-box"><h4>Resumo</h4><table style="font-size:13px">'+
-     '<tr><td>Itens (valor cobrado)</td><td class="os-money">'+osR(o.itens_valor)+'</td></tr>'+
+     '<tr><td>Custos (taxas / débitos / despesas)</td><td class="os-money">'+osR(o.itens_valor)+'</td></tr>'+
      '<tr><td>+ Honorário</td><td class="os-money">'+osR(o.honorario)+'</td></tr>'+
      '<tr><td><b>= Total da OS</b></td><td class="os-money"><b>'+osR(o.total)+'</b></td></tr>'+
      '<tr><td class="os-small">Custo de terceiros</td><td class="os-money os-small">'+osR(o.custo)+'</td></tr>'+
@@ -878,17 +951,32 @@ function osJanela(titulo, corpo){
 }
 function osCabecalho(){ return '<div class="cab"><div><h1>Diego Despachante</h1><div>Caetano Despachante Ltda · CNPJ 08.965.960/0001-06 · Anápolis-GO</div></div>'; }
 function osImprimir(){
-  var d=OS.atual, o=d.os, c=d.cliente||{}, v=d.veiculo||{};
-  var it='';
-  d.itens.forEach(function(i){ it+='<tr><td>'+osEsc(i.descricao)+'</td><td class="r">'+osN(i.qtd)+'</td><td class="r">'+osN(i.valor*i.qtd)+'</td></tr>'; });
-  it+='<tr><td>HONORÁRIO</td><td></td><td class="r">'+osN(o.honorario)+'</td></tr><tr><th colspan="2">TOTAL</th><th class="r">'+osR(o.total)+'</th></tr>'+
-      '<tr><td colspan="2">Pago</td><td class="r">'+osR(o.pago)+'</td></tr><tr><td colspan="2"><b>Saldo devedor</b></td><td class="r"><b>'+osR(o.devedor)+'</b></td></tr>';
+  var d=OS.atual, o=d.os, c=d.cliente||{}, v=d.veiculo||{}, r=d.responsavel||{};
+  var L=function(rot,val,larg){ return '<span class="cp"'+(larg?' style="flex-basis:'+larg+'"':'')+'>'+rot+': <b>'+osEsc(val||'')+'</b></span>'; };
+  var it=d.itens.map(function(i){ var t=i.valor*i.qtd; return '<tr><td>'+osEsc(i.descricao)+(i.qtd!=1?' ('+osN(i.qtd).replace(',00','')+'x)':'')+'</td><td class="r">'+(t<0?'-':'')+osR(Math.abs(t))+'</td></tr>'; }).join('');
   osJanela((o.status==='orcamento'?'Orçamento ':'OS ')+o.numero,
-    osCabecalho()+'<div style="text-align:right"><h1>'+(o.status==='orcamento'?'ORÇAMENTO':'ORDEM DE SERVIÇO')+' Nº '+o.numero+'</h1><div>'+osEsc(o.data_abertura)+' · '+osEsc(OS_STATUS[o.status])+'</div>'+(o.processo_tipo?'<div><b>'+osEsc(o.processo_tipo)+'</b></div>':'')+(o.protocolo?'<div>Protocolo '+osEsc(o.protocolo)+'</div>':'')+'</div></div>'+
-    '<h2>Cliente</h2><div><b>'+osEsc(c.nome||'')+'</b> — '+osEsc(c.cpf_cnpj||'')+'<br>'+osEsc([c.endereco,c.numero,c.complemento,c.bairro,c.cidade].filter(Boolean).join(', '))+' '+(c.cep?'CEP '+osEsc(c.cep):'')+'<br>'+osEsc([c.cel,c.fone,c.email].filter(Boolean).join(' · '))+'</div>'+
-    (d.responsavel?'<div style="margin-top:4px">Responsável: <b>'+osEsc(d.responsavel.nome)+'</b> '+osEsc(d.responsavel.cpf_cnpj||'')+'</div>':'')+
-    '<h2>Veículo</h2><div>Placa <b>'+osEsc(v.placa||'')+'</b> · Renavam '+osEsc(v.renavam||'')+' · Chassi '+osEsc(v.chassi||'')+'<br>'+osEsc(v.modelo||'')+' · '+osEsc([v.ano_fab,v.ano_mod].filter(Boolean).join('/')||v.ano||'')+' · '+osEsc(v.cor||'')+'</div>'+
-    '<h2>Serviços</h2><table><tr><th>Descrição</th><th class="r">Qtd</th><th class="r">Valor (R$)</th></tr>'+it+'</table>'+
+    '<style>.bx{border:1.5px solid #000;margin-bottom:8px}.tt{background:#000;color:#fff;font-weight:800;font-size:15px;padding:4px 10px}'+
+    '.ln{display:flex;flex-wrap:wrap;padding:3px 10px;font-size:13px;gap:2px 18px}.cp{flex:1 1 20%}.cp b{font-weight:700}'+
+    '.ti{width:80%;margin:6px auto;border-collapse:collapse}.ti th{background:#7f7f7f;color:#fff;text-align:left;font-weight:500;padding:4px 10px;border:0}'+
+    '.ti td{background:#d9d9d9;border:0;border-bottom:3px solid #fff;padding:3px 10px;font-size:13px}.tot{display:flex;justify-content:space-between;width:80%;margin:6px auto;font-size:14px}</style>'+
+    osCabecalho()+'<div style="text-align:right"><h1>'+(o.status==='orcamento'?'ORÇAMENTO':'ORDEM DE SERVIÇO')+' Nº '+o.numero+'</h1><div>'+osEsc(o.data_abertura)+' · '+osEsc(OS_STATUS[o.status])+'</div>'+
+      (o.processo_tipo?'<div><b>'+osEsc(o.processo_tipo)+'</b></div>':'')+(o.protocolo?'<div>Protocolo '+osEsc(o.protocolo)+'</div>':'')+'</div></div>'+
+    '<div class="bx" style="margin-top:10px"><div class="tt">PROPRIETÁRIO</div>'+
+      '<div class="ln">'+L('Nome/Razão Social',c.nome,'60%')+L('CPF/CNPJ',c.cpf_cnpj)+'</div>'+
+      '<div class="ln">'+L('Responsável/Revenda',r.nome,'60%')+L('Fone Responsável/Revenda',r.cel||r.fone)+'</div>'+
+      '<div class="ln">'+L('Endereço',[c.endereco,c.numero].filter(Boolean).join(', '),'60%')+L('Bairro',c.bairro)+'</div>'+
+      '<div class="ln">'+L('Complemento',c.complemento,'60%')+L('CEP',c.cep)+'</div>'+
+      '<div class="ln">'+L('Cidade',c.cidade,'60%')+L('Telefone(s)',[c.cel,c.fone].filter(Boolean).join(' / '))+'</div></div>'+
+    '<div class="bx"><div class="tt">VEÍCULO</div>'+
+      '<div class="ln">'+L('Placa',v.placa)+L('Renavam',v.renavam)+L('Chassi',v.chassi)+L('Marca/Modelo',v.modelo)+'</div>'+
+      '<div class="ln">'+L('Ano Fab/Mod',[v.ano_fab,v.ano_mod].filter(Boolean).join('/')||v.ano)+L('Combustível',v.combustivel)+L('Cor',v.cor)+L('Categoria',v.categoria)+'</div>'+
+      '<div class="ln">'+L('Restrição',o.restricao_financeira,'60%')+L('Financeira',o.financeira)+'</div></div>'+
+    '<div class="ln">'+L('Proprietário Anterior',o.proprietario_anterior,'60%')+'</div>'+
+    '<div class="ln">'+L('Data Nota/CRV',osBr(o.data_nf_crv))+L('Valor Nota/CRV',o.valor_nf_crv!=null?osR(o.valor_nf_crv):'')+'</div>'+
+    '<div class="bx" style="border:0"><div class="tt">TAXAS / DÉBITOS / DESPESAS</div>'+
+      '<table class="ti"><tr><th>Descrição</th><th style="text-align:right">Valor</th></tr>'+(it||'<tr><td colspan="2">—</td></tr>')+'</table>'+
+      '<div class="tot"><span>Custos <b>'+osR(o.itens_valor)+'</b></span><span>Honorário <b>'+osR(o.honorario)+'</b></span><span>Valor Total <b>'+osR(o.total)+'</b></span></div>'+
+      '<div class="tot" style="justify-content:flex-end;gap:30px"><span>Adiantado <b>'+osR(o.pago)+'</b></span><span>Saldo <b>'+osR(o.devedor)+'</b></span></div></div>'+
     (o.obs?'<h2>Observações</h2><div style="white-space:pre-wrap">'+osEsc(o.obs)+'</div>':'')+
     (o.status==='orcamento'&&o.validade?'<p>Orçamento válido até '+osBr(o.validade)+'.</p>':'')+
     '<div class="ass">_______________________________________<br>'+osEsc(c.nome||'Cliente')+'</div>');
