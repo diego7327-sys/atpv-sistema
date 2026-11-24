@@ -36,6 +36,7 @@
 .os-acoes{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
 .os-b{padding:7px 12px;font-size:12px;border-radius:7px;cursor:pointer;font-family:var(--font);border:1px solid var(--bord);background:var(--surf2);color:var(--txt);white-space:nowrap}
 .os-b:hover{border-color:var(--acc)}
+.os-b:focus-visible,.btn-main:focus-visible,.btn-sec:focus-visible{outline:2px solid #fff;outline-offset:2px}
 .os-b.pri{background:var(--acc);color:#000;border-color:var(--acc);font-weight:700}
 .os-b.del{border-color:rgba(255,71,87,.35);color:var(--red)}
 .os-b.on{outline:2px solid var(--acc);outline-offset:1px}
@@ -231,6 +232,30 @@ function osAdm(){ return OS.perfil==='admin'; }
 function osFechar(){ osE('os-modal').classList.remove('open'); }
 function osModal(tit,html){ osE('os-modal-tit').textContent=tit; osE('os-modal-corpo').innerHTML=html; osE('os-modal').classList.add('open'); }
 osE('os-modal').addEventListener('click',function(e){ if(e.target===this) osFechar(); });
+// ENTER pula para o próximo campo (Shift+Enter / caixa de texto grande continuam normais)
+document.addEventListener('keydown',function(e){
+  if(e.key!=='Enter' || e.shiftKey || e.ctrlKey || e.altKey || e.isComposing) return;
+  var el=e.target;
+  if(!el || !el.matches || !el.matches('input,select')) return;
+  if(['checkbox','radio','button','submit','file'].indexOf(el.type)>=0 || el.id==='os-q') return;
+  if(!el.closest('#os-modal2, #os-modal, #fc-os')) return;
+  e.preventDefault();
+  var dr=el.id?osE(el.id+'-drop'):null;     // seletor com lista aberta: escolhe o primeiro
+  if(dr && dr.classList.contains('open')){
+    var it=dr.querySelector('.ac-item[onmousedown]');
+    if(it) it.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));
+  }
+  osProximoCampo(el);
+});
+function osProximoCampo(el){
+  var raiz=el.closest('.modal')||el.closest('[data-enter]')||el.closest('.os-box')||el.closest('.os-filtros')||el.closest('#fc-os');
+  var campos=[].slice.call(raiz.querySelectorAll('input,select,textarea')).filter(function(x){
+    return !x.disabled && !x.readOnly && x.type!=='hidden' && x.type!=='checkbox' && x.offsetParent!==null; });
+  var i=campos.indexOf(el);
+  if(i>=0 && i<campos.length-1){ var n=campos[i+1]; n.focus(); if(n.tagName==='INPUT' && n.select) n.select(); return; }
+  var b=raiz.querySelector('.btn-main, .os-b.pri');   // último campo: vai para o botão de salvar (Enter de novo confirma)
+  if(b) b.focus();
+}
 function osFechar2(){ osE('os-modal2').classList.remove('open'); OS.pickVolta=null; }
 function osModal2(tit,html){ osE('os-modal2-tit').textContent=tit; osE('os-modal2-corpo').innerHTML=html; osE('os-modal2').classList.add('open'); }
 function osOpts(lista, sel, vazio){
@@ -320,7 +345,7 @@ function osLista(){
 
 // ── seletor (autocomplete) de cliente / veículo ──
 function osPickHtml(id, tipo, valorTxt, placeholder){
-  return '<div class="fg" style="margin-bottom:4px"><div class="os-pick"><input id="'+id+'" autocomplete="off" placeholder="'+osEsc(placeholder)+'" value="'+osEsc(valorTxt||'')+'" oninput="osPickBusca(\''+id+'\',\''+tipo+'\')" onfocus="osPickBusca(\''+id+'\',\''+tipo+'\')">'+
+  return '<div class="fg" style="margin-bottom:4px"><div class="os-pick"><input id="'+id+'" autocomplete="off" placeholder="'+osEsc(placeholder)+'" value="'+osEsc(valorTxt||'')+'" oninput="delete this.dataset.sel;osPickBusca(\''+id+'\',\''+tipo+'\')" onfocus="osPickBusca(\''+id+'\',\''+tipo+'\')">'+
          '<button class="os-b" type="button" onclick="osPickNovo(\''+id+'\',\''+tipo+'\')">+ Cadastrar</button></div><div class="ac-drop" id="'+id+'-drop"></div></div>';
 }
 function osPickBusca(id,tipo){
@@ -378,7 +403,12 @@ function osNova(tipo){
   if(tipo==='orcamento'){ var d=new Date(); d.setDate(d.getDate()+7); osE('osn-val').value=d.toISOString().slice(0,10); }
   setTimeout(function(){ osE('osn-vei').focus(); },50);
 }
+function osPickConferir(ids){
+  for(var k in ids){ var el=osE(k); if(el && el.value.trim() && !el.dataset.sel){ osMsg(ids[k]+': escolha na lista ou clique em “+ Cadastrar”.','err'); el.focus(); return false; } }
+  return true;
+}
 function osNovaSalvar(){
+  if(!osPickConferir({'osn-vei':'Veículo','osn-cli':'Cliente','osn-resp':'Responsável'})) return;
   var cid=osE('osn-cli').dataset.sel;
   if(!cid || !osE('osn-cli').value.trim()){ osMsg('Escolha o cliente (proprietário).','err'); return; }
   var corpo={tipo:OS.nova.tipo, cliente_id:cid,
@@ -462,7 +492,7 @@ function osAbaCadastro(){
     if(id==='osc-vei'){ osE('osc-vei-f').innerHTML=osFichaVei(x); }
   };
   function inp(id,lb,v,tp){ return '<div class="fg"><label>'+lb+'</label><input id="'+id+'" '+(tp?'type="'+tp+'"':'')+' value="'+osEsc(v==null?'':v)+'"></div>'; }
-  var h='<div class="g2">'+
+  var h='<div data-enter><div class="g2">'+
     '<div class="os-box"><h4>Cliente (proprietário)</h4>'+osPickHtml('osc-cli','cliente',d.cliente?d.cliente.nome:'','Nome, CPF/CNPJ')+'<div id="osc-cli-f">'+osFichaCli(d.cliente)+'</div></div>'+
     '<div class="os-box"><h4>Veículo</h4>'+osPickHtml('osc-vei','veiculo',d.veiculo?d.veiculo.placa+' — '+(d.veiculo.modelo||''):'','Placa, renavam, chassi')+'<div id="osc-vei-f">'+osFichaVei(d.veiculo)+'</div></div></div>'+
     '<div class="os-box"><h4>Cliente responsável / revenda</h4>'+osPickHtml('osc-resp','cliente',d.responsavel?d.responsavel.nome:'','Em branco = o próprio cliente paga')+'</div>'+
@@ -478,12 +508,13 @@ function osAbaCadastro(){
     h+='</div>';
   }
   if(!ro) h+='<div style="text-align:right"><button class="btn-main" onclick="osSalvarCadastro()">Salvar cadastro da OS</button></div>';
-  osE('os-aba-corpo').innerHTML=h;
+  osE('os-aba-corpo').innerHTML=h+'</div>';
   if(d.cliente) osE('osc-cli').dataset.sel=d.cliente.id;
   if(d.veiculo) osE('osc-vei').dataset.sel=d.veiculo.id;
   if(d.responsavel) osE('osc-resp').dataset.sel=d.responsavel.id;
 }
 function osSalvarCadastro(){
+  if(!osPickConferir({'osc-cli':'Cliente','osc-vei':'Veículo','osc-resp':'Responsável'})) return;
   var g=function(id){ return osE(id)?osE(id).value:undefined; };
   var sel=function(id){ return osE(id).value.trim()?(osE(id).dataset.sel||null):null; };
   var c={cliente_id:sel('osc-cli'), veiculo_id:sel('osc-vei'), responsavel_id:sel('osc-resp'),
@@ -758,29 +789,44 @@ function osCliModal(id, sugestao){
     if(!id && sugestao){ if(dig.length===11||dig.length===14) c.cpf_cnpj=sugestao; else c.nome=sugestao; }
     function f(k,lb,cls){ return '<div class="fg"><label>'+lb+'</label><input id="ocm-'+k+'" value="'+osEsc(c[k]||'')+'"'+(cls||'')+'></div>'; }
     osModal2(id?'Editar cliente':'Novo cliente',
-      '<div class="g3">'+f('cpf_cnpj','CPF / CNPJ',' onblur="osCliCnpj()"')+'<div class="fg" style="grid-column:span 2"><label>Nome / Razão social *</label><input id="ocm-nome" value="'+osEsc(c.nome||'')+'"></div></div>'+
+      '<div class="g3">'+f('cpf_cnpj','CPF / CNPJ',' inputmode="numeric" onblur="osCliCnpj()"')+'<div class="fg" style="grid-column:span 2"><label>Nome / Razão social *</label><input id="ocm-nome" value="'+osEsc(c.nome||'')+'"></div></div>'+
       '<div class="g3"><div class="fg"><label>Tipo</label><select id="ocm-tipo"><option value="pf">Pessoa física</option><option value="pj">Pessoa jurídica</option><option value="revenda">Revenda / garagem</option></select></div>'+
         f('nasc','Nascimento')+f('cnh','CNH')+f('rg','RG')+f('rg_org','Órgão RG')+f('ecivil','Estado civil')+'</div>'+
-      '<div class="g3">'+f('cep','CEP',' onblur="osCliCep()"')+'<div class="fg" style="grid-column:span 2"><label>Endereço</label><input id="ocm-endereco" value="'+osEsc(c.endereco||'')+'"></div>'+
+      '<div class="g3">'+f('cep','CEP',' inputmode="numeric" maxlength="9" oninput="osCliCep()" placeholder="00000-000"')+'<div class="fg" style="grid-column:span 2"><label>Endereço</label><input id="ocm-endereco" value="'+osEsc(c.endereco||'')+'"></div>'+
         f('numero','Número')+f('complemento','Complemento')+f('bairro','Bairro')+f('cidade','Município')+f('cel','Celular')+f('fone','Telefone')+'</div>'+
       '<div class="g2">'+f('email','E-mail')+f('forma_pgto_padrao','Forma de pagamento padrão')+'</div>'+
       '<div class="fg"><label>Observações</label><textarea class="os-ta" id="ocm-obs">'+osEsc(c.obs||'')+'</textarea></div>'+
       '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn-sec" onclick="osFechar2()">Cancelar</button><button class="btn-main" onclick="osCliSalvar('+(id||'null')+')">Salvar cliente</button></div>');
     osE('ocm-tipo').value=c.tipo||((c.cpf_cnpj||'').replace(/\D/g,'').length===14?'pj':'pf');
+    OS.cepFeito=(c.cep||'').replace(/\D/g,'');
+    var st=document.createElement('div'); st.id='ocm-cep-st'; st.className='os-small'; st.style.marginTop='-8px';
+    osE('ocm-cep').parentNode.appendChild(st);
+    setTimeout(function(){ osE(id?'ocm-nome':'ocm-cpf_cnpj').focus(); },50);
   };
   if(id) osApi('/api/clientes/'+id).then(function(r){ abrir(r.cliente); }).catch(osErr); else abrir(null);
 }
 function osCliCep(){
-  var cep=osE('ocm-cep').value.replace(/\D/g,''); if(cep.length!==8) return;
+  var el=osE('ocm-cep'), cep=el.value.replace(/\D/g,'');
+  if(cep.length!==8){ OS.cepFeito=''; return; }
+  el.value=cep.slice(0,5)+'-'+cep.slice(5);
+  if(OS.cepFeito===cep) return;
+  OS.cepFeito=cep;
+  var aviso=osE('ocm-cep-st'); if(aviso) aviso.textContent='buscando endereço...';
   fetch('https://viacep.com.br/ws/'+cep+'/json/').then(function(r){return r.json();}).then(function(d){
-    if(d.erro) return;
-    if(!osE('ocm-endereco').value) osE('ocm-endereco').value=(d.logradouro||'').toUpperCase();
-    if(!osE('ocm-bairro').value) osE('ocm-bairro').value=(d.bairro||'').toUpperCase();
+    if(d.erro){ if(aviso) aviso.textContent='CEP não encontrado'; return; }
+    osE('ocm-endereco').value=(d.logradouro||'').toUpperCase();
+    osE('ocm-bairro').value=(d.bairro||'').toUpperCase();
     osE('ocm-cidade').value=((d.localidade||'')+(d.uf?'/'+d.uf:'')).toUpperCase();
-  }).catch(function(){});
+    if(d.complemento && !osE('ocm-complemento').value) osE('ocm-complemento').value=d.complemento.toUpperCase();
+    if(aviso) aviso.textContent='';
+    if(document.activeElement===el){ osE(d.logradouro?'ocm-numero':'ocm-endereco').focus(); }
+  }).catch(function(){ if(aviso) aviso.textContent='sem conexão com o ViaCEP'; OS.cepFeito=''; });
 }
 function osCliCnpj(){
-  var d=osE('ocm-cpf_cnpj').value.replace(/\D/g,''); if(d.length!==14) return;
+  var d=osE('ocm-cpf_cnpj').value.replace(/\D/g,'');
+  if(d.length===11) osE('ocm-cpf_cnpj').value=d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4');
+  if(d.length!==14) return;
+  osE('ocm-cpf_cnpj').value=d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,'$1.$2.$3/$4-$5');
   osE('ocm-tipo').value = osE('ocm-tipo').value==='revenda'?'revenda':'pj';
   if(osE('ocm-nome').value.trim()) return;
   fetch('https://brasilapi.com.br/api/cnpj/v1/'+d).then(function(r){return r.json();}).then(function(j){
@@ -836,10 +882,12 @@ function osVeiModal(id, sugestao){
       '<div class="fg"><label>Proprietário</label>'+osPickHtml('ovm-prop','cliente',v.proprietario_nome||'','Nome ou CPF/CNPJ do proprietário').replace('<button class="os-b" type="button"','<button class="os-b" type="button" style="display:none"')+'</div>'+
       '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn-sec" onclick="osFechar2()">Cancelar</button><button class="btn-main" onclick="osVeiSalvar('+(id||'null')+')">Salvar veículo</button></div>');
     if(v.proprietario_id) osE('ovm-prop').dataset.sel=v.proprietario_id;
+    setTimeout(function(){ osE('ovm-placa').focus(); },50);
   };
   if(id) osApi('/api/os-veiculos/'+id).then(function(r){ abrir(r.veiculo); }).catch(osErr); else abrir(null);
 }
 function osVeiSalvar(id){
+  if(!osPickConferir({'ovm-prop':'Proprietário'})) return;
   var c={id:id};
   ['placa','renavam','chassi','modelo','cor','ano_fab','ano_mod','combustivel','categoria','municipio'].forEach(function(k){ c[k]=osE('ovm-'+k).value; });
   c.proprietario_id = osE('ovm-prop').value.trim()?(osE('ovm-prop').dataset.sel||null):null;
