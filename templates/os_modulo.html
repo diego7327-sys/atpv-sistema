@@ -773,6 +773,9 @@ function osAbaItens(){
      '<tr><td>Custos (taxas / débitos / despesas)</td><td class="os-money">'+osR(o.itens_valor)+'</td></tr>'+
      '<tr><td>+ Honorário</td><td class="os-money">'+osR(o.honorario)+'</td></tr>'+
      '<tr><td><b>= Total da OS</b></td><td class="os-money"><b>'+osR(o.total)+'</b></td></tr>'+
+     '<tr><td>− Adiantado / pago</td><td class="os-money os-ok">'+osR(o.pago)+'</td></tr>'+
+     '<tr><td><b>= Saldo devedor</b></td><td class="os-money '+(o.devedor>0.004?'os-dev':'os-ok')+'"><b>'+osR(o.devedor)+'</b></td></tr>'+
+     (o.devedor>0.004&&!ro&&o.status!=='orcamento'?'<tr><td colspan="2" style="padding:8px 0"><button class="os-b pri" style="width:100%" onclick="osReceberModal()">💰 Lançar entrada / pagamento</button></td></tr>':'')+
      '<tr><td class="os-small">Custo de terceiros</td><td class="os-money os-small">'+osR(o.custo)+'</td></tr>'+
      '<tr><td class="os-small">Lucro sobre terceiros</td><td class="os-money os-small">'+osR(o.lucro_terceiros)+'</td></tr>'+
      '<tr><td><b style="color:var(--acc)">Lucro da OS</b></td><td class="os-money" style="color:var(--acc)"><b>'+osR(o.lucro)+'</b></td></tr></table></div></div>';
@@ -831,7 +834,7 @@ function osReceberModal(){
   var contaPad = mp.conta_id || ((c.contas||[]).filter(function(x){ return x.ativo && x.nome==='SICRED'; })[0]||{}).id;   // padrão do BitDesp
   osModal('Recebimento — OS Nº '+o.numero,
     '<div class="os-ficha" style="margin-bottom:12px">Total '+osR(o.total)+' · Pago '+osR(o.pago)+' · <b class="os-dev">Devedor '+osR(o.devedor)+'</b></div>'+
-    '<div class="g2"><div class="fg"><label>Valor recebido (R$)</label><input id="osr-valor" value="'+osN(o.devedor)+'"></div>'+
+    '<div class="g2"><div class="fg"><label>Valor recebido (R$) — entrada ou total</label><input id="osr-valor" value="'+osN(o.devedor)+'"></div>'+
     '<div class="fg"><label>Data</label><input type="date" id="osr-data" value="'+osHoje()+'"></div>'+
     '<div class="fg"><label>Forma de pagamento *</label><select id="osr-forma">'+osOpts(c.formas,mp.forma_id,'— escolha —')+'</select></div>'+
     '<div class="fg"><label>Conta *</label><select id="osr-conta">'+osOpts(c.contas,contaPad,'— escolha —')+'</select></div></div>'+
