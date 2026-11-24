@@ -17,6 +17,7 @@ from datetime import datetime, date, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from functools import wraps
 import re
+import json
 
 from flask import request, jsonify, session
 
@@ -163,6 +164,12 @@ CREATE TABLE IF NOT EXISTS processo_tipos (
 ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS processo_tipo_id BIGINT REFERENCES processo_tipos(id) ON DELETE SET NULL;
 ALTER TABLE servicos       ADD COLUMN IF NOT EXISTS processo_tipo_id BIGINT REFERENCES processo_tipos(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS os_ptipo_idx ON ordens_servico (processo_tipo_id);
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS desconto NUMERIC(12,2) DEFAULT 0;
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS obs_cliente TEXT DEFAULT '';
+CREATE TABLE IF NOT EXISTS servico_pacotes (
+    id BIGSERIAL PRIMARY KEY, nome TEXT NOT NULL,
+    servicos JSONB DEFAULT '[]'::jsonb,
+    ordem INT DEFAULT 0, ativo BOOLEAN DEFAULT TRUE);
 
 ALTER TABLE IF EXISTS processos ADD COLUMN IF NOT EXISTS os_id BIGINT REFERENCES ordens_servico(id) ON DELETE SET NULL;
 ALTER TABLE IF EXISTS usuarios  ADD COLUMN IF NOT EXISTS conta_padrao_id BIGINT;
@@ -197,6 +204,10 @@ SEED_SERVICO_TIPO = {"TRANSFERÊNCIA NOME": "TRANSFERÊNCIA", "MUDANÇA CATEGORI
 SEED_PENDENCIAS = ["PONTUAÇÃO", "SUSPENSÃO", "SUSPENSÃO CNH", "RECEBER",
                    "PROCESSO JUDICIAL", "ALT IMETRO"]
 
+# Dados da empresa que saem no orçamento enviado ao cliente (Financeiro → Cadastros)
+CFG_EMPRESA = ("empresa_nome", "empresa_fone", "empresa_endereco", "empresa_cidade",
+               "pix_chave", "pix_nome", "pix_cidade", "pix_banco")
+
 STATUS_OS = {
     'orcamento':  'Orçamento',
     'andamento':  'Em andamento',
@@ -212,7 +223,7 @@ CAMPOS_CLIENTE = ("cpf_cnpj", "nome", "nasc", "rg", "rg_org", "cnh", "ecivil", "
                   "email", "tipo", "forma_pgto_padrao", "obs")
 CAMPOS_VEICULO = ("placa", "renavam", "chassi", "modelo", "ano_fab", "ano_mod", "cor",
                   "combustivel", "categoria", "municipio")
-CAMPOS_OS_EDIT = ("despachante", "codigo_web", "protocolo", "proprietario_anterior",
+CAMPOS_OS_EDIT = ("obs_cliente", "despachante", "codigo_web", "protocolo", "proprietario_anterior",
                   "restricao_financeira", "financeira", "obs")
 
 
@@ -318,6 +329,18 @@ def registrar(app, db, login_required):
                                      (SELECT id FROM processo_tipos WHERE nome = %s LIMIT 1)
                                    WHERE nome = %s AND processo_tipo_id IS NULL""", (tp, sv))
                 cur.execute("INSERT INTO migracoes (nome) VALUES ('os_tipos_v1')")
+            cur.execute("SELECT 1 FROM migracoes WHERE nome = 'os_pacotes_v1'")
+            if not cur.fetchone():
+                cur.execute("SELECT COUNT(*) AS n FROM servico_pacotes")
+                if cur.fetchone()['n'] == 0:
+                    cur.execute("""SELECT id, nome FROM servicos WHERE nome = ANY(%s)""",
+                                (["TRANSFERÊNCIA NOME", "VISTORIA", "AGENDAMENTO VISTORIA"],))
+                    ids = {r['nome']: r['id'] for r in cur.fetchall()}
+                    if len(ids) == 3:
+                        cur.execute("INSERT INTO servico_pacotes (nome, servicos, ordem) VALUES (%s, %s::jsonb, 1)",
+                                    ("Transferência", json.dumps([ids["TRANSFERÊNCIA NOME"], ids["VISTORIA"],
+                                                                   ids["AGENDAMENTO VISTORIA"]])))
+                cur.execute("INSERT INTO migracoes (nome) VALUES ('os_pacotes_v1')")
             _sincronizar_clientes(cur)
 
     def _sincronizar_clientes(cur, filtro_sql="", filtro_params=None):
@@ -406,7 +429,8 @@ def registrar(app, db, login_required):
         itens_custo = _f(d.pop('itens_custo', 0))
         honor = _f(d.get('honorario'))
         pago = _f(d.pop('pago', 0))
-        total = round(itens_valor + honor, 2)
+        desc = _f(d.get('desconto'))
+        total = round(itens_valor + honor - desc, 2)
         # orçamento e OS cancelada não geram saldo a receber
         cobravel = d.get('status') not in ('orcamento', 'cancelada')
         d.update({
@@ -415,7 +439,10 @@ def registrar(app, db, login_required):
             'itens_valor': round(itens_valor, 2), 'custo': round(itens_custo, 2),
             'total': total, 'pago': round(pago, 2), 'devedor': round(total - pago, 2) if cobravel else 0.0,
             'lucro_terceiros': round(itens_valor - itens_custo, 2),
-            'lucro': round(honor + itens_valor - itens_custo, 2),
+            'lucro': round(honor + itens_valor - itens_custo - desc, 2),
+            'desconto': desc,
+            'taxas': round(itens_custo, 2),
+            'honorarios': round(honor + itens_valor - itens_custo, 2),
             'status_label': STATUS_OS.get(d.get('status'), d.get('status')),
             'data_abertura': _dt(d.get('data_abertura')),
             'data_abertura_iso': d['data_abertura'].astimezone(BRT).date().isoformat() if r.get('data_abertura') else '',
@@ -654,6 +681,15 @@ def registrar(app, db, login_required):
             cur.execute("SELECT valor FROM config WHERE chave = 'os_numero_inicial'")
             row = cur.fetchone()
             out['os_numero_inicial'] = row['valor'] if row else ''
+            cur.execute("SELECT chave, valor FROM config WHERE chave = ANY(%s)", (list(CFG_EMPRESA),))
+            emp = {k: '' for k in CFG_EMPRESA}
+            emp['empresa_nome'] = 'Diego Despachante'
+            for r in cur.fetchall():
+                if r['valor'] is not None:
+                    emp[r['chave']] = r['valor']
+            out['empresa'] = emp
+            cur.execute("SELECT * FROM servico_pacotes WHERE ativo ORDER BY ordem, nome")
+            out['pacotes'] = [dict(r) for r in cur.fetchall()]
             out['proximo_numero'] = None
         with db(commit=False) as cur:
             cur.execute("SELECT COALESCE(MAX(numero),0) AS m FROM ordens_servico")
@@ -707,11 +743,53 @@ def registrar(app, db, login_required):
         if not _admin():
             return jsonify({"erro": "Sem permissão"}), 403
         d = request.get_json() or {}
-        ini = _so_dig(str(d.get("os_numero_inicial") or ""))
         with db(commit=True) as cur:
-            cur.execute("""INSERT INTO config (chave, valor) VALUES ('os_numero_inicial', %s)
-                           ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor, atualizado = NOW()""",
-                        (ini,))
+            if "os_numero_inicial" in d:
+                ini = _so_dig(str(d.get("os_numero_inicial") or ""))
+                cur.execute("""INSERT INTO config (chave, valor) VALUES ('os_numero_inicial', %s)
+                               ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor, atualizado = NOW()""",
+                            (ini,))
+            for k in CFG_EMPRESA:
+                if k in d:
+                    cur.execute("""INSERT INTO config (chave, valor) VALUES (%s, %s)
+                                   ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor, atualizado = NOW()""",
+                                (k, (d.get(k) or "").strip()))
+        return jsonify({"ok": True})
+
+    # ── PACOTES (botões que lançam vários serviços de uma vez) ──
+    @app.route("/api/pacotes", methods=["GET"])
+    @equipe
+    def os_pacotes_get():
+        with db() as cur:
+            cur.execute("SELECT * FROM servico_pacotes ORDER BY ativo DESC, ordem, nome")
+            return jsonify([dict(r) for r in cur.fetchall()])
+
+    @app.route("/api/pacotes", methods=["POST"])
+    @equipe
+    def os_pacote_salvar():
+        if not _admin():
+            return jsonify({"erro": "Só o administrador altera os pacotes."}), 403
+        d = request.get_json() or {}
+        nome = (d.get("nome") or "").strip()
+        sv = [int(x) for x in (d.get("servicos") or []) if str(x).isdigit()]
+        if not nome or not sv:
+            return jsonify({"erro": "Informe o nome e escolha os serviços do pacote."}), 400
+        with db(commit=True) as cur:
+            if d.get("id"):
+                cur.execute("UPDATE servico_pacotes SET nome=%s, servicos=%s::jsonb, ativo=%s WHERE id=%s",
+                            (nome, json.dumps(sv), _sim(d.get("ativo"), True), d["id"]))
+            else:
+                cur.execute("INSERT INTO servico_pacotes (nome, servicos) VALUES (%s, %s::jsonb)",
+                            (nome, json.dumps(sv)))
+        return jsonify({"ok": True})
+
+    @app.route("/api/pacotes/<int:pid>", methods=["DELETE"])
+    @equipe
+    def os_pacote_del(pid):
+        if not _admin():
+            return jsonify({"erro": "Sem permissão"}), 403
+        with db(commit=True) as cur:
+            cur.execute("DELETE FROM servico_pacotes WHERE id=%s", (pid,))
         return jsonify({"ok": True})
 
     # ── ORDEM DE SERVIÇO: lista / painel ───────────────────────
@@ -806,7 +884,7 @@ def registrar(app, db, login_required):
                 x['lancado'] = _dt(x['lancado'])
                 pend.append(x)
             cur.execute("""SELECT COALESCE(SUM(t.total - t.pago),0) AS dev, COUNT(*) FILTER (WHERE t.total - t.pago > 0.004) AS n
-                           FROM (SELECT o.honorario +
+                           FROM (SELECT o.honorario - COALESCE(o.desconto,0) +
                                    COALESCE((SELECT SUM(i.valor*i.qtd) FROM os_itens i WHERE i.os_id=o.id),0) AS total,
                                    COALESCE((SELECT SUM(r.valor) FROM os_recebimentos r WHERE r.os_id=o.id),0) AS pago
                                  FROM ordens_servico o
@@ -905,15 +983,16 @@ def registrar(app, db, login_required):
             numero = _proximo_numero(cur)
             cur.execute("""INSERT INTO ordens_servico
                 (numero, tipo, cliente_id, responsavel_id, veiculo_id, despachante, user_id, user_nome,
-                 status, honorario, obs, validade, empresa_id, atendimento_id, processo_tipo_id)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                 status, honorario, obs, validade, empresa_id, atendimento_id, processo_tipo_id, desconto, obs_cliente)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
                 (numero, tipo, d.get("cliente_id"), d.get("responsavel_id") or None,
                  d.get("veiculo_id") or None, (d.get("despachante") or "").strip(),
                  str(session.get('user_id') or ''), _eu(),
                  'orcamento' if tipo == 'orcamento' else 'andamento',
                  _num(d.get("honorario")), (d.get("obs") or "").strip(),
                  _data(d.get("validade")) or (_hoje() + timedelta(days=7) if tipo == 'orcamento' else None),
-                 session.get('empresa_id'), d.get("atendimento_id") or None, d.get("processo_tipo_id") or None))
+                 session.get('empresa_id'), d.get("atendimento_id") or None, d.get("processo_tipo_id") or None,
+                 _num(d.get("desconto")), (d.get("obs_cliente") or "").strip()))
             oid = cur.fetchone()['id']
             _ocorrencia(cur, oid, 'outras', ('Orçamento criado' if tipo == 'orcamento' else 'OS aberta') +
                         ' por ' + _eu())
@@ -935,7 +1014,7 @@ def registrar(app, db, login_required):
                     v = (d.get(k) or "").strip()
                     if v != (o.get(k) or ''):
                         sets.append(k + "=%s"); vals.append(v)
-                        if k != 'obs':
+                        if k not in ('obs', 'obs_cliente'):
                             mudou.append(k)
             if 'processo_tipo_id' in d:
                 v = d.get('processo_tipo_id') or None
@@ -950,6 +1029,11 @@ def registrar(app, db, login_required):
                         if k == 'cliente_id' and not v:
                             return jsonify({"erro": "A OS precisa de um cliente."}), 400
                         sets.append(k + "=%s"); vals.append(v); mudou.append(k.replace('_id', ''))
+            if 'desconto' in d:
+                dsc = _num(d.get('desconto'))
+                if dsc != (o.get('desconto') or Decimal('0')):
+                    sets.append("desconto=%s"); vals.append(dsc)
+                    mudou.append('desconto R$ %s → R$ %s' % (_br(o.get('desconto')), _br(dsc)))
             if 'honorario' in d:
                 h = _num(d.get('honorario'))
                 if h != (o.get('honorario') or Decimal('0')):
