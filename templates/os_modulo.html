@@ -1,0 +1,947 @@
+{% raw %}
+<!-- ═══════════════ MÓDULO ORDEM DE SERVIÇO (modelo BitDesp) ═══════════════ -->
+<style>
+.os-sub{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+.os-sub button{background:var(--surf2);color:var(--mut);border:1px solid var(--bord);border-radius:7px;padding:8px 15px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:var(--font)}
+.os-sub button.on{background:var(--acc);color:#000;border-color:var(--acc)}
+.os-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:10px;margin-bottom:16px}
+.os-card{border:1px solid var(--bord);border-radius:10px;padding:12px 10px;text-align:center;background:var(--surf2);cursor:pointer;transition:border-color .15s}
+.os-card:hover{border-color:var(--acc)}
+.os-card .v{font-size:21px;font-weight:700;font-family:var(--mono);line-height:1.15}
+.os-card .l{font-size:9.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin-top:4px}
+.os-filtros{display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:10px;align-items:end}
+@media(max-width:1000px){.os-filtros{grid-template-columns:1fr 1fr}}
+.os-chk{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mut);margin-bottom:12px;white-space:nowrap;cursor:pointer}
+.os-chk input{accent-color:var(--acc)}
+.os-st{display:inline-block;padding:3px 8px;border-radius:5px;font-size:10.5px;font-weight:700;font-family:var(--mono);white-space:nowrap}
+.st-orcamento{background:rgba(160,160,180,.15);color:#b8bdc9}
+.st-andamento{background:rgba(255,165,2,.15);color:var(--warn)}
+.st-detran{background:rgba(0,153,255,.15);color:var(--acc2)}
+.st-disponivel{background:rgba(168,85,247,.18);color:#c084fc}
+.st-entregue{background:rgba(0,212,170,.15);color:var(--acc)}
+.st-concluida{background:rgba(0,212,170,.28);color:#5ff5d2}
+.st-cancelada{background:rgba(255,71,87,.15);color:var(--red)}
+#os-tbl tbody tr{cursor:pointer}
+.os-num{font-family:var(--mono);font-weight:600;color:var(--acc)}
+.os-money{font-family:var(--mono);text-align:right;white-space:nowrap}
+.os-dev{color:var(--red);font-weight:600}
+.os-ok{color:var(--acc)}
+.os-small{font-size:11px;color:var(--mut)}
+.os-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;background:var(--surf2);border:1px solid var(--bord);border-radius:12px;padding:16px;margin-bottom:14px}
+.os-head h2{font-size:20px;font-family:var(--mono);margin-bottom:6px}
+.os-tot{display:flex;gap:10px}
+.os-tot div{background:var(--surf);border:1px solid var(--bord);border-radius:9px;padding:9px 16px;text-align:center;min-width:110px}
+.os-tot b{display:block;font-size:18px;font-family:var(--mono)}
+.os-tot span{font-size:9.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+.os-acoes{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.os-b{padding:7px 12px;font-size:12px;border-radius:7px;cursor:pointer;font-family:var(--font);border:1px solid var(--bord);background:var(--surf2);color:var(--txt);white-space:nowrap}
+.os-b:hover{border-color:var(--acc)}
+.os-b.pri{background:var(--acc);color:#000;border-color:var(--acc);font-weight:700}
+.os-b.del{border-color:rgba(255,71,87,.35);color:var(--red)}
+.os-b.on{outline:2px solid var(--acc);outline-offset:1px}
+.os-b:disabled{opacity:.4;cursor:not-allowed}
+.os-abas{display:flex;gap:2px;border-bottom:1px solid var(--bord);margin-bottom:14px;overflow-x:auto}
+.os-abas button{padding:10px 14px;font-size:12.5px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;color:var(--mut);cursor:pointer;font-family:var(--font);white-space:nowrap}
+.os-abas button.on{color:var(--acc);border-bottom-color:var(--acc)}
+.os-abas .cnt{font-size:10px;background:var(--surf2);border-radius:8px;padding:1px 6px;margin-left:4px;font-family:var(--mono)}
+.os-box{background:var(--surf);border:1px solid var(--bord);border-radius:10px;padding:14px;margin-bottom:12px}
+.os-box h4{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--acc);font-family:var(--mono);margin-bottom:10px}
+.os-pick{display:flex;gap:6px;align-items:center}
+.os-pick input{flex:1}
+.os-ficha{font-size:12.5px;line-height:1.6;background:var(--surf2);border:1px solid var(--bord);border-radius:8px;padding:9px 12px;margin-top:6px}
+.os-ficha b{font-weight:600}
+.os-ta{width:100%;min-height:70px;background:var(--surf);border:1px solid var(--bord);border-radius:7px;padding:8px 11px;font-size:13px;color:var(--txt);font-family:var(--font);resize:vertical}
+.os-ta:focus{outline:none;border-color:var(--acc)}
+.os-linha{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+.os-linha .fg{flex:1;min-width:120px}
+.os-tl{border-left:2px solid var(--bord);padding:6px 0 8px 12px;margin-left:4px;font-size:12.5px}
+.os-tl .q{font-size:10.5px;color:var(--mut);font-family:var(--mono)}
+.os-tl.t-detran{border-left-color:var(--acc2)}
+.os-tl.t-disponivel{border-left-color:#c084fc}
+.os-tl.t-entregue{border-left-color:var(--acc)}
+.os-tl.t-protocolo{border-left-color:var(--warn)}
+.os-venc{color:var(--red);font-weight:700}
+.os-hj{color:var(--warn);font-weight:700}
+.os-modal{max-width:760px}
+.os-vazio{text-align:center;color:var(--mut);padding:26px 0;font-size:13px}
+.os-soma td{font-weight:700;font-family:var(--mono);border-top:2px solid var(--bord)}
+.os-faixa-teste{background:repeating-linear-gradient(45deg,#ffa502,#ffa502 14px,#ffb733 14px,#ffb733 28px);color:#000;text-align:center;font-weight:800;padding:6px;font-size:12px;letter-spacing:.06em}
+.os-g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+@media(max-width:900px){.os-g4{grid-template-columns:1fr 1fr}}
+.os-cad{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.os-cad ul{list-style:none;max-height:260px;overflow-y:auto}
+.os-cad li{display:flex;justify-content:space-between;align-items:center;padding:6px 4px;border-bottom:1px solid var(--bord);font-size:12.5px}
+.os-cad li.off{opacity:.45}
+input[type=date].os-dt,.fg input[type=date]{color-scheme:dark}
+</style>
+
+<div id="fc-os" class="ftc fields">
+  <div class="os-sub" id="os-sub">
+    <button data-v="lista" class="on" onclick="osVer('lista')">📋 Ordens de Serviço</button>
+    <button data-v="clientes" onclick="osVer('clientes')">👤 Clientes</button>
+    <button data-v="veiculos" onclick="osVer('veiculos')">🚗 Veículos</button>
+    <button data-v="servicos" onclick="osVer('servicos')">🏷 Tabela de Serviços</button>
+    <button data-v="fin" onclick="osVer('fin')">💰 Financeiro</button>
+  </div>
+
+  <!-- LISTA DE OS -->
+  <div id="osv-lista">
+    <div class="fb-title" style="display:flex;justify-content:space-between;align-items:center">📋 Ordens de Serviço
+      <span style="display:flex;gap:6px">
+        <button class="os-b" onclick="osNova('orcamento')">+ Orçamento</button>
+        <button class="os-b pri" onclick="osNova('os')">+ Nova OS</button>
+      </span></div>
+    <div class="os-cards" id="os-cards"></div>
+    <div id="os-pend-painel"></div>
+    <div class="os-filtros">
+      <div class="fg"><label>Localizar</label>
+        <input id="os-q" placeholder="Nº da OS, cliente, CPF/CNPJ, placa, renavam, chassi, protocolo" onkeydown="if(event.key==='Enter')osLista()"></div>
+      <div class="fg"><label>Situação</label>
+        <select id="os-fst" onchange="osLista()">
+          <option value="">Todas</option><option value="abertas">Abertas (andamento/Detran/disponível)</option>
+          <option value="orcamento">Orçamento</option><option value="andamento">Em andamento</option>
+          <option value="detran">No Detran</option><option value="disponivel">Disponível p/ entrega</option>
+          <option value="entregue">Entregue</option><option value="concluida">Concluída</option>
+          <option value="cancelada">Cancelada</option></select></div>
+      <div class="fg"><label>De</label><input type="date" id="os-de" onchange="osLista()"></div>
+      <div class="fg"><label>Até</label><input type="date" id="os-ate" onchange="osLista()"></div>
+      <div>
+        <label class="os-chk"><input type="checkbox" id="os-fdev" onchange="osLista()"> Só com saldo devedor</label>
+        <label class="os-chk os-adm" style="display:none"><input type="checkbox" id="os-flix" onchange="osLista()"> 🗑 Lixeira</label>
+      </div>
+    </div>
+    <div class="table-wrap"><table id="os-tbl">
+      <thead><tr><th>Nº OS</th><th>Data</th><th>Cliente / Responsável</th><th>Veículo</th><th>Serviços</th>
+        <th>Situação</th><th style="text-align:right">Total</th><th style="text-align:right">Pago</th><th style="text-align:right">Devedor</th></tr></thead>
+      <tbody id="os-tbody"><tr><td colspan="9" class="os-vazio">Carregando...</td></tr></tbody>
+      <tfoot id="os-tfoot"></tfoot>
+    </table></div>
+  </div>
+
+  <!-- UMA OS -->
+  <div id="osv-os" style="display:none"></div>
+
+  <!-- CLIENTES -->
+  <div id="osv-clientes" style="display:none">
+    <div class="fb-title">👤 Clientes <button class="os-b pri" style="float:right" onclick="osCliModal()">+ Novo cliente</button></div>
+    <div class="fg"><label>Buscar</label><input id="os-cli-q" placeholder="Nome, CPF/CNPJ ou celular" oninput="osDeb('cli',osCliLista)"></div>
+    <div class="table-wrap"><table><thead><tr><th>Nome</th><th>CPF/CNPJ</th><th>Tipo</th><th>Celular</th><th>Cidade</th><th></th></tr></thead>
+      <tbody id="os-cli-tbody"></tbody></table></div>
+    <div id="os-cli-ficha"></div>
+  </div>
+
+  <!-- VEÍCULOS -->
+  <div id="osv-veiculos" style="display:none">
+    <div class="fb-title">🚗 Veículos <button class="os-b pri" style="float:right" onclick="osVeiModal()">+ Novo veículo</button></div>
+    <div class="fg"><label>Buscar</label><input id="os-vei-q" placeholder="Placa, renavam, chassi ou modelo" oninput="osDeb('vei',osVeiLista)"></div>
+    <div class="table-wrap"><table><thead><tr><th>Placa</th><th>Renavam</th><th>Marca/Modelo</th><th>Ano</th><th>Cor</th><th>Proprietário</th><th></th></tr></thead>
+      <tbody id="os-vei-tbody"></tbody></table></div>
+  </div>
+
+  <!-- TABELA DE SERVIÇOS -->
+  <div id="osv-servicos" style="display:none">
+    <div class="fb-title">🏷 Tabela de serviços e taxas</div>
+    <p class="cfg-note"><b>Valor</b> = o que o cliente paga. <b>Custo</b> = o que vai para terceiros (Detran, vistoria, placa). O item lançado na OS copia os dois na hora — mudar o preço aqui não altera OS antigas.</p>
+    <div class="os-box os-adm" style="display:none">
+      <h4>Novo serviço</h4>
+      <div class="os-linha">
+        <div class="fg" style="flex:3"><label>Nome</label><input id="os-sv-nome"></div>
+        <div class="fg"><label>Valor (R$)</label><input id="os-sv-valor" placeholder="0,00"></div>
+        <div class="fg"><label>Custo (R$)</label><input id="os-sv-custo" placeholder="0,00"></div>
+        <div class="fg" style="flex:2"><label>Centro de valores</label><select id="os-sv-centro"></select></div>
+        <div class="fg" style="flex:0"><button class="os-b pri" onclick="osSvSalvar()">Adicionar</button></div>
+      </div>
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>Serviço</th><th style="text-align:right">Valor</th><th style="text-align:right">Custo</th>
+      <th style="text-align:right">Margem</th><th>Centro</th><th>Ativo</th><th></th></tr></thead><tbody id="os-sv-tbody"></tbody></table></div>
+  </div>
+
+  <!-- FINANCEIRO -->
+  <div id="osv-fin" style="display:none">
+    <div class="os-sub" style="margin-bottom:12px">
+      <button id="osf-b-extrato" class="on" onclick="osFinAba('extrato')">Extrato de lançamentos</button>
+      <button id="osf-b-cad" onclick="osFinAba('cad')">Contas, formas e centros</button>
+    </div>
+    <div id="osf-extrato">
+      <div class="os-g4">
+        <div class="fg"><label>De</label><input type="date" id="osf-de"></div>
+        <div class="fg"><label>Até</label><input type="date" id="osf-ate"></div>
+        <div class="fg"><label>Conta</label><select id="osf-conta"></select></div>
+        <div class="fg"><label>Forma</label><select id="osf-forma"></select></div>
+      </div>
+      <div class="os-linha"><div class="fg"><label>Centro de valores</label><select id="osf-centro"></select></div>
+        <div class="fg" style="flex:0"><button class="os-b pri" onclick="osExtrato()">Filtrar</button></div></div>
+      <div id="osf-res"></div>
+    </div>
+    <div id="osf-cad" style="display:none">
+      <div class="os-box"><h4>Meus padrões no recebimento</h4>
+        <div class="os-linha">
+          <div class="fg"><label>Conta padrão</label><select id="osf-mp-conta"></select></div>
+          <div class="fg"><label>Forma padrão</label><select id="osf-mp-forma"></select></div>
+          <div class="fg" style="flex:0"><button class="os-b pri" onclick="osMeusPadroes()">Salvar</button></div>
+        </div>
+      </div>
+      <div class="os-box os-adm" style="display:none"><h4>Numeração da OS</h4>
+        <div class="os-linha">
+          <div class="fg"><label>Próxima OS começa em (para continuar a numeração do BitDesp)</label><input id="osf-numini" placeholder="ex.: 35600"></div>
+          <div class="fg" style="flex:0"><button class="os-b pri" onclick="osNumIni()">Salvar</button></div>
+        </div><div class="os-small" id="osf-prox"></div>
+      </div>
+      <div class="os-cad" id="osf-cads"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DE CADASTRO (cliente/veículo) — fica por cima do modal da OS -->
+<div class="modal-overlay" id="os-modal2" style="z-index:1100">
+  <div class="modal os-modal">
+    <div class="modal-title"><span id="os-modal2-tit"></span><button class="modal-close" onclick="osFechar2()">✕</button></div>
+    <div id="os-modal2-corpo"></div>
+  </div>
+</div>
+<!-- MODAL GENÉRICO DO MÓDULO OS -->
+<div class="modal-overlay" id="os-modal">
+  <div class="modal os-modal">
+    <div class="modal-title"><span id="os-modal-tit"></span><button class="modal-close" onclick="osFechar()">✕</button></div>
+    <div id="os-modal-corpo"></div>
+  </div>
+</div>
+
+<script>
+// ═══ MÓDULO OS ═════════════════════════════════════════════════
+var OS = {cad:null, serv:[], atual:null, aba:'cadastro', perfil:'', deb:{}, pick:{}};
+var OS_STATUS = {orcamento:'Orçamento',andamento:'Em andamento',detran:'No Detran',disponivel:'Disponível p/ entrega',
+                 entregue:'Entregue',concluida:'Concluída',cancelada:'Cancelada'};
+function osE(id){ return document.getElementById(id); }
+function osEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+function osR(n){ return (Number(n)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
+function osN(n){ return (Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function osBr(iso){ if(!iso) return ''; var p=iso.slice(0,10).split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
+function osHoje(){ var d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,10); }
+function osSt(s){ return '<span class="os-st st-'+s+'">'+osEsc(OS_STATUS[s]||s)+'</span>'; }
+function osApi(url, metodo, corpo){
+  var o={method:metodo||'GET',headers:{'Content-Type':'application/json'}};
+  if(corpo) o.body=JSON.stringify(corpo);
+  return fetch(url,o).then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error(j.erro||'Erro'); return j; }); });
+}
+function osMsg(m,t){ if(typeof showAlert==='function') showAlert(m,t||'ok'); else alert(m); }
+function osErr(e){ osMsg(e.message||String(e),'err'); }
+function osDeb(k,fn){ clearTimeout(OS.deb[k]); OS.deb[k]=setTimeout(fn,300); }
+function osAdm(){ return OS.perfil==='admin'; }
+function osFechar(){ osE('os-modal').classList.remove('open'); }
+function osModal(tit,html){ osE('os-modal-tit').textContent=tit; osE('os-modal-corpo').innerHTML=html; osE('os-modal').classList.add('open'); }
+osE('os-modal').addEventListener('click',function(e){ if(e.target===this) osFechar(); });
+function osFechar2(){ osE('os-modal2').classList.remove('open'); OS.pickVolta=null; }
+function osModal2(tit,html){ osE('os-modal2-tit').textContent=tit; osE('os-modal2-corpo').innerHTML=html; osE('os-modal2').classList.add('open'); }
+function osOpts(lista, sel, vazio){
+  var h=vazio!==undefined?'<option value="">'+osEsc(vazio)+'</option>':'';
+  (lista||[]).forEach(function(x){ if(x.ativo===false && String(x.id)!==String(sel)) return;
+    h+='<option value="'+x.id+'"'+(String(x.id)===String(sel)?' selected':'')+'>'+osEsc(x.nome)+'</option>'; });
+  return h;
+}
+
+function osCarregarCad(forcar){
+  if(OS.cad && !forcar) return Promise.resolve(OS.cad);
+  return Promise.all([osApi('/api/fin/cadastros'), osApi('/api/servicos')]).then(function(r){
+    OS.cad=r[0]; OS.serv=r[1]; return OS.cad; });
+}
+
+// ── entrada do módulo ──
+function osEntrar(){
+  osApi('/api/me').then(function(d){
+    OS.perfil=d.perfil||'';
+    document.querySelectorAll('.os-adm').forEach(function(el){ el.style.display=osAdm()?'':'none'; });
+  }).catch(function(){});
+  osCarregarCad(true).then(function(){ osVer(OS.vista||'lista'); }).catch(osErr);
+}
+function osVer(v){
+  OS.vista=v;
+  document.querySelectorAll('#os-sub button').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-v')===v); });
+  ['lista','os','clientes','veiculos','servicos','fin'].forEach(function(k){ osE('osv-'+k).style.display = k===v?'':'none'; });
+  if(v==='lista'){ osPainel(); osLista(); }
+  if(v==='clientes') osCliLista();
+  if(v==='veiculos') osVeiLista();
+  if(v==='servicos') osSvLista();
+  if(v==='fin') osFinAba(OS.finAba||'extrato');
+}
+
+// ── painel (cards + pendências vencendo) ──
+function osPainel(){
+  osApi('/api/os/painel').then(function(p){
+    var s=p.por_status||{};
+    var c=[['andamento','Em andamento','var(--warn)'],['detran','No Detran','var(--acc2)'],
+           ['disponivel','Disponível p/ entrega','#c084fc'],['entregue','Entregue','var(--acc)'],['orcamento','Orçamentos','#b8bdc9']];
+    var h='';
+    c.forEach(function(x){ h+='<div class="os-card" onclick="osFiltroSt(\''+x[0]+'\')"><div class="v" style="color:'+x[2]+'">'+(s[x[0]]||0)+'</div><div class="l">'+x[1]+'</div></div>'; });
+    var venc=(p.pendencias||[]).filter(function(x){return x.dias<0;}).length;
+    h+='<div class="os-card" onclick="osFiltroDev()"><div class="v" style="color:var(--red);font-size:16px">'+osR(p.devedor_total)+'</div><div class="l">A receber ('+p.devedor_qtd+' OS)</div></div>';
+    h+='<div class="os-card"><div class="v" style="color:var(--acc);font-size:16px">'+osR(p.recebido_hoje)+'</div><div class="l">Recebido hoje</div></div>';
+    h+='<div class="os-card" onclick="osE(\'os-pend-painel\').scrollIntoView({behavior:\'smooth\'})"><div class="v" style="color:'+(venc?'var(--red)':'var(--mut)')+'">'+(p.pendencias||[]).length+'</div><div class="l">Pendências vencendo'+(venc?' · '+venc+' vencidas':'')+'</div></div>';
+    osE('os-cards').innerHTML=h;
+    var pd=p.pendencias||[];
+    if(!pd.length){ osE('os-pend-painel').innerHTML=''; return; }
+    var t='<div class="os-box"><h4>⏰ Pendências vencidas e dos próximos 7 dias</h4><div class="table-wrap" style="margin:0"><table><thead><tr><th>OS</th><th>Limite</th><th>Tipo</th><th>Cliente</th><th>Placa</th><th>Descrição</th><th>Responsável</th></tr></thead><tbody>';
+    pd.forEach(function(x){
+      var dd=x.dias<0?'<span class="os-venc">vencida há '+(-x.dias)+' dia(s)</span>':x.dias===0?'<span class="os-hj">hoje</span>':'em '+x.dias+' dia(s)';
+      t+='<tr style="cursor:pointer" onclick="osAbrir('+x.numero+',\'pendencias\')"><td class="os-num">'+x.numero+'</td><td>'+osBr(x.limite)+'<div class="os-small">'+dd+'</div></td><td>'+osEsc(x.tipo||'')+'</td><td>'+osEsc(x.cliente_nome||'')+'</td><td>'+osEsc(x.placa||'')+'</td><td>'+osEsc(x.descricao||'')+'</td><td>'+osEsc(x.responsavel||'')+'</td></tr>';
+    });
+    osE('os-pend-painel').innerHTML=t+'</tbody></table></div></div>';
+  }).catch(osErr);
+}
+function osFiltroSt(s){ osE('os-fst').value=s; osE('os-fdev').checked=false; osLista(); }
+function osFiltroDev(){ osE('os-fst').value=''; osE('os-fdev').checked=true; osLista(); }
+
+// ── lista ──
+function osLista(){
+  var p=new URLSearchParams();
+  var q=osE('os-q').value.trim(); if(q) p.set('q',q);
+  if(osE('os-fst').value) p.set('status',osE('os-fst').value);
+  if(osE('os-de').value) p.set('de',osE('os-de').value);
+  if(osE('os-ate').value) p.set('ate',osE('os-ate').value);
+  if(osE('os-fdev').checked) p.set('devedor','1');
+  if(osE('os-flix') && osE('os-flix').checked) p.set('lixeira','1');
+  osApi('/api/os?'+p.toString()).then(function(d){
+    if(q && d.itens.length===1 && /^\d+$/.test(q) && String(d.itens[0].numero)===q){ osAbrir(d.itens[0].numero); return; }
+    var h='';
+    d.itens.forEach(function(o){
+      h+='<tr onclick="osAbrir('+o.numero+')"><td class="os-num">'+o.numero+(o.pend_abertas?' <span title="pendências abertas" style="color:var(--warn)">⏰'+o.pend_abertas+'</span>':'')+'</td>'+
+         '<td>'+osEsc(o.data_abertura.slice(0,10))+'<div class="os-small">'+osEsc(o.user_nome)+'</div></td>'+
+         '<td>'+osEsc(o.cliente_nome||'—')+(o.responsavel_nome?'<div class="os-small">resp.: '+osEsc(o.responsavel_nome)+'</div>':'')+'</td>'+
+         '<td>'+osEsc(o.placa||'')+'<div class="os-small">'+osEsc(o.modelo||'')+'</div></td>'+
+         '<td style="max-width:240px">'+osEsc(o.servicos||'')+'</td><td>'+osSt(o.status)+'</td>'+
+         '<td class="os-money">'+osN(o.total)+'</td><td class="os-money">'+osN(o.pago)+'</td>'+
+         '<td class="os-money '+(o.devedor>0.004?'os-dev':'os-ok')+'">'+osN(o.devedor)+'</td></tr>';
+    });
+    osE('os-tbody').innerHTML=h||'<tr><td colspan="9" class="os-vazio">Nenhuma OS encontrada.</td></tr>';
+    osE('os-tfoot').innerHTML=d.itens.length?'<tr class="os-soma"><td colspan="6">'+d.total+' OS'+(d.total>=300?' (mostrando as 300 mais recentes)':'')+
+      ' · honorários '+osR(d.soma.honorario)+' · lucro '+osR(d.soma.lucro)+'</td><td class="os-money">'+osN(d.soma.total)+'</td><td class="os-money">'+osN(d.soma.pago)+'</td><td class="os-money os-dev">'+osN(d.soma.devedor)+'</td></tr>':'';
+  }).catch(osErr);
+}
+
+// ── seletor (autocomplete) de cliente / veículo ──
+function osPickHtml(id, tipo, valorTxt, placeholder){
+  return '<div class="fg" style="margin-bottom:4px"><div class="os-pick"><input id="'+id+'" autocomplete="off" placeholder="'+osEsc(placeholder)+'" value="'+osEsc(valorTxt||'')+'" oninput="osPickBusca(\''+id+'\',\''+tipo+'\')" onfocus="osPickBusca(\''+id+'\',\''+tipo+'\')">'+
+         '<button class="os-b" type="button" onclick="osPickNovo(\''+id+'\',\''+tipo+'\')">+ Cadastrar</button></div><div class="ac-drop" id="'+id+'-drop"></div></div>';
+}
+function osPickBusca(id,tipo){
+  var q=osE(id).value.trim(); var dr=osE(id+'-drop');
+  if(q.length<2){ dr.classList.remove('open'); return; }
+  osDeb('pick'+id,function(){
+    osApi((tipo==='veiculo'?'/api/os-veiculos?q=':'/api/clientes?q=')+encodeURIComponent(q)).then(function(lst){
+      OS.pick[id]=lst;
+      var h='';
+      lst.forEach(function(x,i){
+        h+= tipo==='veiculo'
+          ? '<div class="ac-item" onmousedown="osPickEscolher(\''+id+'\',\'veiculo\','+i+')"><div class="ac-nome">'+osEsc(x.placa)+' — '+osEsc(x.modelo||'')+'</div><div class="ac-meta">Renavam '+osEsc(x.renavam||'—')+' · '+osEsc(x.proprietario_nome||'sem proprietário')+'</div></div>'
+          : '<div class="ac-item" onmousedown="osPickEscolher(\''+id+'\',\'cliente\','+i+')"><div class="ac-nome">'+osEsc(x.nome)+(x.tipo==='revenda'?' <span class="tag tag-emp">REVENDA</span>':'')+'</div><div class="ac-meta">'+osEsc(x.cpf_cnpj||'sem documento')+' · '+osEsc(x.cel||x.fone||'')+'</div></div>';
+      });
+      dr.innerHTML=h||'<div class="ac-item"><div class="ac-meta">Nada encontrado — use “+ Cadastrar”.</div></div>';
+      dr.classList.add('open');
+    }).catch(osErr);
+  });
+  if(!osE(id)._blur){ osE(id)._blur=true; osE(id).addEventListener('blur',function(){ setTimeout(function(){ dr.classList.remove('open'); },200); }); }
+}
+function osPickEscolher(id,tipo,i){
+  var x=OS.pick[id][i]; osE(id+'-drop').classList.remove('open');
+  osE(id).value = tipo==='veiculo' ? x.placa+' — '+(x.modelo||'') : x.nome;
+  osE(id).dataset.sel = x.id;
+  if(typeof OS.onPick==='function') OS.onPick(id,tipo,x);
+}
+function osPickNovo(id,tipo){
+  OS.pickVolta=id;
+  var q=osE(id).value.trim();
+  if(tipo==='veiculo') osVeiModal(null, q); else osCliModal(null, q);
+}
+
+// ── nova OS / orçamento ──
+function osNova(tipo){
+  OS.nova={tipo:tipo};
+  OS.onPick=function(id,t,x){
+    if(id==='osn-cli'){ OS.nova.cliente=x; osE('osn-cli-f').innerHTML=osFichaCli(x); }
+    if(id==='osn-resp'){ OS.nova.resp=x; }
+    if(id==='osn-vei'){ OS.nova.vei=x; osE('osn-vei-f').innerHTML=osFichaVei(x);
+      if(x.proprietario_id && !OS.nova.cliente){ osApi('/api/clientes/'+x.proprietario_id).then(function(r){ OS.nova.cliente=r.cliente; osE('osn-cli').value=r.cliente.nome; osE('osn-cli').dataset.sel=r.cliente.id; osE('osn-cli-f').innerHTML=osFichaCli(r.cliente); }); } }
+  };
+  var sv='<option value="">— escolha um serviço da tabela —</option>';
+  OS.serv.forEach(function(s){ sv+='<option value="'+s.id+'">'+osEsc(s.nome)+' — '+osR(s.valor_padrao)+'</option>'; });
+  osModal(tipo==='orcamento'?'Novo orçamento':'Nova Ordem de Serviço',
+    '<div class="os-box"><h4>Veículo</h4>'+osPickHtml('osn-vei','veiculo','','Placa, renavam ou chassi')+'<div id="osn-vei-f"></div></div>'+
+    '<div class="os-box"><h4>Cliente (proprietário) *</h4>'+osPickHtml('osn-cli','cliente','','Nome, CPF/CNPJ ou celular')+'<div id="osn-cli-f"></div></div>'+
+    '<div class="os-box"><h4>Cliente responsável / revenda (quem paga, se for outro)</h4>'+osPickHtml('osn-resp','cliente','','Deixe em branco se for o próprio cliente')+'</div>'+
+    '<div class="os-box"><h4>Serviço principal e honorário</h4><div class="os-linha">'+
+      '<div class="fg" style="flex:3"><label>Serviço</label><select id="osn-serv">'+sv+'</select></div>'+
+      '<div class="fg"><label>Honorário (R$)</label><input id="osn-hon" placeholder="0,00"></div></div>'+
+      (tipo==='orcamento'?'<div class="fg"><label>Validade do orçamento</label><input type="date" id="osn-val"></div>':'')+
+      '<div class="fg"><label>Observações</label><textarea class="os-ta" id="osn-obs"></textarea></div></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn-sec" onclick="osFechar()">Cancelar</button>'+
+    '<button class="btn-main" onclick="osNovaSalvar()">'+(tipo==='orcamento'?'Criar orçamento':'Abrir OS')+'</button></div>');
+  if(tipo==='orcamento'){ var d=new Date(); d.setDate(d.getDate()+7); osE('osn-val').value=d.toISOString().slice(0,10); }
+  setTimeout(function(){ osE('osn-vei').focus(); },50);
+}
+function osNovaSalvar(){
+  var cid=osE('osn-cli').dataset.sel;
+  if(!cid || !osE('osn-cli').value.trim()){ osMsg('Escolha o cliente (proprietário).','err'); return; }
+  var corpo={tipo:OS.nova.tipo, cliente_id:cid,
+    responsavel_id:(osE('osn-resp').value.trim()&&osE('osn-resp').dataset.sel)||null,
+    veiculo_id:(osE('osn-vei').value.trim()&&osE('osn-vei').dataset.sel)||null,
+    honorario:osE('osn-hon').value, obs:osE('osn-obs').value,
+    validade:osE('osn-val')?osE('osn-val').value:null,
+    itens: osE('osn-serv').value?[{servico_id:osE('osn-serv').value}]:[]};
+  osApi('/api/os','POST',corpo).then(function(r){ osFechar(); osMsg('✓ '+(corpo.tipo==='orcamento'?'Orçamento':'OS')+' nº '+r.numero+' criada.'); osAbrir(r.numero,'itens'); }).catch(osErr);
+}
+
+// ── abrir uma OS ──
+function osAbrir(numero, aba){
+  if(aba) OS.aba=aba;
+  osApi('/api/os/'+numero).then(function(d){
+    OS.atual=d; OS.vista='os';
+    document.querySelectorAll('#os-sub button').forEach(function(b){ b.classList.remove('on'); });
+    ['lista','clientes','veiculos','servicos','fin'].forEach(function(k){ osE('osv-'+k).style.display='none'; });
+    osE('osv-os').style.display='';
+    osRender();
+    window.scrollTo({top:0,behavior:'smooth'});
+  }).catch(osErr);
+}
+function osRecarregar(aba){ if(OS.atual) osAbrir(OS.atual.os.numero, aba); }
+function osRender(){
+  var d=OS.atual, o=d.os, exc=!!o.excluida_em;
+  var h='<div style="margin-bottom:10px"><button class="os-b" onclick="osVer(\'lista\')">← Voltar para a lista</button></div>';
+  if(exc) h+='<div class="alert err" style="display:block;margin:0 0 12px">🗑 Esta OS está na lixeira (excluída em '+osEsc(o.excluida_em)+' por '+osEsc(o.excluida_por)+').'+
+    (osAdm()?' <button class="os-b" onclick="osRestaurar()">Restaurar</button>':'')+'</div>';
+  h+='<div class="os-head"><div><h2>'+(o.status==='orcamento'?'ORÇAMENTO':'OS')+' Nº '+o.numero+' '+osSt(o.status)+'</h2>'+
+     '<div class="os-small">Aberta em '+osEsc(o.data_abertura)+' por '+osEsc(o.user_nome||'—')+(o.protocolo?' · Protocolo <b style="color:var(--txt)">'+osEsc(o.protocolo)+'</b>':'')+
+     (o.status==='orcamento'&&o.validade?' · Válido até '+osBr(o.validade):'')+'</div>'+
+     '<div style="margin-top:8px;font-size:13px"><b>'+osEsc(d.cliente?d.cliente.nome:'—')+'</b>'+(d.veiculo?' · '+osEsc(d.veiculo.placa)+' '+osEsc(d.veiculo.modelo||''):'')+
+     (d.responsavel?'<div class="os-small">Responsável: '+osEsc(d.responsavel.nome)+'</div>':'')+'</div></div>'+
+     '<div class="os-tot"><div><b>'+osR(o.total)+'</b><span>Total</span></div><div><b class="os-ok">'+osR(o.pago)+'</b><span>Pago</span></div>'+
+     '<div><b class="'+(o.devedor>0.004?'os-dev':'os-ok')+'">'+osR(o.devedor)+'</b><span>Devedor</span></div></div></div>';
+  if(!exc){
+    h+='<div class="os-acoes">';
+    if(o.status==='orcamento') h+='<button class="os-b pri" onclick="osConverter()">✓ Aprovar orçamento → gerar OS</button>';
+    else h+='<button class="os-b pri" onclick="osReceberModal()" '+(o.devedor>0.004?'':'disabled')+'>💰 Recebimento</button>';
+    if(o.status!=='orcamento'){
+      [['andamento','Em andamento'],['detran','No Detran'],['disponivel','Disponível p/ entrega'],['entregue','Entregue'],['concluida','Concluída']].forEach(function(s){
+        h+='<button class="os-b'+(o.status===s[0]?' on':'')+'" onclick="osMudarStatus(\''+s[0]+'\')">'+(o.status===s[0]?'● ':'')+s[1]+'</button>'; });
+      h+='<button class="os-b del'+(o.status==='cancelada'?' on':'')+'" onclick="osMudarStatus(\'cancelada\')">Cancelar OS</button>';
+    }
+    h+='<button class="os-b" onclick="osImprimir()">🖨 Imprimir</button>';
+    if(o.pago>0) h+='<button class="os-b" onclick="osRecibo()">🧾 Recibo</button>';
+    if(osAdm()) h+='<button class="os-b del" onclick="osExcluir()">🗑 Excluir</button>';
+    h+='</div>';
+  }
+  var abas=[['cadastro','Cadastro'],['itens','Itens e honorário',d.itens.length],['recebimentos','Recebimentos',d.recebimentos.length],
+            ['ocorrencias','Ocorrências',d.ocorrencias.length],['pendencias','Pendências',d.pendencias.filter(function(p){return !p.resolvida;}).length],
+            ['documentos','Documentos',d.documentos.length]];
+  h+='<div class="os-abas">';
+  abas.forEach(function(a){ h+='<button class="'+(OS.aba===a[0]?'on':'')+'" onclick="OS.aba=\''+a[0]+'\';osRender()">'+a[1]+(a[2]?'<span class="cnt">'+a[2]+'</span>':'')+'</button>'; });
+  h+='</div><div id="os-aba-corpo"></div>';
+  osE('osv-os').innerHTML=h;
+  ({cadastro:osAbaCadastro,itens:osAbaItens,recebimentos:osAbaReceb,ocorrencias:osAbaOcor,pendencias:osAbaPend,documentos:osAbaDocs}[OS.aba]||osAbaCadastro)();
+}
+function osFichaCli(c){
+  if(!c) return '';
+  var end=[c.endereco,c.numero,c.complemento,c.bairro,c.cidade].filter(Boolean).join(', ');
+  return '<div class="os-ficha"><b>'+osEsc(c.nome)+'</b> '+(c.tipo==='revenda'?'<span class="tag tag-emp">REVENDA</span>':'')+
+    '<br>'+osEsc(c.cpf_cnpj||'sem CPF/CNPJ')+(c.cel?' · 📱 '+osEsc(c.cel):'')+(c.fone?' · ☎ '+osEsc(c.fone):'')+(c.email?' · '+osEsc(c.email):'')+
+    (end?'<br>'+osEsc(end)+(c.cep?' — CEP '+osEsc(c.cep):''):'')+(c.cnh?'<br>CNH '+osEsc(c.cnh):'')+
+    ' <a href="#" onclick="osCliModal('+c.id+');return false" style="color:var(--acc2);font-size:11px">editar</a></div>';
+}
+function osFichaVei(v){
+  if(!v) return '';
+  return '<div class="os-ficha"><b>'+osEsc(v.placa)+'</b> — '+osEsc(v.modelo||'')+'<br>Renavam '+osEsc(v.renavam||'—')+' · Chassi '+osEsc(v.chassi||'—')+
+    '<br>Ano '+osEsc([v.ano_fab,v.ano_mod].filter(Boolean).join('/')||v.ano||'—')+(v.cor?' · '+osEsc(v.cor):'')+(v.combustivel?' · '+osEsc(v.combustivel):'')+
+    (v.categoria?' · '+osEsc(v.categoria):'')+(v.municipio?' · '+osEsc(v.municipio):'')+
+    ' <a href="#" onclick="osVeiModal('+v.id+');return false" style="color:var(--acc2);font-size:11px">editar</a></div>';
+}
+
+// ── aba Cadastro ──
+function osAbaCadastro(){
+  var d=OS.atual, o=d.os, ro=!!o.excluida_em;
+  OS.onPick=function(id,t,x){
+    if(id==='osc-cli'){ osE('osc-cli-f').innerHTML=osFichaCli(x); }
+    if(id==='osc-vei'){ osE('osc-vei-f').innerHTML=osFichaVei(x); }
+  };
+  function inp(id,lb,v,tp){ return '<div class="fg"><label>'+lb+'</label><input id="'+id+'" '+(tp?'type="'+tp+'"':'')+' value="'+osEsc(v==null?'':v)+'"></div>'; }
+  var h='<div class="g2">'+
+    '<div class="os-box"><h4>Cliente (proprietário)</h4>'+osPickHtml('osc-cli','cliente',d.cliente?d.cliente.nome:'','Nome, CPF/CNPJ')+'<div id="osc-cli-f">'+osFichaCli(d.cliente)+'</div></div>'+
+    '<div class="os-box"><h4>Veículo</h4>'+osPickHtml('osc-vei','veiculo',d.veiculo?d.veiculo.placa+' — '+(d.veiculo.modelo||''):'','Placa, renavam, chassi')+'<div id="osc-vei-f">'+osFichaVei(d.veiculo)+'</div></div></div>'+
+    '<div class="os-box"><h4>Cliente responsável / revenda</h4>'+osPickHtml('osc-resp','cliente',d.responsavel?d.responsavel.nome:'','Em branco = o próprio cliente paga')+'</div>'+
+    '<div class="os-box"><h4>Dados da OS</h4><div class="g3">'+
+      inp('osc-desp','Despachante responsável',o.despachante)+inp('osc-cweb','Código web',o.codigo_web)+inp('osc-prot','Protocolo',o.protocolo)+
+      inp('osc-dnf','Data NF / CRV',o.data_nf_crv,'date')+inp('osc-vnf','Valor NF / CRV (R$)',o.valor_nf_crv!=null?osN(o.valor_nf_crv):'')+inp('osc-pant','Proprietário anterior',o.proprietario_anterior)+
+      inp('osc-rest','Restrição financeira',o.restricao_financeira)+inp('osc-fin','Financeira',o.financeira)+
+      (o.status==='orcamento'?inp('osc-val','Validade do orçamento',o.validade,'date'):'<div></div>')+
+    '</div><div class="fg"><label>Observações</label><textarea class="os-ta" id="osc-obs" style="min-height:110px">'+osEsc(o.obs||'')+'</textarea></div></div>';
+  if(d.processos && d.processos.length){
+    h+='<div class="os-box"><h4>Processos de recurso ligados</h4>';
+    d.processos.forEach(function(p){ h+='<div class="os-small">#'+p.id+' · '+osEsc(p.tipo)+' · '+osEsc(p.fase)+' · '+osEsc(p.status)+(p.ait?' · AIT '+osEsc(p.ait):'')+(p.prazo_final?' · prazo '+osBr(p.prazo_final):'')+'</div>'; });
+    h+='</div>';
+  }
+  if(!ro) h+='<div style="text-align:right"><button class="btn-main" onclick="osSalvarCadastro()">Salvar cadastro da OS</button></div>';
+  osE('os-aba-corpo').innerHTML=h;
+  if(d.cliente) osE('osc-cli').dataset.sel=d.cliente.id;
+  if(d.veiculo) osE('osc-vei').dataset.sel=d.veiculo.id;
+  if(d.responsavel) osE('osc-resp').dataset.sel=d.responsavel.id;
+}
+function osSalvarCadastro(){
+  var g=function(id){ return osE(id)?osE(id).value:undefined; };
+  var sel=function(id){ return osE(id).value.trim()?(osE(id).dataset.sel||null):null; };
+  var c={cliente_id:sel('osc-cli'), veiculo_id:sel('osc-vei'), responsavel_id:sel('osc-resp'),
+    despachante:g('osc-desp'), codigo_web:g('osc-cweb'), protocolo:g('osc-prot'), data_nf_crv:g('osc-dnf'),
+    valor_nf_crv:g('osc-vnf'), proprietario_anterior:g('osc-pant'), restricao_financeira:g('osc-rest'),
+    financeira:g('osc-fin'), obs:g('osc-obs')};
+  if(osE('osc-val')) c.validade=g('osc-val');
+  if(!c.cliente_id){ osMsg('A OS precisa de um cliente.','err'); return; }
+  osApi('/api/os/'+OS.atual.os.numero,'PUT',c).then(function(){ osMsg('✓ Cadastro da OS salvo.'); osRecarregar(); }).catch(osErr);
+}
+
+// ── aba Itens e honorário ──
+function osAbaItens(){
+  var d=OS.atual, o=d.os, ro=!!o.excluida_em;
+  var sv='<option value="">— item avulso (digite a descrição) —</option>';
+  OS.serv.forEach(function(s){ sv+='<option value="'+s.id+'">'+osEsc(s.nome)+' — '+osR(s.valor_padrao)+' / custo '+osR(s.custo_padrao)+'</option>'; });
+  var h='';
+  if(!ro) h+='<div class="os-box"><h4>Lançar item (taxa, débito ou serviço)</h4><div class="os-linha">'+
+    '<div class="fg" style="flex:3"><label>Da tabela</label><select id="osi-serv" onchange="osItemServ()">'+sv+'</select></div>'+
+    '<div class="fg" style="flex:3"><label>Descrição</label><input id="osi-desc"></div>'+
+    '<div class="fg" style="flex:0 0 70px;min-width:60px"><label>Qtd</label><input id="osi-qtd" value="1"></div>'+
+    '<div class="fg"><label>Valor (R$)</label><input id="osi-valor" placeholder="0,00"></div>'+
+    '<div class="fg"><label>Custo (R$)</label><input id="osi-custo" placeholder="0,00"></div>'+
+    '<div class="fg" style="flex:0"><button class="os-b pri" onclick="osItemAdd()">+ Lançar</button></div></div></div>';
+  h+='<div class="table-wrap"><table><thead><tr><th>Descrição</th><th style="text-align:right">Qtd</th><th style="text-align:right">Valor</th><th style="text-align:right">Custo (terceiros)</th><th style="text-align:right">Margem</th><th>Lançado</th><th></th></tr></thead><tbody>';
+  d.itens.forEach(function(i){
+    h+='<tr><td>'+osEsc(i.descricao)+'</td><td class="os-money">'+osN(i.qtd).replace(',00','')+'</td><td class="os-money">'+osN(i.valor*i.qtd)+'</td><td class="os-money">'+osN(i.custo*i.qtd)+'</td>'+
+       '<td class="os-money">'+osN((i.valor-i.custo)*i.qtd)+'</td><td class="os-small">'+osEsc(i.criado)+' '+osEsc(i.user_nome)+'</td>'+
+       '<td>'+(ro?'':'<button class="os-b" onclick="osItemEdit('+i.id+')">✎</button> <button class="os-b del" onclick="osItemDel('+i.id+')">✕</button>')+'</td></tr>';
+  });
+  if(!d.itens.length) h+='<tr><td colspan="7" class="os-vazio">Nenhum item lançado.</td></tr>';
+  h+='</tbody></table></div>';
+  h+='<div class="g2"><div class="os-box"><h4>Honorário do escritório</h4><div class="os-linha">'+
+     '<div class="fg"><label>Honorário (R$)</label><input id="osi-hon" value="'+osN(o.honorario)+'" '+(ro?'disabled':'')+'></div>'+
+     (ro?'':'<div class="fg" style="flex:0"><button class="os-b pri" onclick="osHonSalvar()">Salvar</button></div>')+'</div></div>'+
+     '<div class="os-box"><h4>Resumo</h4><table style="font-size:13px">'+
+     '<tr><td>Itens (valor cobrado)</td><td class="os-money">'+osR(o.itens_valor)+'</td></tr>'+
+     '<tr><td>+ Honorário</td><td class="os-money">'+osR(o.honorario)+'</td></tr>'+
+     '<tr><td><b>= Total da OS</b></td><td class="os-money"><b>'+osR(o.total)+'</b></td></tr>'+
+     '<tr><td class="os-small">Custo de terceiros</td><td class="os-money os-small">'+osR(o.custo)+'</td></tr>'+
+     '<tr><td class="os-small">Lucro sobre terceiros</td><td class="os-money os-small">'+osR(o.lucro_terceiros)+'</td></tr>'+
+     '<tr><td><b style="color:var(--acc)">Lucro da OS</b></td><td class="os-money" style="color:var(--acc)"><b>'+osR(o.lucro)+'</b></td></tr></table></div></div>';
+  osE('os-aba-corpo').innerHTML=h;
+}
+function osItemServ(){
+  var s=OS.serv.filter(function(x){ return String(x.id)===osE('osi-serv').value; })[0];
+  if(!s) return;
+  osE('osi-desc').value=s.nome; osE('osi-valor').value=osN(s.valor_padrao); osE('osi-custo').value=osN(s.custo_padrao);
+}
+function osItemAdd(){
+  var c={servico_id:osE('osi-serv').value||null, descricao:osE('osi-desc').value, qtd:osE('osi-qtd').value,
+         valor:osE('osi-valor').value, custo:osE('osi-custo').value};
+  if(!c.descricao.trim() && !c.servico_id){ osMsg('Escolha da tabela ou digite a descrição.','err'); return; }
+  osApi('/api/os/'+OS.atual.os.numero+'/itens','POST',c).then(function(){ osRecarregar('itens'); }).catch(osErr);
+}
+function osItemEdit(iid){
+  var i=OS.atual.itens.filter(function(x){return x.id===iid;})[0];
+  osModal('Editar item',
+    '<div class="fg"><label>Descrição</label><input id="osie-desc" value="'+osEsc(i.descricao)+'"></div>'+
+    '<div class="g3"><div class="fg"><label>Qtd</label><input id="osie-qtd" value="'+osN(i.qtd)+'"></div>'+
+    '<div class="fg"><label>Valor unitário (R$)</label><input id="osie-valor" value="'+osN(i.valor)+'"></div>'+
+    '<div class="fg"><label>Custo unitário (R$)</label><input id="osie-custo" value="'+osN(i.custo)+'"></div></div>'+
+    '<div style="text-align:right"><button class="btn-main" onclick="osItemEditSalvar('+iid+')">Salvar</button></div>');
+}
+function osItemEditSalvar(iid){
+  osApi('/api/os/'+OS.atual.os.numero+'/itens/'+iid,'PUT',{descricao:osE('osie-desc').value,qtd:osE('osie-qtd').value,
+    valor:osE('osie-valor').value,custo:osE('osie-custo').value}).then(function(){ osFechar(); osRecarregar('itens'); }).catch(osErr);
+}
+function osItemDel(iid){
+  if(!confirm('Remover este item da OS?')) return;
+  osApi('/api/os/'+OS.atual.os.numero+'/itens/'+iid,'DELETE').then(function(){ osRecarregar('itens'); }).catch(osErr);
+}
+function osHonSalvar(){
+  osApi('/api/os/'+OS.atual.os.numero,'PUT',{honorario:osE('osi-hon').value}).then(function(){ osMsg('✓ Honorário salvo.'); osRecarregar('itens'); }).catch(osErr);
+}
+
+// ── aba Recebimentos ──
+function osAbaReceb(){
+  var d=OS.atual, o=d.os;
+  var h='<div class="table-wrap"><table><thead><tr><th>Data</th><th>Descrição</th><th>Forma</th><th>Conta</th><th>Centro</th><th>Usuário</th><th style="text-align:right">Valor</th><th></th></tr></thead><tbody>';
+  d.recebimentos.forEach(function(r){
+    h+='<tr><td>'+osEsc(r.quando)+'</td><td>PAGAMENTO CONFORME O.S. Nº '+o.numero+(r.obs?'<div class="os-small">'+osEsc(r.obs)+'</div>':'')+'</td><td>'+osEsc(r.forma||'')+'</td><td>'+osEsc(r.conta||'')+'</td><td>'+osEsc(r.centro||'')+'</td><td>'+osEsc(r.user_nome)+'</td>'+
+       '<td class="os-money os-ok">'+osN(r.valor)+'</td><td>'+(osAdm()&&!o.excluida_em?'<button class="os-b del" onclick="osRecebDel('+r.id+')">✕</button>':'')+'</td></tr>';
+  });
+  if(!d.recebimentos.length) h+='<tr><td colspan="8" class="os-vazio">Nenhum recebimento.</td></tr>';
+  else h+='<tr class="os-soma"><td colspan="6">Total recebido</td><td class="os-money">'+osN(o.pago)+'</td><td></td></tr>';
+  h+='</tbody></table></div><div style="display:flex;gap:8px">';
+  if(o.devedor>0.004 && !o.excluida_em && o.status!=='orcamento') h+='<button class="os-b pri" onclick="osReceberModal()">💰 Receber '+osR(o.devedor)+'</button>';
+  if(o.pago>0) h+='<button class="os-b" onclick="osRecibo()">🧾 Emitir recibo</button>';
+  h+='</div><p class="cfg-note" style="margin-top:10px">Cada recebimento entra sozinho no extrato do Financeiro, na conta escolhida. Só o administrador exclui recebimento.</p>';
+  osE('os-aba-corpo').innerHTML=h;
+}
+function osReceberModal(){
+  var o=OS.atual.os, c=OS.cad, mp=c.meus_padroes||{};
+  var contaPad = mp.conta_id || ((c.contas||[]).filter(function(x){ return x.ativo && x.nome==='SICRED'; })[0]||{}).id;   // padrão do BitDesp
+  osModal('Recebimento — OS Nº '+o.numero,
+    '<div class="os-ficha" style="margin-bottom:12px">Total '+osR(o.total)+' · Pago '+osR(o.pago)+' · <b class="os-dev">Devedor '+osR(o.devedor)+'</b></div>'+
+    '<div class="g2"><div class="fg"><label>Valor recebido (R$)</label><input id="osr-valor" value="'+osN(o.devedor)+'"></div>'+
+    '<div class="fg"><label>Data</label><input type="date" id="osr-data" value="'+osHoje()+'"></div>'+
+    '<div class="fg"><label>Forma de pagamento *</label><select id="osr-forma">'+osOpts(c.formas,mp.forma_id,'— escolha —')+'</select></div>'+
+    '<div class="fg"><label>Conta *</label><select id="osr-conta">'+osOpts(c.contas,contaPad,'— escolha —')+'</select></div></div>'+
+    '<div class="fg"><label>Centro de valores (vazio = do serviço principal da OS)</label><select id="osr-centro">'+osOpts(c.centros,'','— automático —')+'</select></div>'+
+    '<div class="fg"><label>Observação</label><input id="osr-obs"></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn-sec" onclick="osFechar()">Cancelar</button><button class="btn-main" onclick="osReceber()">Confirmar recebimento</button></div>');
+  setTimeout(function(){ osE('osr-valor').select(); },50);
+}
+function osReceber(){
+  var c={valor:osE('osr-valor').value, data:osE('osr-data').value, forma_pgto_id:osE('osr-forma').value, conta_id:osE('osr-conta').value,
+         centro_id:osE('osr-centro').value||null, obs:osE('osr-obs').value};
+  if(!c.forma_pgto_id){ osMsg('Escolha a forma de pagamento.','err'); return; }
+  if(!c.conta_id){ osMsg('Escolha a conta.','err'); return; }
+  osApi('/api/os/'+OS.atual.os.numero+'/recebimentos','POST',c).then(function(){ osFechar(); osMsg('✓ Recebimento lançado.'); osRecarregar('recebimentos'); }).catch(osErr);
+}
+function osRecebDel(rid){
+  if(!confirm('Excluir este recebimento? O lançamento no extrato também será apagado.')) return;
+  osApi('/api/os/'+OS.atual.os.numero+'/recebimentos/'+rid,'DELETE').then(function(){ osRecarregar('recebimentos'); }).catch(osErr);
+}
+
+// ── aba Ocorrências ──
+function osAbaOcor(){
+  var d=OS.atual, ro=!!d.os.excluida_em;
+  var h='';
+  if(!ro) h+='<div class="os-box"><h4>Lançar ocorrência</h4><div class="os-linha">'+
+    '<div class="fg"><label>Tipo</label><select id="oso-tipo" onchange="osE(\'oso-prot-w\').style.display=this.value===\'protocolo\'?\'\':\'none\'">'+
+      '<option value="outras">Outras</option><option value="protocolo">Protocolo</option><option value="detran">Detran</option>'+
+      '<option value="disponivel">Concluído e disponível para entrega</option><option value="entregue">Entregue</option></select></div>'+
+    '<div class="fg" id="oso-prot-w" style="display:none"><label>Nº do protocolo</label><input id="oso-prot"></div>'+
+    '<div class="fg" style="flex:3"><label>Descrição</label><input id="oso-desc"></div></div>'+
+    '<div class="fg"><label>Observação</label><input id="oso-obs"></div>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center"><span class="os-small">Detran / Disponível / Entregue também mudam a situação da OS.</span><button class="os-b pri" onclick="osOcorAdd()">+ Lançar</button></div></div>';
+  d.ocorrencias.forEach(function(x){
+    h+='<div class="os-tl t-'+osEsc(x.tipo)+'"><div class="q">'+osEsc(x.quando)+' · '+osEsc(x.user_nome||'')+' · '+osEsc(x.tipo)+'</div>'+osEsc(x.descricao)+(x.obs?'<div class="os-small">'+osEsc(x.obs)+'</div>':'')+'</div>';
+  });
+  osE('os-aba-corpo').innerHTML=h;
+}
+function osOcorAdd(){
+  var c={tipo:osE('oso-tipo').value, descricao:osE('oso-desc').value, obs:osE('oso-obs').value, protocolo:osE('oso-prot').value};
+  if(!c.descricao.trim()){ var t=osE('oso-tipo'); c.descricao=t.options[t.selectedIndex].text+(c.protocolo?' — '+c.protocolo:''); }
+  osApi('/api/os/'+OS.atual.os.numero+'/ocorrencias','POST',c).then(function(){ osRecarregar('ocorrencias'); }).catch(osErr);
+}
+function osMudarStatus(st){
+  var o=OS.atual.os; if(o.status===st) return;
+  var obs=prompt('Mudar para "'+OS_STATUS[st]+'". Observação (opcional):','');
+  if(obs===null) return;
+  osApi('/api/os/'+o.numero+'/status','POST',{status:st,obs:obs}).then(function(){ osMsg('✓ Situação: '+OS_STATUS[st]); osRecarregar(); }).catch(osErr);
+}
+function osConverter(){
+  if(!confirm('Aprovar o orçamento e transformar em OS (Em andamento)?')) return;
+  osApi('/api/os/'+OS.atual.os.numero+'/converter','POST').then(function(){ osMsg('✓ Orçamento virou OS.'); osRecarregar('itens'); }).catch(osErr);
+}
+function osExcluir(){
+  if(!confirm('Enviar a OS '+OS.atual.os.numero+' para a lixeira? Dá para restaurar depois.')) return;
+  osApi('/api/os/'+OS.atual.os.numero,'DELETE').then(function(){ osMsg('OS enviada para a lixeira.'); osVer('lista'); }).catch(osErr);
+}
+function osRestaurar(){
+  osApi('/api/os/'+OS.atual.os.numero+'/restaurar','POST').then(function(){ osMsg('✓ OS restaurada.'); osRecarregar(); }).catch(osErr);
+}
+
+// ── aba Pendências ──
+function osAbaPend(){
+  var d=OS.atual, ro=!!d.os.excluida_em;
+  var h='';
+  if(!ro) h+='<div class="os-box"><h4>Nova pendência</h4><div class="os-linha">'+
+    '<div class="fg"><label>Tipo</label><select id="osp-tipo">'+osOpts(OS.cad.pendencias,'','— escolha —')+'</select></div>'+
+    '<div class="fg"><label>Data limite</label><input type="date" id="osp-lim"></div>'+
+    '<div class="fg"><label>Responsável</label><input id="osp-resp" value="'+osEsc(typeof MEU_NOME!=='undefined'&&MEU_NOME?MEU_NOME:'')+'"></div></div>'+
+    '<div class="os-linha"><div class="fg" style="flex:4"><label>Descrição</label><input id="osp-desc"></div>'+
+    '<div class="fg" style="flex:0"><button class="os-b pri" onclick="osPendAdd()">+ Lançar</button></div></div></div>';
+  h+='<div class="table-wrap"><table><thead><tr><th></th><th>Tipo</th><th>Lançado em</th><th>Limite</th><th>Responsável</th><th>Descrição</th><th></th></tr></thead><tbody>';
+  d.pendencias.forEach(function(p){
+    var dd=p.resolvida?'<span class="os-small">resolvida '+osEsc(p.resolvida_em)+' '+osEsc(p.resolvida_por)+'</span>':
+      (p.dias==null?'':p.dias<0?'<span class="os-venc">vencida há '+(-p.dias)+' dia(s)</span>':p.dias===0?'<span class="os-hj">vence hoje</span>':'<span class="os-small">em '+p.dias+' dia(s)</span>');
+    h+='<tr style="'+(p.resolvida?'opacity:.5':'')+'"><td><input type="checkbox" '+(p.resolvida?'checked':'')+' '+(ro?'disabled':'')+' title="Resolvida" onchange="osPendResolver('+p.id+',this.checked)" style="accent-color:var(--acc);width:16px;height:16px"></td>'+
+       '<td>'+osEsc(p.tipo||'—')+'</td><td class="os-small">'+osEsc(p.lancado)+'<br>'+osEsc(p.user_nome)+'</td><td>'+osBr(p.limite)+'<div>'+dd+'</div></td><td>'+osEsc(p.responsavel)+'</td><td>'+osEsc(p.descricao)+'</td>'+
+       '<td>'+(ro?'':'<button class="os-b del" onclick="osPendDel('+p.id+')">✕</button>')+'</td></tr>';
+  });
+  if(!d.pendencias.length) h+='<tr><td colspan="7" class="os-vazio">Sem pendências.</td></tr>';
+  osE('os-aba-corpo').innerHTML=h+'</tbody></table></div><p class="cfg-note">Pendência com data limite aparece no painel da lista de OS quando estiver vencida ou faltando 7 dias.</p>';
+}
+function osPendAdd(){
+  var c={tipo_id:osE('osp-tipo').value||null, limite:osE('osp-lim').value, responsavel:osE('osp-resp').value, descricao:osE('osp-desc').value};
+  osApi('/api/os/'+OS.atual.os.numero+'/pendencias','POST',c).then(function(){ osRecarregar('pendencias'); }).catch(osErr);
+}
+function osPendResolver(pid,v){ osApi('/api/os-pendencias/'+pid,'PUT',{resolvida:v}).then(function(){ osRecarregar('pendencias'); }).catch(osErr); }
+function osPendDel(pid){ if(!confirm('Apagar esta pendência?')) return; osApi('/api/os-pendencias/'+pid,'DELETE').then(function(){ osRecarregar('pendencias'); }).catch(osErr); }
+
+// ── aba Documentos ──
+function osAbaDocs(){
+  var d=OS.atual, ro=!!d.os.excluida_em;
+  var h='';
+  if(!ro) h+='<div class="os-box"><h4>Anexar documento (link)</h4><div class="os-linha">'+
+    '<div class="fg"><label>Nome</label><input id="osd-nome" placeholder="ex.: CRV assinado"></div>'+
+    '<div class="fg" style="flex:3"><label>Link (Google Drive, ZapSign, Detran...)</label><input id="osd-url" placeholder="https://"></div>'+
+    '<div class="fg" style="flex:0"><button class="os-b pri" onclick="osDocAdd()">+ Anexar</button></div></div></div>';
+  h+='<div class="table-wrap"><table><thead><tr><th>Documento</th><th>Enviado</th><th></th></tr></thead><tbody>';
+  d.documentos.forEach(function(x){
+    h+='<tr><td><a href="'+osEsc(x.url)+'" target="_blank" rel="noopener" style="color:var(--acc2)">📎 '+osEsc(x.nome)+'</a></td><td class="os-small">'+osEsc(x.enviado)+' '+osEsc(x.user_nome)+'</td>'+
+       '<td>'+(ro?'':'<button class="os-b del" onclick="osDocDel('+x.id+')">✕</button>')+'</td></tr>';
+  });
+  if(!d.documentos.length) h+='<tr><td colspan="3" class="os-vazio">Nenhum documento.</td></tr>';
+  osE('os-aba-corpo').innerHTML=h+'</tbody></table></div>';
+}
+function osDocAdd(){ osApi('/api/os/'+OS.atual.os.numero+'/documentos','POST',{nome:osE('osd-nome').value,url:osE('osd-url').value}).then(function(){ osRecarregar('documentos'); }).catch(osErr); }
+function osDocDel(id){ if(!confirm('Remover este documento da OS?')) return; osApi('/api/os/'+OS.atual.os.numero+'/documentos/'+id,'DELETE').then(function(){ osRecarregar('documentos'); }).catch(osErr); }
+
+// ── impressão: OS e recibo ──
+function osJanela(titulo, corpo){
+  var w=window.open('','_blank'); if(!w){ osMsg('Libere os pop-ups para imprimir.','err'); return; }
+  w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+osEsc(titulo)+'</title><style>'+
+    'body{font-family:Arial,sans-serif;font-size:12px;color:#000;margin:24px}h1{font-size:18px;margin:0}h2{font-size:13px;margin:16px 0 6px;border-bottom:1px solid #000;padding-bottom:3px}'+
+    'table{width:100%;border-collapse:collapse}td,th{border:1px solid #999;padding:4px 6px;text-align:left}th{background:#eee}.r{text-align:right}'+
+    '.cab{display:flex;justify-content:space-between;border-bottom:2px solid #000;padding-bottom:8px}.ass{margin-top:60px;text-align:center}'+
+    '@media print{button{display:none}}</style></head><body>'+corpo+'<p style="margin-top:20px"><button onclick="window.print()">Imprimir</button></p></body></html>');
+  w.document.close();
+}
+function osCabecalho(){ return '<div class="cab"><div><h1>Diego Despachante</h1><div>Caetano Despachante Ltda · CNPJ 08.965.960/0001-06 · Anápolis-GO</div></div>'; }
+function osImprimir(){
+  var d=OS.atual, o=d.os, c=d.cliente||{}, v=d.veiculo||{};
+  var it='';
+  d.itens.forEach(function(i){ it+='<tr><td>'+osEsc(i.descricao)+'</td><td class="r">'+osN(i.qtd)+'</td><td class="r">'+osN(i.valor*i.qtd)+'</td></tr>'; });
+  it+='<tr><td>HONORÁRIO</td><td></td><td class="r">'+osN(o.honorario)+'</td></tr><tr><th colspan="2">TOTAL</th><th class="r">'+osR(o.total)+'</th></tr>'+
+      '<tr><td colspan="2">Pago</td><td class="r">'+osR(o.pago)+'</td></tr><tr><td colspan="2"><b>Saldo devedor</b></td><td class="r"><b>'+osR(o.devedor)+'</b></td></tr>';
+  osJanela((o.status==='orcamento'?'Orçamento ':'OS ')+o.numero,
+    osCabecalho()+'<div style="text-align:right"><h1>'+(o.status==='orcamento'?'ORÇAMENTO':'ORDEM DE SERVIÇO')+' Nº '+o.numero+'</h1><div>'+osEsc(o.data_abertura)+' · '+osEsc(OS_STATUS[o.status])+'</div>'+(o.protocolo?'<div>Protocolo '+osEsc(o.protocolo)+'</div>':'')+'</div></div>'+
+    '<h2>Cliente</h2><div><b>'+osEsc(c.nome||'')+'</b> — '+osEsc(c.cpf_cnpj||'')+'<br>'+osEsc([c.endereco,c.numero,c.complemento,c.bairro,c.cidade].filter(Boolean).join(', '))+' '+(c.cep?'CEP '+osEsc(c.cep):'')+'<br>'+osEsc([c.cel,c.fone,c.email].filter(Boolean).join(' · '))+'</div>'+
+    (d.responsavel?'<div style="margin-top:4px">Responsável: <b>'+osEsc(d.responsavel.nome)+'</b> '+osEsc(d.responsavel.cpf_cnpj||'')+'</div>':'')+
+    '<h2>Veículo</h2><div>Placa <b>'+osEsc(v.placa||'')+'</b> · Renavam '+osEsc(v.renavam||'')+' · Chassi '+osEsc(v.chassi||'')+'<br>'+osEsc(v.modelo||'')+' · '+osEsc([v.ano_fab,v.ano_mod].filter(Boolean).join('/')||v.ano||'')+' · '+osEsc(v.cor||'')+'</div>'+
+    '<h2>Serviços</h2><table><tr><th>Descrição</th><th class="r">Qtd</th><th class="r">Valor (R$)</th></tr>'+it+'</table>'+
+    (o.obs?'<h2>Observações</h2><div style="white-space:pre-wrap">'+osEsc(o.obs)+'</div>':'')+
+    (o.status==='orcamento'&&o.validade?'<p>Orçamento válido até '+osBr(o.validade)+'.</p>':'')+
+    '<div class="ass">_______________________________________<br>'+osEsc(c.nome||'Cliente')+'</div>');
+}
+function osRecibo(){
+  var d=OS.atual, o=d.os, fav=d.responsavel||d.cliente||{};
+  var hoje=new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'});
+  osJanela('Recibo OS '+o.numero, osCabecalho()+'<div style="text-align:right"><h1>RECIBO</h1><h1>'+osR(o.pago)+'</h1></div></div>'+
+    '<p style="font-size:14px;line-height:1.9;margin-top:24px">Recebemos de <b>'+osEsc(fav.nome||'')+'</b>'+(fav.cpf_cnpj?', CPF/CNPJ '+osEsc(fav.cpf_cnpj):'')+
+    ', a importância de <b>'+osR(o.pago)+'</b>, proveniente de serviços prestados conforme a Ordem de Serviço nº <b>'+o.numero+'</b>'+
+    (d.veiculo?', veículo placa '+osEsc(d.veiculo.placa):'')+'.</p>'+
+    '<table style="margin-top:10px"><tr><th>Data</th><th>Forma</th><th class="r">Valor</th></tr>'+
+    d.recebimentos.map(function(r){ return '<tr><td>'+osEsc(r.quando)+'</td><td>'+osEsc(r.forma||'')+'</td><td class="r">'+osN(r.valor)+'</td></tr>'; }).join('')+'</table>'+
+    (o.devedor>0.004?'<p>Saldo devedor restante: <b>'+osR(o.devedor)+'</b>.</p>':'<p>Quitado.</p>')+
+    '<p style="margin-top:20px">Anápolis-GO, '+hoje+'.</p><div class="ass">_______________________________________<br>Diego Caetano Silva</div>');
+}
+
+// ── CLIENTES ──
+function osCliLista(){
+  osApi('/api/clientes?q='+encodeURIComponent(osE('os-cli-q').value.trim())).then(function(l){
+    var h='';
+    l.forEach(function(c){
+      h+='<tr><td>'+osEsc(c.nome)+'</td><td class="os-small">'+osEsc(c.cpf_cnpj)+'</td><td>'+(c.tipo==='revenda'?'<span class="tag tag-emp">REVENDA</span>':c.tipo==='pj'?'PJ':'PF')+'</td>'+
+         '<td>'+osEsc(c.cel||c.fone||'')+'</td><td>'+osEsc(c.cidade||'')+'</td><td style="white-space:nowrap"><button class="os-b" onclick="osCliFicha('+c.id+')">OS</button> <button class="os-b" onclick="osCliModal('+c.id+')">✎</button></td></tr>';
+    });
+    osE('os-cli-tbody').innerHTML=h||'<tr><td colspan="6" class="os-vazio">Nenhum cliente.</td></tr>';
+  }).catch(osErr);
+}
+function osCliFicha(id){
+  osApi('/api/clientes/'+id).then(function(r){
+    var h='<div class="os-box"><h4>OS de '+osEsc(r.cliente.nome)+'</h4>'+osFichaCli(r.cliente);
+    if(r.veiculos.length) h+='<div class="os-small" style="margin-top:8px">Veículos: '+r.veiculos.map(function(v){return osEsc(v.placa+' '+(v.modelo||''));}).join(' · ')+'</div>';
+    h+='<div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>Nº</th><th>Data</th><th>Situação</th><th style="text-align:right">Total</th><th style="text-align:right">Devedor</th></tr></thead><tbody>';
+    r.os.forEach(function(o){ h+='<tr style="cursor:pointer" onclick="osAbrir('+o.numero+')"><td class="os-num">'+o.numero+'</td><td>'+osEsc(o.data_abertura.slice(0,10))+'</td><td>'+osSt(o.status)+'</td><td class="os-money">'+osN(o.total)+'</td><td class="os-money '+(o.devedor>0.004?'os-dev':'')+'">'+osN(o.devedor)+'</td></tr>'; });
+    if(!r.os.length) h+='<tr><td colspan="5" class="os-vazio">Sem OS.</td></tr>';
+    osE('os-cli-ficha').innerHTML=h+'</tbody></table></div></div>';
+    osE('os-cli-ficha').scrollIntoView({behavior:'smooth'});
+  }).catch(osErr);
+}
+function osCliModal(id, sugestao){
+  var abrir=function(c){
+    c=c||{};
+    var dig=(sugestao||'').replace(/\D/g,'');
+    if(!id && sugestao){ if(dig.length===11||dig.length===14) c.cpf_cnpj=sugestao; else c.nome=sugestao; }
+    function f(k,lb,cls){ return '<div class="fg"><label>'+lb+'</label><input id="ocm-'+k+'" value="'+osEsc(c[k]||'')+'"'+(cls||'')+'></div>'; }
+    osModal2(id?'Editar cliente':'Novo cliente',
+      '<div class="g3">'+f('cpf_cnpj','CPF / CNPJ',' onblur="osCliCnpj()"')+'<div class="fg" style="grid-column:span 2"><label>Nome / Razão social *</label><input id="ocm-nome" value="'+osEsc(c.nome||'')+'"></div></div>'+
+      '<div class="g3"><div class="fg"><label>Tipo</label><select id="ocm-tipo"><option value="pf">Pessoa física</option><option value="pj">Pessoa jurídica</option><option value="revenda">Revenda / garagem</option></select></div>'+
+        f('nasc','Nascimento')+f('cnh','CNH')+f('rg','RG')+f('rg_org','Órgão RG')+f('ecivil','Estado civil')+'</div>'+
+      '<div class="g3">'+f('cep','CEP',' onblur="osCliCep()"')+'<div class="fg" style="grid-column:span 2"><label>Endereço</label><input id="ocm-endereco" value="'+osEsc(c.endereco||'')+'"></div>'+
+        f('numero','Número')+f('complemento','Complemento')+f('bairro','Bairro')+f('cidade','Município')+f('cel','Celular')+f('fone','Telefone')+'</div>'+
+      '<div class="g2">'+f('email','E-mail')+f('forma_pgto_padrao','Forma de pagamento padrão')+'</div>'+
+      '<div class="fg"><label>Observações</label><textarea class="os-ta" id="ocm-obs">'+osEsc(c.obs||'')+'</textarea></div>'+
+      '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn-sec" onclick="osFechar2()">Cancelar</button><button class="btn-main" onclick="osCliSalvar('+(id||'null')+')">Salvar cliente</button></div>');
+    osE('ocm-tipo').value=c.tipo||((c.cpf_cnpj||'').replace(/\D/g,'').length===14?'pj':'pf');
+  };
+  if(id) osApi('/api/clientes/'+id).then(function(r){ abrir(r.cliente); }).catch(osErr); else abrir(null);
+}
+function osCliCep(){
+  var cep=osE('ocm-cep').value.replace(/\D/g,''); if(cep.length!==8) return;
+  fetch('https://viacep.com.br/ws/'+cep+'/json/').then(function(r){return r.json();}).then(function(d){
+    if(d.erro) return;
+    if(!osE('ocm-endereco').value) osE('ocm-endereco').value=(d.logradouro||'').toUpperCase();
+    if(!osE('ocm-bairro').value) osE('ocm-bairro').value=(d.bairro||'').toUpperCase();
+    osE('ocm-cidade').value=((d.localidade||'')+(d.uf?'/'+d.uf:'')).toUpperCase();
+  }).catch(function(){});
+}
+function osCliCnpj(){
+  var d=osE('ocm-cpf_cnpj').value.replace(/\D/g,''); if(d.length!==14) return;
+  osE('ocm-tipo').value = osE('ocm-tipo').value==='revenda'?'revenda':'pj';
+  if(osE('ocm-nome').value.trim()) return;
+  fetch('https://brasilapi.com.br/api/cnpj/v1/'+d).then(function(r){return r.json();}).then(function(j){
+    if(!j.razao_social) return;
+    osE('ocm-nome').value=j.razao_social.toUpperCase();
+    if(j.cep && !osE('ocm-cep').value){ osE('ocm-cep').value=String(j.cep); }
+    if(!osE('ocm-endereco').value) osE('ocm-endereco').value=((j.descricao_tipo_de_logradouro?j.descricao_tipo_de_logradouro+' ':'')+(j.logradouro||'')).toUpperCase();
+    if(!osE('ocm-numero').value) osE('ocm-numero').value=j.numero||'';
+    if(!osE('ocm-bairro').value) osE('ocm-bairro').value=(j.bairro||'').toUpperCase();
+    if(!osE('ocm-cidade').value) osE('ocm-cidade').value=((j.municipio||'')+(j.uf?'/'+j.uf:'')).toUpperCase();
+  }).catch(function(){});
+}
+function osCliSalvar(id){
+  var c={id:id};
+  ['cpf_cnpj','nome','tipo','nasc','cnh','rg','rg_org','ecivil','cep','endereco','numero','complemento','bairro','cidade','cel','fone','email','forma_pgto_padrao','obs']
+    .forEach(function(k){ c[k]=osE('ocm-'+k).value; });
+  osApi('/api/clientes','POST',c).then(function(r){
+    var volta=OS.pickVolta; osFechar2(); OS.pickVolta=volta; osMsg('✓ Cliente salvo.');
+    osVoltaPick('cliente', r.cliente);
+    if(OS.vista==='clientes') osCliLista();
+    if(OS.vista==='os' && OS.atual && ((OS.atual.cliente&&OS.atual.cliente.id===r.cliente.id)||(OS.atual.responsavel&&OS.atual.responsavel.id===r.cliente.id))) osRecarregar();
+  }).catch(osErr);
+}
+// depois de cadastrar pelo "+ Cadastrar" de um seletor, já escolhe o novo registro
+function osVoltaPick(tipo, x){
+  var id=OS.pickVolta; OS.pickVolta=null;
+  if(!id || !osE(id)) return;
+  osE(id).value = tipo==='veiculo' ? x.placa+' — '+(x.modelo||'') : x.nome;
+  osE(id).dataset.sel = x.id;
+  if(typeof OS.onPick==='function') OS.onPick(id,tipo,x);
+}
+
+// ── VEÍCULOS ──
+function osVeiLista(){
+  osApi('/api/os-veiculos?q='+encodeURIComponent(osE('os-vei-q').value.trim())).then(function(l){
+    var h='';
+    l.forEach(function(v){
+      h+='<tr><td><b>'+osEsc(v.placa)+'</b></td><td class="os-small">'+osEsc(v.renavam||'')+'</td><td>'+osEsc(v.modelo||'')+'</td><td>'+osEsc([v.ano_fab,v.ano_mod].filter(Boolean).join('/')||v.ano||'')+'</td><td>'+osEsc(v.cor||'')+'</td>'+
+         '<td>'+osEsc(v.proprietario_nome||'')+'</td><td><button class="os-b" onclick="osVeiModal('+v.id+')">✎</button></td></tr>';
+    });
+    osE('os-vei-tbody').innerHTML=h||'<tr><td colspan="7" class="os-vazio">Nenhum veículo.</td></tr>';
+  }).catch(osErr);
+}
+function osVeiModal(id, sugestao){
+  var abrir=function(v){
+    v=v||{};
+    if(!id && sugestao){ var s=sugestao.replace(/[\s-]/g,'').toUpperCase(); if(/^\d{9,11}$/.test(s)) v.renavam=s; else if(s.length===17) v.chassi=s; else v.placa=s; }
+    function f(k,lb){ return '<div class="fg"><label>'+lb+'</label><input id="ovm-'+k+'" value="'+osEsc(v[k]||'')+'"></div>'; }
+    osModal2(id?'Editar veículo':'Novo veículo',
+      '<div class="g3">'+f('placa','Placa *')+f('renavam','Renavam')+f('chassi','Chassi')+'</div>'+
+      '<div class="g3"><div class="fg" style="grid-column:span 2"><label>Marca / Modelo</label><input id="ovm-modelo" value="'+osEsc(v.modelo||'')+'"></div>'+f('cor','Cor')+
+        f('ano_fab','Ano fabricação')+f('ano_mod','Ano modelo')+f('combustivel','Combustível')+f('categoria','Categoria')+f('municipio','Município')+'</div>'+
+      '<div class="fg"><label>Proprietário</label>'+osPickHtml('ovm-prop','cliente',v.proprietario_nome||'','Nome ou CPF/CNPJ do proprietário').replace('<button class="os-b" type="button"','<button class="os-b" type="button" style="display:none"')+'</div>'+
+      '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn-sec" onclick="osFechar2()">Cancelar</button><button class="btn-main" onclick="osVeiSalvar('+(id||'null')+')">Salvar veículo</button></div>');
+    if(v.proprietario_id) osE('ovm-prop').dataset.sel=v.proprietario_id;
+  };
+  if(id) osApi('/api/os-veiculos/'+id).then(function(r){ abrir(r.veiculo); }).catch(osErr); else abrir(null);
+}
+function osVeiSalvar(id){
+  var c={id:id};
+  ['placa','renavam','chassi','modelo','cor','ano_fab','ano_mod','combustivel','categoria','municipio'].forEach(function(k){ c[k]=osE('ovm-'+k).value; });
+  c.proprietario_id = osE('ovm-prop').value.trim()?(osE('ovm-prop').dataset.sel||null):null;
+  osApi('/api/os-veiculos','POST',c).then(function(r){
+    var volta=OS.pickVolta; osFechar2(); OS.pickVolta=volta; osMsg('✓ Veículo salvo.');
+    osVoltaPick('veiculo', r.veiculo);
+    if(OS.vista==='veiculos') osVeiLista();
+    if(OS.vista==='os' && OS.atual && OS.atual.veiculo && OS.atual.veiculo.id===r.veiculo.id) osRecarregar();
+  }).catch(osErr);
+}
+
+// ── TABELA DE SERVIÇOS ──
+function osSvLista(){
+  osApi('/api/servicos?todos=1').then(function(l){
+    OS.servTodos=l;
+    osE('os-sv-centro').innerHTML=osOpts(OS.cad.centros,'','— nenhum —');
+    var h='';
+    l.forEach(function(s){
+      h+='<tr style="'+(s.ativo?'':'opacity:.45')+'"><td>'+osEsc(s.nome)+'</td><td class="os-money">'+osN(s.valor_padrao)+'</td><td class="os-money">'+osN(s.custo_padrao)+'</td>'+
+         '<td class="os-money">'+osN(s.valor_padrao-s.custo_padrao)+'</td><td class="os-small">'+osEsc(s.centro_nome||'')+'</td><td>'+(s.ativo?'Sim':'Não')+'</td>'+
+         '<td>'+(osAdm()?'<button class="os-b" onclick="osSvEditar('+s.id+')">✎</button>':'')+'</td></tr>';
+    });
+    osE('os-sv-tbody').innerHTML=h||'<tr><td colspan="7" class="os-vazio">Nenhum serviço.</td></tr>';
+  }).catch(osErr);
+}
+function osSvSalvar(){
+  osApi('/api/servicos','POST',{nome:osE('os-sv-nome').value,valor_padrao:osE('os-sv-valor').value,custo_padrao:osE('os-sv-custo').value,centro_id:osE('os-sv-centro').value||null})
+    .then(function(){ osE('os-sv-nome').value=''; osE('os-sv-valor').value=''; osE('os-sv-custo').value=''; osMsg('✓ Serviço adicionado.'); osCarregarCad(true).then(osSvLista); }).catch(osErr);
+}
+function osSvEditar(id){
+  var s=OS.servTodos.filter(function(x){return x.id===id;})[0];
+  osModal('Editar serviço',
+    '<div class="fg"><label>Nome</label><input id="ose-nome" value="'+osEsc(s.nome)+'"></div>'+
+    '<div class="g2"><div class="fg"><label>Valor (R$)</label><input id="ose-valor" value="'+osN(s.valor_padrao)+'"></div><div class="fg"><label>Custo (R$)</label><input id="ose-custo" value="'+osN(s.custo_padrao)+'"></div></div>'+
+    '<div class="g2"><div class="fg"><label>Centro de valores</label><select id="ose-centro">'+osOpts(OS.cad.centros,s.centro_id,'— nenhum —')+'</select></div>'+
+    '<div class="fg"><label>Ativo</label><select id="ose-ativo"><option value="1">Sim</option><option value="0"'+(s.ativo?'':' selected')+'>Não (some da lista da OS)</option></select></div></div>'+
+    '<div style="text-align:right"><button class="btn-main" onclick="osSvEditSalvar('+id+')">Salvar</button></div>');
+}
+function osSvEditSalvar(id){
+  osApi('/api/servicos','POST',{id:id,nome:osE('ose-nome').value,valor_padrao:osE('ose-valor').value,custo_padrao:osE('ose-custo').value,
+    centro_id:osE('ose-centro').value||null,ativo:osE('ose-ativo').value==='1'}).then(function(){ osFechar(); osCarregarCad(true).then(osSvLista); }).catch(osErr);
+}
+
+// ── FINANCEIRO ──
+function osFinAba(a){
+  OS.finAba=a;
+  osE('osf-b-extrato').classList.toggle('on',a==='extrato'); osE('osf-b-cad').classList.toggle('on',a==='cad');
+  osE('osf-extrato').style.display=a==='extrato'?'':'none'; osE('osf-cad').style.display=a==='cad'?'':'none';
+  var c=OS.cad;
+  if(a==='extrato'){
+    if(!osE('osf-de').value){ var h=osHoje(); osE('osf-de').value=h.slice(0,8)+'01'; osE('osf-ate').value=h; }
+    osE('osf-conta').innerHTML=osOpts(c.contas,osE('osf-conta').value,'Todas');
+    osE('osf-forma').innerHTML=osOpts(c.formas,osE('osf-forma').value,'Todas');
+    osE('osf-centro').innerHTML=osOpts(c.centros,osE('osf-centro').value,'Todos');
+    osExtrato();
+  } else osFinCads();
+}
+function osExtrato(){
+  if(!osAdm()){ osE('osf-res').innerHTML='<p class="cfg-note">O extrato é visível só para o administrador.</p>'; return; }
+  var p=new URLSearchParams({de:osE('osf-de').value,ate:osE('osf-ate').value});
+  if(osE('osf-conta').value) p.set('conta_id',osE('osf-conta').value);
+  if(osE('osf-forma').value) p.set('forma_id',osE('osf-forma').value);
+  if(osE('osf-centro').value) p.set('centro_id',osE('osf-centro').value);
+  osApi('/api/fin/extrato?'+p.toString()).then(function(e){
+    var h='<div class="os-cards" style="margin-top:6px"><div class="os-card"><div class="v os-ok" style="font-size:16px">'+osR(e.creditos)+'</div><div class="l">Créditos</div></div>'+
+      '<div class="os-card"><div class="v os-dev" style="font-size:16px">'+osR(e.debitos)+'</div><div class="l">Débitos</div></div>'+
+      '<div class="os-card"><div class="v" style="font-size:16px">'+osR(e.saldo)+'</div><div class="l">Saldo do período</div></div></div>';
+    h+='<div class="g2"><div class="os-box"><h4>Por centro de valores</h4><table>'+e.por_centro.map(function(x){return '<tr><td>'+osEsc(x.centro)+'</td><td class="os-money">'+osN(x.total)+'</td></tr>';}).join('')+'</table></div>'+
+       '<div class="os-box"><h4>Por forma de pagamento</h4><table>'+e.por_forma.map(function(x){return '<tr><td>'+osEsc(x.forma)+'</td><td class="os-money">'+osN(x.total)+'</td></tr>';}).join('')+'</table></div></div>';
+    h+='<div class="table-wrap"><table><thead><tr><th>Data</th><th>Descrição</th><th>Conta</th><th>Forma</th><th>Centro</th><th>Favorecido</th><th>Usuário</th><th style="text-align:right">Crédito</th><th style="text-align:right">Débito</th></tr></thead><tbody>';
+    e.itens.forEach(function(l){
+      h+='<tr'+(l.os_numero?' style="cursor:pointer" onclick="osAbrir('+l.os_numero+',\'recebimentos\')"':'')+'><td>'+osEsc(l.pago_em)+'</td><td>'+osEsc(l.descricao)+'</td><td>'+osEsc(l.conta||'')+'</td><td>'+osEsc(l.forma||'')+'</td><td class="os-small">'+osEsc(l.centro||'')+'</td>'+
+         '<td>'+osEsc(l.favorecido||'')+'</td><td class="os-small">'+osEsc(l.user_nome)+'</td><td class="os-money os-ok">'+(l.credito?osN(l.credito):'')+'</td><td class="os-money os-dev">'+(l.debito?osN(l.debito):'')+'</td></tr>';
+    });
+    if(!e.itens.length) h+='<tr><td colspan="9" class="os-vazio">Nenhum lançamento no período.</td></tr>';
+    osE('osf-res').innerHTML=h+'</tbody></table></div>';
+  }).catch(osErr);
+}
+function osFinCads(){
+  osCarregarCad(true).then(function(c){
+    var mp=c.meus_padroes||{};
+    osE('osf-mp-conta').innerHTML=osOpts(c.contas,mp.conta_id,'— nenhuma —');
+    osE('osf-mp-forma').innerHTML=osOpts(c.formas,mp.forma_id,'— nenhuma —');
+    osE('osf-numini').value=c.os_numero_inicial||'';
+    osE('osf-prox').textContent='Próxima OS a ser aberta: nº '+c.proximo_numero;
+    var blocos=[['contas','Contas'],['formas','Formas de pagamento'],['centros','Centros de valores'],['pendencias','Tipos de pendência']];
+    var h='';
+    blocos.forEach(function(b){
+      h+='<div class="os-box"><h4>'+b[1]+'</h4><ul>';
+      (c[b[0]]||[]).forEach(function(x){
+        h+='<li class="'+(x.ativo?'':'off')+'"><span>'+osEsc(x.nome)+'</span>'+(osAdm()?'<span style="white-space:nowrap"><button class="os-b" onclick="osCadRen(\''+b[0]+'\','+x.id+')">✎</button> <button class="os-b" onclick="osCadAtivo(\''+b[0]+'\','+x.id+','+(!x.ativo)+')">'+(x.ativo?'Desativar':'Ativar')+'</button></span>':'')+'</li>';
+      });
+      h+='</ul>'+(osAdm()?'<div class="os-linha" style="margin-top:8px"><div class="fg" style="margin:0"><input id="osf-n-'+b[0]+'" placeholder="Novo..."></div><button class="os-b pri" onclick="osCadAdd(\''+b[0]+'\')">+</button></div>':'')+'</div>';
+    });
+    osE('osf-cads').innerHTML=h;
+  }).catch(osErr);
+}
+function osCadAdd(t){ var n=osE('osf-n-'+t).value.trim(); if(!n) return; osApi('/api/fin/'+t,'POST',{nome:n}).then(osFinCads).catch(osErr); }
+function osCadRen(t,id){ var x=OS.cad[t].filter(function(i){return i.id===id;})[0]; var n=prompt('Novo nome:',x.nome); if(!n) return;
+  osApi('/api/fin/'+t,'POST',{id:id,nome:n,ativo:x.ativo}).then(osFinCads).catch(osErr); }
+function osCadAtivo(t,id,v){ var x=OS.cad[t].filter(function(i){return i.id===id;})[0]; osApi('/api/fin/'+t,'POST',{id:id,nome:x.nome,ativo:v}).then(osFinCads).catch(osErr); }
+function osMeusPadroes(){ osApi('/api/fin/meus-padroes','PUT',{conta_id:osE('osf-mp-conta').value||null,forma_id:osE('osf-mp-forma').value||null}).then(function(){ osMsg('✓ Padrões salvos.'); osCarregarCad(true); }).catch(osErr); }
+function osNumIni(){ osApi('/api/os-config','POST',{os_numero_inicial:osE('osf-numini').value}).then(function(){ osMsg('✓ Numeração salva.'); osFinCads(); }).catch(osErr); }
+</script>
+{% endraw %}

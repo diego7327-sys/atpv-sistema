@@ -225,6 +225,7 @@ tr:hover td{background:var(--surf2)}
 </style>
 </head>
 <body>
+{% if modo_teste %}<div class="os-faixa-teste">⚠ AMBIENTE DE TESTE — banco separado, nada aqui vale para o escritório</div>{% endif %}
 <header>
   <div class="logo">
     <div class="logo-ico">D</div>
@@ -244,6 +245,8 @@ tr:hover td{background:var(--surf2)}
 <nav class="modbar">
   <button class="modbtn active" data-mod="atpv" onclick="modulo('atpv')">
     <span class="mod-ico">📄</span> ATPV-e</button>
+  <button class="modbtn" data-mod="os" id="modbtn-os" onclick="modulo('os')">
+    <span class="mod-ico">📋</span> Ordens de Serviço</button>
   <button class="modbtn" data-mod="recursos" onclick="modulo('recursos')">
     <span class="mod-ico">⚖</span> Recursos de Multa e Suspensão de CNH
     <span id="badge-prazos" class="badge-alerta" style="display:none">0</span></button>
@@ -818,6 +821,7 @@ tr:hover td{background:var(--surf2)}
   </div>
 
   <!-- CONFIG -->
+{% include 'os_modulo.html' %}
   <div id="fc-config" class="ftc fields">
     <div class="fb">
       <div class="fb-title">Dados fixos do escritório</div>
@@ -1180,6 +1184,7 @@ function modulo(m){
   if(alvo) alvo.classList.add('active');
   if(m==='recursos')   carregarRecursos();
   if(m==='agenda')     agCarregar();
+  if(m==='os')         osEntrar();
   if(m==='relatorios'){ carregarRelatorio(); relTab(relTabAtual||'atendimentos'); }
 }
 
@@ -2528,6 +2533,7 @@ function carregarMe(){
     var classes = {admin:'perfil-admin',funcionario:'perfil-funcionario',empresa:'perfil-empresa'};
     badge.textContent = labels[d.perfil]||d.perfil;
     badge.className = 'perfil-badge '+(classes[d.perfil]||'');
+    if(d.perfil==='empresa' && document.getElementById('modbtn-os')) document.getElementById('modbtn-os').style.display='none';
     if(d.perfil==='admin'){
       document.getElementById('btn-admin').style.display='inline-block';
       document.getElementById('cofre-sec').style.display='block';

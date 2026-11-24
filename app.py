@@ -30,6 +30,10 @@ TELEGRAM_TOKEN   = _env('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = _env('TELEGRAM_CHAT_ID')
 ALERTA_CHAVE     = _env('ALERTA_CHAVE')
 
+# ── AMBIENTE DE TESTE ─────────────────────────────────────────
+# MODO_TESTE=1 no Render de teste: mostra a faixa "AMBIENTE DE TESTE" no topo
+MODO_TESTE = _env('MODO_TESTE') in ('1', 'true', 'sim')
+
 # ── BANCO DE DADOS ────────────────────────────────────────────
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 HIST_PAGINA  = int(os.environ.get('HIST_PAGINA', '100'))
@@ -581,7 +585,7 @@ def extrair_campos(texto):
 def index():
     if 'user_id' not in session:
         return render_template("login.html")
-    return render_template("index.html")
+    return render_template("index.html", modo_teste=MODO_TESTE)
 
 @app.route("/login", methods=["GET"])
 def login_page():
@@ -2471,6 +2475,12 @@ def api_diario_cron():
     if not _DOE_TRAVA.locked():
         _doe_disparar(quem="agendador")
     return jsonify({"ok": True})
+
+
+# ── MÓDULO ORDEM DE SERVIÇO (modelo BitDesp) ──────────────────
+from os_modulo import registrar as _registrar_os
+if DATABASE_URL:
+    _registrar_os(app, db, login_required)
 
 
 if __name__ == "__main__":
