@@ -175,6 +175,8 @@ ALTER TABLE IF EXISTS processos ADD COLUMN IF NOT EXISTS os_id BIGINT REFERENCES
 ALTER TABLE IF EXISTS usuarios  ADD COLUMN IF NOT EXISTS conta_padrao_id BIGINT;
 ALTER TABLE IF EXISTS usuarios  ADD COLUMN IF NOT EXISTS ver_lucro BOOLEAN DEFAULT FALSE;
 ALTER TABLE IF EXISTS usuarios  ADD COLUMN IF NOT EXISTS dar_baixa BOOLEAN DEFAULT FALSE;
+ALTER TABLE IF EXISTS usuarios  ADD COLUMN IF NOT EXISTS ver_pend_todos BOOLEAN DEFAULT FALSE;
+ALTER TABLE os_pendencias ADD COLUMN IF NOT EXISTS user_id TEXT DEFAULT '';
 ALTER TABLE os_recebimentos ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'confirmado';
 ALTER TABLE os_recebimentos ADD COLUMN IF NOT EXISTS baixa_por TEXT DEFAULT '';
 ALTER TABLE os_recebimentos ADD COLUMN IF NOT EXISTS baixa_em TIMESTAMPTZ;
@@ -400,17 +402,25 @@ def registrar(app, db, login_required):
         return dec
 
     def _perms(cur=None):
-        """ver_lucro / dar_baixa: admin sempre; outros só se o admin marcar."""
+        """ver_lucro / dar_baixa / ver_pend_todos: admin sempre; outros só se o admin marcar."""
         if _admin():
-            return {"ver_lucro": True, "dar_baixa": True, "admin": True}
+            return {"ver_lucro": True, "dar_baixa": True, "ver_pend_todos": True, "admin": True}
         def busca(c):
-            c.execute("SELECT ver_lucro, dar_baixa FROM usuarios WHERE id = %s", (str(session.get('user_id')),))
+            c.execute("SELECT ver_lucro, dar_baixa, ver_pend_todos FROM usuarios WHERE id = %s", (str(session.get('user_id')),))
             return c.fetchone() or {}
         u = busca(cur) if cur is not None else None
         if u is None:
             with db() as c2:
                 u = busca(c2)
-        return {"ver_lucro": bool(u.get('ver_lucro')), "dar_baixa": bool(u.get('dar_baixa')), "admin": False}
+        return {"ver_lucro": bool(u.get('ver_lucro')), "dar_baixa": bool(u.get('dar_baixa')),
+                "ver_pend_todos": bool(u.get('ver_pend_todos')), "admin": False}
+
+    def _pend_filtro(cur, alias='p'):
+        """Pendências: cada um vê só as que marcou; admin (ou quem ele liberar) vê de todos."""
+        if _perms(cur)['ver_pend_todos']:
+            return "", ()
+        return (" AND ({a}.user_id = %s OR (COALESCE({a}.user_id,'') = '' AND {a}.user_nome = %s))".format(a=alias),
+                (str(session.get('user_id') or ''), _eu()))
 
     CAMPOS_LUCRO = ('custo', 'lucro', 'lucro_terceiros', 'taxas', 'honorarios')
 
@@ -909,7 +919,8 @@ def registrar(app, db, login_required):
                            WHERE o.excluida_em IS NULL AND o.status IN ('andamento','detran','disponivel')
                            GROUP BY 1, 2 ORDER BY 3 DESC, 2""")
             por_tipo = [dict(r) for r in cur.fetchall()]
-            cur.execute("""SELECT p.id, p.limite, p.lancado, p.descricao, p.responsavel,
+            pf_sql, pf_args = _pend_filtro(cur)
+            cur.execute("""SELECT p.id, p.limite, p.lancado, p.descricao, p.responsavel, p.user_nome,
                                   t.nome AS tipo, o.numero, c.nome AS cliente_nome, v.placa
                            FROM os_pendencias p
                            JOIN ordens_servico o ON o.id = p.os_id AND o.excluida_em IS NULL
@@ -917,8 +928,8 @@ def registrar(app, db, login_required):
                            LEFT JOIN clientes c ON c.id = o.cliente_id
                            LEFT JOIN veiculos v ON v.id = o.veiculo_id
                            WHERE NOT p.resolvida AND p.limite IS NOT NULL
-                             AND p.limite <= """ + HOJE_SQL + """ + 7
-                           ORDER BY p.limite LIMIT 100""")
+                             AND p.limite <= """ + HOJE_SQL + """ + 7""" + pf_sql + """
+                           ORDER BY p.limite LIMIT 100""", pf_args)
             hoje = _hoje()
             pend = []
             for r in cur.fetchall():
@@ -987,9 +998,10 @@ def registrar(app, db, login_required):
             receb.append(x)
         cur.execute("SELECT * FROM os_ocorrencias WHERE os_id = %s ORDER BY id DESC", (oid,))
         ocor = [dict(x, quando=_dt(x['quando'])) for x in cur.fetchall()]
+        pf_sql, pf_args = _pend_filtro(cur)
         cur.execute("""SELECT p.*, t.nome AS tipo FROM os_pendencias p
                        LEFT JOIN pendencia_tipos t ON t.id = p.tipo_id
-                       WHERE p.os_id = %s ORDER BY p.resolvida, p.limite NULLS LAST, p.id""", (oid,))
+                       WHERE p.os_id = %s""" + pf_sql + """ ORDER BY p.resolvida, p.limite NULLS LAST, p.id""", (oid,) + pf_args)
         hoje = _hoje()
         pend = []
         for x in cur.fetchall():
@@ -1423,7 +1435,7 @@ def registrar(app, db, login_required):
             return jsonify({"erro": "Sem permissão"}), 403
         with db() as cur:
             cur.execute("""SELECT id, nome, login, perfil, COALESCE(ver_lucro,FALSE) AS ver_lucro,
-                                  COALESCE(dar_baixa,FALSE) AS dar_baixa
+                                  COALESCE(dar_baixa,FALSE) AS dar_baixa, COALESCE(ver_pend_todos,FALSE) AS ver_pend_todos
                            FROM usuarios WHERE ativo AND perfil IN ('admin','funcionario') ORDER BY nome""")
             return jsonify([dict(r) for r in cur.fetchall()])
 
@@ -1434,8 +1446,9 @@ def registrar(app, db, login_required):
             return jsonify({"erro": "Sem permissão"}), 403
         d = request.get_json() or {}
         with db(commit=True) as cur:
-            cur.execute("UPDATE usuarios SET ver_lucro=%s, dar_baixa=%s WHERE id=%s",
-                        (_sim(d.get("ver_lucro"), False), _sim(d.get("dar_baixa"), False), str(d.get("id"))))
+            cur.execute("UPDATE usuarios SET ver_lucro=%s, dar_baixa=%s, ver_pend_todos=%s WHERE id=%s",
+                        (_sim(d.get("ver_lucro"), False), _sim(d.get("dar_baixa"), False),
+                         _sim(d.get("ver_pend_todos"), False), str(d.get("id"))))
         return jsonify({"ok": True})
 
     # ── ocorrências, pendências, documentos ────────────────────
@@ -1466,18 +1479,24 @@ def registrar(app, db, login_required):
     @equipe
     def os_pend_add(numero):
         d = request.get_json() or {}
-        if not d.get("tipo_id") and not (d.get("descricao") or "").strip():
-            return jsonify({"erro": "Escolha o tipo ou descreva a pendência."}), 400
+        if not (d.get("descricao") or "").strip() and not d.get("tipo_id"):
+            return jsonify({"erro": "Digite o que é a pendência."}), 400
         with db(commit=True) as cur:
             o = _os_por_numero(cur, numero)
             if not o:
                 return jsonify({"erro": "OS não encontrada"}), 404
-            cur.execute("""INSERT INTO os_pendencias (os_id, tipo_id, limite, responsavel, descricao, user_nome)
-                           VALUES (%s,%s,%s,%s,%s,%s)""",
+            cur.execute("""INSERT INTO os_pendencias (os_id, tipo_id, limite, responsavel, descricao, user_nome, user_id)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s)""",
                         (o['id'], d.get("tipo_id") or None, _data(d.get("limite")),
-                         (d.get("responsavel") or "").strip(), (d.get("descricao") or "").strip(), _eu()))
+                         (d.get("responsavel") or _eu()).strip(), (d.get("descricao") or "").strip(), _eu(),
+                         str(session.get('user_id') or '')))
             _toca(cur, o['id'])
         return jsonify({"ok": True})
+
+    def _pend_minha(cur, pid):
+        pf_sql, pf_args = _pend_filtro(cur)
+        cur.execute("SELECT 1 FROM os_pendencias p WHERE p.id = %s" + pf_sql, (pid,) + pf_args)
+        return bool(cur.fetchone())
 
     @app.route("/api/os-pendencias/<int:pid>", methods=["PUT"])
     @equipe
@@ -1485,6 +1504,8 @@ def registrar(app, db, login_required):
         d = request.get_json() or {}
         resolv = _sim(d.get("resolvida"), True)
         with db(commit=True) as cur:
+            if not _pend_minha(cur, pid):
+                return jsonify({"erro": "Essa pendência não é sua."}), 403
             cur.execute("""UPDATE os_pendencias SET resolvida=%s,
                              resolvida_em = CASE WHEN %s THEN NOW() ELSE NULL END,
                              resolvida_por = CASE WHEN %s THEN %s ELSE '' END
@@ -1502,6 +1523,8 @@ def registrar(app, db, login_required):
     @equipe
     def os_pend_del(pid):
         with db(commit=True) as cur:
+            if not _pend_minha(cur, pid):
+                return jsonify({"erro": "Essa pendência não é sua."}), 403
             cur.execute("DELETE FROM os_pendencias WHERE id=%s RETURNING os_id", (pid,))
             r = cur.fetchone()
             if r:

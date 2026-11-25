@@ -354,7 +354,7 @@ input[type=date].os-dt,.fg input[type=date]{color-scheme:dark}
       </div>
       <div class="os-box os-adm" style="display:none"><h4>🔒 Quem pode ver custo/lucro e dar baixa em recebimento</h4>
         <p class="os-small" style="margin-bottom:8px">Você (administrador) sempre pode. Para os outros, só se marcar aqui. Quem não pode ver lucro não vê custo, margem nem lucro em nenhuma tela. Quem não pode dar baixa só <b>informa</b> o recebimento — fica aguardando você conferir.</p>
-        <div class="table-wrap" style="margin:0"><table><thead><tr><th>Usuário</th><th>Perfil</th><th style="text-align:center">Ver custo e lucro</th><th style="text-align:center">Dar baixa</th></tr></thead><tbody id="osf-perm"></tbody></table></div>
+        <div class="table-wrap" style="margin:0"><table><thead><tr><th>Usuário</th><th>Perfil</th><th style="text-align:center">Ver custo e lucro</th><th style="text-align:center">Dar baixa</th><th style="text-align:center">Ver pendências de todos</th></tr></thead><tbody id="osf-perm"></tbody></table></div>
       </div>
       <div class="os-box os-adm" style="display:none"><h4>Numeração da OS</h4>
         <div class="os-linha">
@@ -450,6 +450,7 @@ function osCarregarCad(forcar){
 
 // ── entrada do módulo ──
 function osVL(){ return !!(OS.perm&&OS.perm.ver_lucro); }
+function osPT(){ return !!(OS.perm&&OS.perm.ver_pend_todos); }
 function osBX(){ return !!(OS.perm&&OS.perm.dar_baixa); }
 function osEntrar(){
   osApi('/api/os/minhas-permissoes').then(function(p){ OS.perm=p; }).catch(function(){ OS.perm={}; });
@@ -487,7 +488,8 @@ function osPainel(){
     h+='<div class="os-card" onclick="osFiltroDev()"><div class="v" style="color:var(--red);font-size:16px">'+osR(p.devedor_total)+'</div><div class="l">A receber ('+p.devedor_qtd+' OS)</div></div>';
     h+='<div class="os-card"><div class="v" style="color:var(--acc);font-size:16px">'+osR(p.recebido_hoje)+'</div><div class="l">Recebido hoje (com baixa)</div></div>';
     if(p.baixa_pendente_qtd>0) h+='<div class="os-card" style="border-color:rgba(255,165,2,.6)" onclick="osBaixasModal()"><div class="v" style="color:var(--warn);font-size:16px">'+osR(p.baixa_pendente_valor)+'</div><div class="l">⏳ '+p.baixa_pendente_qtd+' aguardando baixa</div></div>';
-    h+='<div class="os-card" onclick="osE(\'os-pend-painel\').scrollIntoView({behavior:\'smooth\'})"><div class="v" style="color:'+(venc?'var(--red)':'var(--mut)')+'">'+(p.pendencias||[]).length+'</div><div class="l">Pendências vencendo'+(venc?' · '+venc+' vencidas':'')+'</div></div>';
+    var hj=(p.pendencias||[]).filter(function(x){return x.dias===0;}).length;
+    h+='<div class="os-card" onclick="osE(\'os-pend-painel\').scrollIntoView({behavior:\'smooth\'})"><div class="v" style="color:'+(venc?'var(--red)':hj?'var(--warn)':'var(--mut)')+'">'+(p.pendencias||[]).length+'</div><div class="l">'+(osPT()?'Pendências':'Minhas pendências')+(hj?' · '+hj+' hoje':'')+(venc?' · '+venc+' vencidas':'')+'</div></div>';
     osE('os-cards').innerHTML=h;
     var pt=p.por_tipo||[], ftp=osE('os-ftp').value;
     osE('os-chips').innerHTML=pt.length?'<span class="lb">Abertas por tipo</span>'+pt.map(function(t){
@@ -495,10 +497,10 @@ function osPainel(){
       return '<button class="os-chip'+(ftp===v?' on':'')+'" onclick="osFiltroTipo(\''+v+'\')">'+osEsc(t.nome)+'<b>'+t.n+'</b></button>'; }).join(''):'';
     var pd=p.pendencias||[];
     if(!pd.length){ osE('os-pend-painel').innerHTML=''; return; }
-    var t='<div class="os-box"><h4>⏰ Pendências vencidas e dos próximos 7 dias</h4><div class="table-wrap" style="margin:0"><table><thead><tr><th>OS</th><th>Limite</th><th>Tipo</th><th>Cliente</th><th>Placa</th><th>Descrição</th><th>Responsável</th></tr></thead><tbody>';
+    var t='<div class="os-box"><h4>⏰ '+(osPT()?'Pendências de todos':'Minhas pendências')+' — vencidas, de hoje e dos próximos 7 dias</h4><div class="table-wrap" style="margin:0"><table><thead><tr><th>OS</th><th>Dia</th><th>Pendência</th><th>Cliente</th><th>Placa</th>'+(osPT()?'<th>Marcada por</th>':'')+'</tr></thead><tbody>';
     pd.forEach(function(x){
       var dd=x.dias<0?'<span class="os-venc">vencida há '+(-x.dias)+' dia(s)</span>':x.dias===0?'<span class="os-hj">hoje</span>':'em '+x.dias+' dia(s)';
-      t+='<tr style="cursor:pointer" onclick="osAbrir('+x.numero+',\'pendencias\')"><td class="os-num">'+x.numero+'</td><td>'+osBr(x.limite)+'<div class="os-small">'+dd+'</div></td><td>'+osEsc(x.tipo||'')+'</td><td>'+osEsc(x.cliente_nome||'')+'</td><td>'+osEsc(x.placa||'')+'</td><td>'+osEsc(x.descricao||'')+'</td><td>'+osEsc(x.responsavel||'')+'</td></tr>';
+      t+='<tr style="cursor:pointer'+(x.dias===0?';background:rgba(255,198,26,.08)':'')+'" onclick="osAbrir('+x.numero+',\'pendencias\')"><td class="os-num">'+x.numero+'</td><td>'+osBr(x.limite)+'<div class="os-small">'+dd+'</div></td><td style="font-weight:600">'+osEsc(x.descricao||x.tipo||'')+(x.descricao&&x.tipo?'<div class="os-small">'+osEsc(x.tipo)+'</div>':'')+'</td><td>'+osEsc(x.cliente_nome||'')+'</td><td>'+osEsc(x.placa||'')+'</td>'+(osPT()?'<td>'+osEsc(x.user_nome||'')+'</td>':'')+'</tr>';
     });
     osE('os-pend-painel').innerHTML=t+'</tbody></table></div></div>';
   }).catch(osErr);
@@ -525,7 +527,7 @@ function osLista(){
     if(q && d.itens.length===1 && /^\d+$/.test(q) && String(d.itens[0].numero)===q){ osAbrir(d.itens[0].numero); return; }
     var h='';
     d.itens.forEach(function(o){
-      h+='<tr onclick="osAbrir('+o.numero+')"><td class="os-num">'+o.numero+(o.pend_abertas?' <span title="pendências abertas" style="color:var(--warn)">⏰'+o.pend_abertas+'</span>':'')+'</td>'+
+      h+='<tr onclick="osAbrir('+o.numero+')"><td class="os-num">'+o.numero+(o.pend_abertas&&osPT()?' <span title="pendências abertas" style="color:var(--warn)">⏰'+o.pend_abertas+'</span>':'')+'</td>'+
          '<td>'+osEsc(o.data_abertura.slice(0,10))+'<div class="os-small">'+osEsc(o.user_nome)+'</div></td>'+
          '<td>'+osEsc(o.cliente_nome||'—')+(o.responsavel_nome?'<div class="os-small">resp.: '+osEsc(o.responsavel_nome)+'</div>':'')+'</td>'+
          '<td>'+osEsc(o.placa||'')+'<div class="os-small">'+osEsc(o.modelo||'')+'</div></td>'+
@@ -1152,14 +1154,12 @@ function osAbaItens(){
   var c0=OS.cad||{}, mp=c0.meus_padroes||{};
   var contaPad=mp.conta_id||((c0.contas||[]).filter(function(x){ return x.ativo&&x.nome==='SICRED'; })[0]||{}).id;
   if(!ro) h+='<div class="os-box"><h4>Lançar item — taxa, débito, despesa ou serviço (entra no total da OS)</h4>'+
-    '<div class="nv-chips" style="margin-bottom:8px"><span class="os-small" style="align-self:center;margin-right:4px">Rápido:</span>'+
-      ['TAXA DE CARTÓRIO','RECONHECIMENTO DE FIRMA','DÉBITO DETRAN (IPVA / LICENCIAMENTO)','MULTA','TAXA DETRAN','VISTORIA','PLACA','OUTRA DESPESA'].map(function(t){
-        return '<button type="button" class="nv-chip" onclick="osItemRapido(\''+t+'\')">+ '+t+'</button>'; }).join('')+'</div>'+
-    '<div class="nv-add" style="grid-template-columns:1.4fr 2fr 70px 120px 260px auto">'+
+    '<div class="nv-add" style="grid-template-columns:'+(vl?'1.3fr 2fr 64px 120px 120px 230px auto':'1.4fr 2fr 70px 120px 260px auto')+'">'+
       '<div class="fg"><label>Da tabela</label><select id="osi-serv" onchange="osItemServ()">'+sv+'</select></div>'+
       '<div class="fg"><label>Descrição (digite o que quiser)</label><input id="osi-desc" placeholder="ex.: TAXA CARTÓRIO 2º OFÍCIO" onkeydown="osItemTecla(event)"></div>'+
       '<div class="fg"><label>Qtd</label><input id="osi-qtd" value="1" onkeydown="osItemTecla(event)"></div>'+
-      '<div class="fg"><label>Valor (R$)</label><input id="osi-valor" placeholder="0,00" onkeydown="osItemTecla(event)"></div>'+
+      '<div class="fg"><label>Valor cobrado (R$)</label><input id="osi-valor" placeholder="0,00" onkeydown="osItemTecla(event)"></div>'+
+      (vl?'<div class="fg"><label>Custo (R$) 🔒</label><input id="osi-custo" placeholder="opcional" title="Quanto o escritório paga. Só você (ou quem você liberar) vê." onkeydown="osItemTecla(event)"></div>':'')+
       '<div class="fg"><label>É</label><select id="osi-tipo" onchange="osItemTipo()"><option value="taxa">Taxa / débito / despesa (repasse)</option><option value="hon">Serviço / honorário do escritório</option></select></div>'+
       '<div class="fg"><label>&nbsp;</label><button class="os-b pri" onclick="osItemAdd()">+ Lançar</button></div></div>'+
     (osBX()?'<div id="osi-pgbox" class="nv-adi" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:2px">'+
@@ -1200,18 +1200,15 @@ function osItemServ(){
   var s=OS.serv.filter(function(x){ return String(x.id)===osE('osi-serv').value; })[0];
   if(!s) return;
   osE('osi-desc').value=s.nome; osE('osi-valor').value=osN(s.valor_padrao);
+  if(osE('osi-custo')) osE('osi-custo').value=Number(s.custo_padrao)>0?osN(s.custo_padrao):'';
   osE('osi-tipo').value=(s.custo_padrao===undefined||Number(s.custo_padrao)>0)?'taxa':'hon'; osItemTipo();
   osE('osi-valor').focus(); osE('osi-valor').select();
-}
-function osItemRapido(t){
-  osE('osi-serv').value=''; osE('osi-desc').value=t; osE('osi-tipo').value='taxa'; osItemTipo();
-  osE('osi-valor').value=''; osE('osi-valor').focus();
 }
 function osItemTipo(){ var b=osE('osi-pgbox'); if(b) b.style.display=osE('osi-tipo').value==='taxa'?'flex':'none'; }
 function osItemTecla(e){
   if(e.key!=='Enter') return; e.preventDefault(); e.stopPropagation();
-  var ord=['osi-desc','osi-qtd','osi-valor'], i=ord.indexOf(e.target.id);
-  if(i>=0&&i<2){ osE(ord[i+1]).focus(); osE(ord[i+1]).select(); return; }
+  var ord=['osi-desc','osi-qtd','osi-valor'].concat(osE('osi-custo')?['osi-custo']:[]), i=ord.indexOf(e.target.id);
+  if(i>=0&&i<ord.length-1){ osE(ord[i+1]).focus(); osE(ord[i+1]).select(); return; }
   osItemAdd();
 }
 function osItemAdd(){
@@ -1223,7 +1220,9 @@ function osItemAdd(){
   if(!(valor>0)){ osMsg('Informe o valor do item.','err'); osE('osi-valor').focus(); return; }
   var tipo=osE('osi-tipo').value, qtd=nvNum(osE('osi-qtd').value)||1;
   var c={servico_id:sid, descricao:desc, qtd:osN(qtd), valor:osN(valor), tipo_item:tipo};
-  if(osVL()){ if(sid && tipo==='taxa' && s){ c.custo=osN(Math.min(Number(s.custo_padrao)||0,valor)); } else c.custo = tipo==='hon' ? '0' : osN(valor); }
+  var cTxt=osE('osi-custo')?osE('osi-custo').value.trim():'';
+  if(osVL()){ if(cTxt!==''){ c.custo=osN(nvNum(cTxt)); }
+    else if(sid && tipo==='taxa' && s){ c.custo=osN(Math.min(Number(s.custo_padrao)||0,valor)); } else c.custo = tipo==='hon' ? '0' : osN(valor); }
   if(osE('osi-pago') && osE('osi-pago').checked && tipo==='taxa'){
     if(!osE('osi-pgconta').value){ osMsg('Escolha de qual conta saiu o pagamento.','err'); return; }
     c.pago_agora={conta_id:osE('osi-pgconta').value, forma_id:osE('osi-pgforma').value||null, favorecido:osE('osi-pgfav').value};
@@ -1308,18 +1307,19 @@ function osReceberModal(){
   osModal('Recebimento — OS Nº '+o.numero,
     (osBX()?'':'<div class="alert" style="display:block;margin:0 0 12px;background:rgba(255,165,2,.1);border:1px solid rgba(255,165,2,.4);color:var(--warn)">⏳ Este recebimento fica <b>aguardando baixa</b>. Só conta como pago depois que o responsável conferir.</div>')+
     '<div class="os-ficha" style="margin-bottom:12px">Total '+osR(o.total)+' · Pago '+osR(o.pago)+(o.aguardando_baixa>0?' · Aguardando baixa '+osR(o.aguardando_baixa):'')+' · <b class="os-dev">Devedor '+osR(o.devedor)+'</b></div>'+
-    '<div class="g2"><div class="fg"><label>Valor recebido (R$) — entrada ou total</label><input id="osr-valor" value="'+osN(Math.max(0,o.devedor-(o.aguardando_baixa||0)))+'"></div>'+
+    '<div class="g2"><div class="fg"><label>Valor recebido (R$) — digite o que entrou de verdade</label><input id="osr-valor" value="" placeholder="0,00" autocomplete="off"></div>'+
     '<div class="fg"><label>Data</label><input type="date" id="osr-data" value="'+osHoje()+'"></div>'+
     '<div class="fg"><label>Forma de pagamento *</label><select id="osr-forma">'+osOpts(c.formas,mp.forma_id,'— escolha —')+'</select></div>'+
     '<div class="fg"><label>Conta *</label><select id="osr-conta">'+osOpts(c.contas,contaPad,'— escolha —')+'</select></div></div>'+
     '<div class="fg"><label>Centro de valores (vazio = do serviço principal da OS)</label><select id="osr-centro">'+osOpts(c.centros,'','— automático —')+'</select></div>'+
     '<div class="fg"><label>Observação</label><input id="osr-obs"></div>'+
     '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn-sec" onclick="osFechar()">Cancelar</button><button class="btn-main" onclick="osReceber()">Confirmar recebimento</button></div>');
-  setTimeout(function(){ osE('osr-valor').select(); },50);
+  setTimeout(function(){ osE('osr-valor').focus(); },50);
 }
 function osReceber(){
   var c={valor:osE('osr-valor').value, data:osE('osr-data').value, forma_pgto_id:osE('osr-forma').value, conta_id:osE('osr-conta').value,
          centro_id:osE('osr-centro').value||null, obs:osE('osr-obs').value};
+  if(!(nvNum(c.valor)>0)){ osMsg('Digite o valor que o cliente pagou.','err'); osE('osr-valor').focus(); return; }
   if(!c.forma_pgto_id){ osMsg('Escolha a forma de pagamento.','err'); return; }
   if(!c.conta_id){ osMsg('Escolha a conta.','err'); return; }
   osApi('/api/os/'+OS.atual.os.numero+'/recebimentos','POST',c).then(function(r){ osFechar();
@@ -1374,25 +1374,28 @@ function osRestaurar(){
 function osAbaPend(){
   var d=OS.atual, ro=!!d.os.excluida_em;
   var h='';
-  if(!ro) h+='<div class="os-box"><h4>Nova pendência</h4><div class="os-linha">'+
-    '<div class="fg"><label>Tipo</label><select id="osp-tipo">'+osOpts(OS.cad.pendencias,'','— escolha —')+'</select></div>'+
-    '<div class="fg"><label>Data limite</label><input type="date" id="osp-lim"></div>'+
-    '<div class="fg"><label>Responsável</label><input id="osp-resp" value="'+osEsc(typeof MEU_NOME!=='undefined'&&MEU_NOME?MEU_NOME:'')+'"></div></div>'+
-    '<div class="os-linha"><div class="fg" style="flex:4"><label>Descrição</label><input id="osp-desc"></div>'+
-    '<div class="fg" style="flex:0"><button class="os-b pri" onclick="osPendAdd()">+ Lançar</button></div></div></div>';
-  h+='<div class="table-wrap"><table><thead><tr><th></th><th>Tipo</th><th>Lançado em</th><th>Limite</th><th>Responsável</th><th>Descrição</th><th></th></tr></thead><tbody>';
+  if(!ro) h+='<div class="os-box"><h4>Nova pendência / lembrete</h4><div class="os-linha">'+
+    '<div class="fg" style="flex:4"><label>O que é a pendência (digite)</label><input id="osp-desc" placeholder="ex.: Olhar se o processo finalizou no Detran" onkeydown="if(event.key===\'Enter\'){event.preventDefault();osE(\'osp-lim\').focus();}"></div>'+
+    '<div class="fg" style="flex:1.3"><label>Lembrar no dia</label><input type="date" id="osp-lim" onkeydown="if(event.key===\'Enter\'){event.preventDefault();osPendAdd();}"></div>'+
+    '<div class="fg" style="flex:1.3"><label>Tipo (opcional)</label><select id="osp-tipo">'+osOpts(OS.cad.pendencias,'','—')+'</select></div>'+
+    '<div class="fg" style="flex:0"><label>&nbsp;</label><button class="os-b pri" onclick="osPendAdd()">+ Lançar</button></div></div>'+
+    '<p class="os-small" style="margin:0">'+(osPT()?'Você vê as pendências de todos.':'Só você vê as pendências que marcar (o Diego vê de todos).')+' No dia marcado ela aparece no painel da lista de OS.</p></div>';
+  h+='<div class="table-wrap"><table><thead><tr><th></th><th>Pendência</th><th>Lembrar no dia</th><th>Tipo</th><th>Marcada por</th><th></th></tr></thead><tbody>';
   d.pendencias.forEach(function(p){
     var dd=p.resolvida?'<span class="os-small">resolvida '+osEsc(p.resolvida_em)+' '+osEsc(p.resolvida_por)+'</span>':
       (p.dias==null?'':p.dias<0?'<span class="os-venc">vencida há '+(-p.dias)+' dia(s)</span>':p.dias===0?'<span class="os-hj">vence hoje</span>':'<span class="os-small">em '+p.dias+' dia(s)</span>');
     h+='<tr style="'+(p.resolvida?'opacity:.5':'')+'"><td><input type="checkbox" '+(p.resolvida?'checked':'')+' '+(ro?'disabled':'')+' title="Resolvida" onchange="osPendResolver('+p.id+',this.checked)" style="accent-color:var(--acc);width:16px;height:16px"></td>'+
-       '<td>'+osEsc(p.tipo||'—')+'</td><td class="os-small">'+osEsc(p.lancado)+'<br>'+osEsc(p.user_nome)+'</td><td>'+osBr(p.limite)+'<div>'+dd+'</div></td><td>'+osEsc(p.responsavel)+'</td><td>'+osEsc(p.descricao)+'</td>'+
+       '<td style="font-weight:600">'+osEsc(p.descricao||p.tipo||'')+'</td><td>'+osBr(p.limite)+'<div>'+dd+'</div></td><td>'+osEsc(p.tipo||'—')+'</td><td class="os-small">'+osEsc(p.user_nome)+'<br>'+osEsc(p.lancado)+'</td>'+
        '<td>'+(ro?'':'<button class="os-b del" onclick="osPendDel('+p.id+')">✕</button>')+'</td></tr>';
   });
-  if(!d.pendencias.length) h+='<tr><td colspan="7" class="os-vazio">Sem pendências.</td></tr>';
-  osE('os-aba-corpo').innerHTML=h+'</tbody></table></div><p class="cfg-note">Pendência com data limite aparece no painel da lista de OS quando estiver vencida ou faltando 7 dias.</p>';
+  if(!d.pendencias.length) h+='<tr><td colspan="6" class="os-vazio">Sem pendências.</td></tr>';
+  osE('os-aba-corpo').innerHTML=h+'</tbody></table></div>';
+  if(!ro) setTimeout(function(){ var e=osE('osp-desc'); if(e) e.focus(); },50);
 }
 function osPendAdd(){
-  var c={tipo_id:osE('osp-tipo').value||null, limite:osE('osp-lim').value, responsavel:osE('osp-resp').value, descricao:osE('osp-desc').value};
+  var c={tipo_id:osE('osp-tipo').value||null, limite:osE('osp-lim').value, descricao:osE('osp-desc').value.trim()};
+  if(!c.descricao && !c.tipo_id){ osMsg('Digite o que é a pendência.','err'); osE('osp-desc').focus(); return; }
+  if(!c.limite){ osMsg('Escolha o dia para lembrar.','err'); osE('osp-lim').focus(); return; }
   osApi('/api/os/'+OS.atual.os.numero+'/pendencias','POST',c).then(function(){ osRecarregar('pendencias'); }).catch(osErr);
 }
 function osPendResolver(pid,v){ osApi('/api/os-pendencias/'+pid,'PUT',{resolvida:v}).then(function(){ osRecarregar('pendencias'); }).catch(osErr); }
@@ -1810,8 +1813,8 @@ function osFinCads(){
     if(osAdm()) osApi('/api/os/permissoes').then(function(l){
       osE('osf-perm').innerHTML=l.map(function(u){ var adm=u.perfil==='admin';
         var cb=function(k){ return '<input type="checkbox" style="width:18px;height:18px;accent-color:var(--acc)" '+(adm||u[k]?'checked':'')+(adm?' disabled':'')+' onchange="osPermSalvar(\''+osEsc(u.id)+'\',this)">'; };
-        return '<tr data-uid="'+osEsc(u.id)+'"><td>'+osEsc(u.nome||u.login)+'</td><td>'+osEsc(u.perfil)+'</td><td style="text-align:center" data-k="ver_lucro">'+cb('ver_lucro')+'</td><td style="text-align:center" data-k="dar_baixa">'+cb('dar_baixa')+'</td></tr>'; }).join('')
-        || '<tr><td colspan="4" class="os-vazio">Nenhum funcionário cadastrado.</td></tr>';
+        return '<tr data-uid="'+osEsc(u.id)+'"><td>'+osEsc(u.nome||u.login)+'</td><td>'+osEsc(u.perfil)+'</td><td style="text-align:center" data-k="ver_lucro">'+cb('ver_lucro')+'</td><td style="text-align:center" data-k="dar_baixa">'+cb('dar_baixa')+'</td><td style="text-align:center" data-k="ver_pend_todos">'+cb('ver_pend_todos')+'</td></tr>'; }).join('')
+        || '<tr><td colspan="5" class="os-vazio">Nenhum funcionário cadastrado.</td></tr>';
     }).catch(osErr);
     osE('osf-prox').textContent='Próxima OS a ser aberta: nº '+c.proximo_numero;
     var blocos=[['tipos','Tipos de processo'],['contas','Contas'],['formas','Formas de pagamento'],['centros','Centros de valores'],['pendencias','Tipos de pendência']];
@@ -1833,7 +1836,7 @@ function osCadAtivo(t,id,v){ var x=OS.cad[t].filter(function(i){return i.id===id
 function osMeusPadroes(){ osApi('/api/fin/meus-padroes','PUT',{conta_id:osE('osf-mp-conta').value||null,forma_id:osE('osf-mp-forma').value||null}).then(function(){ osMsg('✓ Padrões salvos.'); osCarregarCad(true); }).catch(osErr); }
 function osPermSalvar(uid, el){
   var tr=el.closest('tr'), q=function(k){ return tr.querySelector('[data-k="'+k+'"] input').checked; };
-  osApi('/api/os/permissoes','PUT',{id:uid, ver_lucro:q('ver_lucro'), dar_baixa:q('dar_baixa')}).then(function(){ osMsg('✓ Permissão salva.'); }).catch(osErr);
+  osApi('/api/os/permissoes','PUT',{id:uid, ver_lucro:q('ver_lucro'), dar_baixa:q('dar_baixa'), ver_pend_todos:q('ver_pend_todos')}).then(function(){ osMsg('✓ Permissão salva.'); }).catch(osErr);
 }
 var OS_EMP_CAMPOS=['empresa_nome','empresa_fone','empresa_cidade','empresa_endereco','empresa_email','pix_chave','pix_nome','pix_cidade','pix_banco'];
 function osEmpresaSalvar(){
