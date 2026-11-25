@@ -339,7 +339,8 @@ input[type=date].os-dt,.fg input[type=date]{color-scheme:dark}
           <div class="fg" style="grid-column:span 2"><label>Nome da empresa</label><input id="osf-empresa_nome"></div>
           <div class="fg" style="grid-column:span 2"><label>Telefone / WhatsApp do escritório</label><input id="osf-empresa_fone"></div>
           <div class="fg" style="grid-column:span 2"><label>Cidade</label><input id="osf-empresa_cidade" placeholder="Anápolis-GO"></div>
-          <div class="fg" style="grid-column:span 6"><label>Endereço para retirada</label><input id="osf-empresa_endereco"></div>
+          <div class="fg" style="grid-column:span 4"><label>Endereço (sai no cabeçalho da OS)</label><input id="osf-empresa_endereco"></div>
+          <div class="fg" style="grid-column:span 2"><label>E-mail</label><input id="osf-empresa_email"></div>
           <div class="fg" style="grid-column:span 2"><label>Chave PIX</label><input id="osf-pix_chave" placeholder="CNPJ, CPF, e-mail, celular ou aleatória"></div>
           <div class="fg" style="grid-column:span 2"><label>Favorecido (nome no PIX)</label><input id="osf-pix_nome"></div>
           <div class="fg"><label>Cidade do PIX</label><input id="osf-pix_cidade" placeholder="ANAPOLIS"></div>
@@ -1018,7 +1019,7 @@ function osNovaSalvar(acao){
       var n=osZapNumero(zapCel), url=(n?'https://wa.me/'+n:'https://wa.me/')+'?text='+encodeURIComponent(osMsgTexto(dadosMsg));
       if(zapJanela) zapJanela.location.href=url; else osAbrirZap(zapCel, osMsgTexto(dadosMsg));
     }
-    osAbrir(numero, 'itens');
+    osAbrir(numero, 'doc');
     if(acao==='imagem') setTimeout(function(){ osGerarImagem(dadosMsg); },500);
   }).catch(function(e){
     if(zapJanela) zapJanela.close();
@@ -1029,6 +1030,7 @@ function osNovaSalvar(acao){
 // ── abrir uma OS ──
 function osAbrir(numero, aba){
   if(aba) OS.aba=aba;
+  else if(!OS.atual || OS.atual.os.numero!==Number(numero)) OS.aba='doc';   // abrir uma OS mostra o documento completo
   osApi('/api/os/'+numero).then(function(d){
     OS.atual=d; OS.vista='os';
     document.querySelectorAll('#os-sub button').forEach(function(b){ b.classList.remove('on'); });
@@ -1068,14 +1070,14 @@ function osRender(){
     if(osAdm()) h+='<button class="os-b del" onclick="osExcluir()">🗑 Excluir</button>';
     h+='</div>';
   }
-  var abas=[['cadastro','Cadastro'],['itens','Itens e honorário',d.itens.length],['recebimentos','Recebimentos',d.recebimentos.length],
+  var abas=[['doc','📄 Ordem de Serviço'],['cadastro','Cadastro'],['itens','Itens e honorário',d.itens.length],['recebimentos','Recebimentos',d.recebimentos.length],
             ['ocorrencias','Ocorrências',d.ocorrencias.length],['pendencias','Pendências',d.pendencias.filter(function(p){return !p.resolvida;}).length],
             ['documentos','Documentos',d.documentos.length]];
   h+='<div class="os-abas">';
   abas.forEach(function(a){ h+='<button class="'+(OS.aba===a[0]?'on':'')+'" onclick="OS.aba=\''+a[0]+'\';osRender()">'+a[1]+(a[2]?'<span class="cnt">'+a[2]+'</span>':'')+'</button>'; });
   h+='</div><div id="os-aba-corpo"></div>';
   osE('osv-os').innerHTML=h;
-  ({cadastro:osAbaCadastro,itens:osAbaItens,recebimentos:osAbaReceb,ocorrencias:osAbaOcor,pendencias:osAbaPend,documentos:osAbaDocs}[OS.aba]||osAbaCadastro)();
+  ({doc:osAbaDoc,cadastro:osAbaCadastro,itens:osAbaItens,recebimentos:osAbaReceb,ocorrencias:osAbaOcor,pendencias:osAbaPend,documentos:osAbaDocs}[OS.aba]||osAbaCadastro)();
 }
 function osFichaCli(c){
   if(!c) return '';
@@ -1385,36 +1387,97 @@ function osJanela(titulo, corpo){
   w.document.close();
 }
 function osCabecalho(){ return '<div class="cab"><div><h1>Diego Despachante</h1><div>Caetano Despachante Ltda · CNPJ 08.965.960/0001-06 · Anápolis-GO</div></div>'; }
+// ═══ OS COMPLETA — documento no modelo do BitDesp (mesma coisa na tela e na impressão) ═══
+var BD_CSS=
+'.bd{background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.35;max-width:840px;margin:0 auto;padding:16px 18px 10px}'+
+'.bd *{box-sizing:border-box}'+
+'.bd-cab{display:flex;align-items:center;border:1.5px solid #000;padding:8px 12px;gap:14px}'+
+'.bd-logo{width:86px;height:58px;border-radius:8px;background:#0f3d33;color:#f4c64e;font-size:34px;font-weight:900;display:flex;align-items:center;justify-content:center;flex:none}'+
+'.bd-emp{flex:1;text-align:center}.bd-emp b{display:block;font-size:17px;letter-spacing:.02em}.bd-emp div{font-size:11.5px}'+
+'.bd-lin{display:flex;align-items:center;justify-content:space-between;border:1.5px solid #000;border-top:0;padding:5px 12px;font-size:13px;gap:10px}'+
+'.bd-lin .n{font-size:16px}.bd-lin small{font-size:9.5px;display:block;line-height:1.1}'+
+'.bd-faixa{background:#000;color:#fff;font-weight:800;font-size:14px;padding:4px 10px;margin-top:6px;letter-spacing:.02em}'+
+'.bd-box{border:1.5px solid #000;border-top:0;padding:4px 10px 6px}'+
+'.bd-r{display:flex;flex-wrap:wrap;gap:1px 14px;padding:1px 0}.bd-r>span{flex:1 1 auto}.bd-r>.dir{flex:0 0 auto;text-align:right;min-width:36%}'+
+'.bd-r b{font-weight:700}'+
+'.bd-fora{padding:3px 10px 0}'+
+'.bd-tab{width:76%;margin:6px auto 0;border-collapse:collapse}'+
+'.bd-tab th{background:#7f7f7f;color:#fff;font-weight:400;text-align:left;padding:3px 8px;border:0}'+
+'.bd-tab td{background:#d0d0d0;border:0;border-bottom:2px solid #fff;padding:2px 8px;color:#000}'+
+'.bd-tab .v{text-align:right;white-space:nowrap}'+
+'.bd-tot{width:76%;margin:4px auto 0;display:grid;grid-template-columns:1fr 1fr 1fr;font-size:12.5px;row-gap:1px}'+
+'.bd-tot b{font-weight:700}.bd-tot .c3{text-align:right}'+
+'.bd-tot .dv{grid-column:3;text-align:right;border-top:1.5px solid #000;padding-top:2px;margin-top:3px}'+
+'.bd-obs{border:1.5px solid #000;border-top:0;min-height:120px;padding:8px 10px;white-space:pre-wrap}'+
+'.bd-ass{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}'+
+'.bd-ass>div{border:1.5px solid #000;padding:8px 10px 6px;text-align:center;font-size:10.5px;display:flex;flex-direction:column;justify-content:space-between;min-height:118px}'+
+'.bd-ass .ln{border-top:1px solid #000;margin:26px 18px 0;padding-top:3px;font-size:11px}'+
+'.bd-rod{text-align:center;font-size:11.5px;margin-top:8px}'+
+'.bd table{font-size:12.5px!important}.bd th{text-transform:none!important;letter-spacing:0!important;font-size:12.5px!important;color:#fff!important;font-family:Arial,sans-serif!important}'+
+'.bd td{font-family:Arial,sans-serif!important}';
+function osPlacaFmt(p){ p=String(p||'').toUpperCase().replace(/[^A-Z0-9]/g,''); return p.length===7?p.slice(0,3)+'-'+p.slice(3):p; }
+function osBRL(v){ v=Number(v)||0; return (v<0?'-':'')+osR(Math.abs(v)); }
+function osDocHtml(d){
+  var o=d.os, c=d.cliente||{}, r=d.responsavel||{}, v=d.veiculo||{}, emp=(OS.cad||{}).empresa||{};
+  var orc=o.status==='orcamento';
+  var V=function(rot,val,cls){ return '<span'+(cls?' class="'+cls+'"':'')+'>'+rot+': <b>'+osEsc(val==null?'':val)+'</b></span>'; };
+  var fones=[c.cel,c.fone].filter(Boolean).join(' / ');
+  var itens=d.itens.map(function(i){ return '<tr><td>'+osEsc(i.descricao)+(i.qtd!=1?' ('+osN(i.qtd).replace(',00','')+'x)':'')+'</td><td class="v">'+osBRL(i.valor*i.qtd)+'</td></tr>'; }).join('');
+  if(o.desconto>0) itens+='<tr><td>DESCONTO</td><td class="v">'+osBRL(-o.desconto)+'</td></tr>';
+  var agora=new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).replace(',','');
+  var nomeAss=osEsc((d.responsavel&&d.responsavel.nome)||c.nome||'');
+  return '<div class="bd">'+
+    '<div class="bd-cab"><div class="bd-logo">'+osEsc((emp.empresa_nome||'D').slice(0,1))+'</div><div class="bd-emp"><b>'+osEsc((emp.empresa_nome||'Diego Despachante').toUpperCase())+'</b>'+
+      (emp.empresa_endereco?'<div>'+osEsc(emp.empresa_endereco.toUpperCase())+(emp.empresa_cidade?' - '+osEsc(emp.empresa_cidade.toUpperCase()):'')+'</div>':(emp.empresa_cidade?'<div>'+osEsc(emp.empresa_cidade.toUpperCase())+'</div>':''))+
+      (emp.empresa_fone?'<div>TELEFONE(S): '+osEsc(emp.empresa_fone)+'</div>':'')+(emp.empresa_email?'<div>'+osEsc(emp.empresa_email)+'</div>':'')+'</div></div>'+
+    '<div class="bd-lin"><span class="n">'+(orc?'ORÇAMENTO':'ORDEM DE SERVIÇO')+' Nº <b>'+o.numero+'</b></span>'+
+      '<span><small>Usuário:</small>'+osEsc((o.user_nome||'').toUpperCase())+'</span>'+
+      (o.processo_tipo?'<span><small>Tipo de processo:</small>'+osEsc(o.processo_tipo)+'</span>':'')+
+      '<span>'+(orc?'VÁLIDO ATÉ: <b>'+osBr(o.validade)+'</b>':'DATA DE EMISSÃO: <b>'+osEsc(agora)+'</b>')+'</span></div>'+
+    '<div class="bd-faixa">PROPRIETÁRIO</div><div class="bd-box">'+
+      '<div class="bd-r">'+V('Nome/Razão Social',c.nome)+V('CPF/CNPJ',c.cpf_cnpj,'dir')+'</div>'+
+      '<div class="bd-r">'+V('Responsável/Revenda',r.nome)+V('Fone Responsável/Revenda',r.cel||r.fone,'dir')+'</div>'+
+      '<div class="bd-r">'+V('Endereço',[c.endereco,c.numero].filter(Boolean).join(', '))+V('Bairro',c.bairro,'dir')+'</div>'+
+      '<div class="bd-r">'+V('Complemento',c.complemento)+V('CEP',c.cep,'dir')+'</div>'+
+      '<div class="bd-r">'+V('Cidade',c.cidade)+V('Telefone(s)',fones,'dir')+'</div></div>'+
+    '<div class="bd-faixa">VEÍCULO</div><div class="bd-box">'+
+      '<div class="bd-r">'+V('Placa',osPlacaFmt(v.placa))+V('Renavam',v.renavam)+V('Chassi',v.chassi)+V('Marca/Modelo',v.modelo)+'</div>'+
+      '<div class="bd-r">'+V('Ano Fab/Mod',[v.ano_fab,v.ano_mod].filter(Boolean).join('/')||v.ano||'')+V('Combustível',v.combustivel)+V('Cor',v.cor)+V('Categoria',v.categoria)+'</div>'+
+      '<div class="bd-r">'+V('Data de aquisição',osBr(o.data_nf_crv))+V('Município',v.municipio)+'</div>'+
+      '<div class="bd-r">'+V('Restrição',o.restricao_financeira)+V('Financeira',o.financeira,'dir')+'</div></div>'+
+    '<div class="bd-fora"><div class="bd-r">'+V('Proprietário Anterior',o.proprietario_anterior)+V('Protocolo',o.protocolo,'dir')+'</div>'+
+      '<div class="bd-r">'+V('Data Nota/CRV',osBr(o.data_nf_crv))+V('Valor Nota/CRV',o.valor_nf_crv!=null?osR(o.valor_nf_crv):osR(0))+'<span></span></div></div>'+
+    '<div class="bd-faixa">TAXAS/DÉBITOS/DESPESAS</div>'+
+      '<table class="bd-tab"><tr><th>Descrição</th><th class="v">Valor</th></tr>'+(itens||'<tr><td colspan="2">—</td></tr>')+'</table>'+
+      '<div class="bd-tot"><span>Custos <b>'+osR(o.itens_valor-(o.desconto||0))+'</b></span><span>Honorário <b>'+osR(o.honorario)+'</b></span><span class="c3">Valor Total <b>'+osR(o.total)+'</b></span>'+
+        '<span></span><span></span><span class="c3">Adiantado <b>'+osR(o.pago)+'</b></span>'+
+        '<span></span><span></span><span class="dv">Devedor <b>'+osR(o.devedor)+'</b></span></div>'+
+    '<div class="bd-faixa" style="margin-top:12px">OBSERVAÇÕES</div><div class="bd-obs">'+osEsc(o.obs_cliente||'')+'</div>'+
+    '<div class="bd-ass"><div><div>Autorizo a execução do serviço apresentado neste documento estando ciente dos valores cobrados e concordado com os mesmos. Também me comprometo a fornecer toda documentação necessária para conclusão do processo. Voluntariamente também decido ser representado pelo despachante emissor deste documento, junto à estampadora, na confecção e instalação da(s) placa(s), se aplicada neste processo. (Res. 780/2019-Contran).</div><div class="ln">'+nomeAss+'</div></div>'+
+      '<div><div>Declaro que conferi e retirei o(s) documento(s) conforme contratado nesta ordem de serviço, foram esclarecidas todas as dúvidas quanto débitos que incidem sobre o veículo isentando o despachante de quaisquer responsabilidade.<br><br>Retirado em ____/____/_______</div><div class="ln">'+nomeAss+'</div></div></div>'+
+    (o.codigo_web?'<div class="bd-rod">Código web do processo: <b>'+osEsc(o.codigo_web)+'</b></div>':'')+
+  '</div>';
+}
+function osAbaDoc(){
+  var d=OS.atual, o=d.os;
+  if(!osE('bd-css')){ var st=document.createElement('style'); st.id='bd-css'; st.textContent=BD_CSS; document.head.appendChild(st); }
+  var h='<div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px;flex-wrap:wrap">'+
+    '<span class="os-small" style="margin-right:auto;align-self:center">É assim que sai impresso para o cliente assinar. Para alterar algo, use as abas Cadastro, Itens e Recebimentos.</span>'+
+    '<button class="os-b" onclick="OS.aba=\'cadastro\';osRender()">✎ Editar cadastro</button>'+
+    '<button class="os-b pri" onclick="osImprimir()">🖨 Imprimir / salvar PDF</button></div>'+
+    '<div style="background:#e9ecef;padding:18px;border-radius:10px;overflow-x:auto">'+osDocHtml(d)+'</div>';
+  if(o.obs) h+='<div class="os-box" style="margin-top:12px"><h4>Observação interna (não sai na impressão)</h4><div style="white-space:pre-wrap">'+osEsc(o.obs)+'</div></div>';
+  osE('os-aba-corpo').innerHTML=h;
+}
 function osImprimir(){
-  var d=OS.atual, o=d.os, c=d.cliente||{}, v=d.veiculo||{}, r=d.responsavel||{};
-  var L=function(rot,val,larg){ return '<span class="cp"'+(larg?' style="flex-basis:'+larg+'"':'')+'>'+rot+': <b>'+osEsc(val||'')+'</b></span>'; };
-  var it=d.itens.map(function(i){ var t=i.valor*i.qtd; return '<tr><td>'+osEsc(i.descricao)+(i.qtd!=1?' ('+osN(i.qtd).replace(',00','')+'x)':'')+'</td><td class="r">'+(t<0?'-':'')+osR(Math.abs(t))+'</td></tr>'; }).join('');
-  osJanela((o.status==='orcamento'?'Orçamento ':'OS ')+o.numero,
-    '<style>.bx{border:1.5px solid #000;margin-bottom:8px}.tt{background:#000;color:#fff;font-weight:800;font-size:15px;padding:4px 10px}'+
-    '.ln{display:flex;flex-wrap:wrap;padding:3px 10px;font-size:13px;gap:2px 18px}.cp{flex:1 1 20%}.cp b{font-weight:700}'+
-    '.ti{width:80%;margin:6px auto;border-collapse:collapse}.ti th{background:#7f7f7f;color:#fff;text-align:left;font-weight:500;padding:4px 10px;border:0}'+
-    '.ti td{background:#d9d9d9;border:0;border-bottom:3px solid #fff;padding:3px 10px;font-size:13px}.tot{display:flex;justify-content:space-between;width:80%;margin:6px auto;font-size:14px}</style>'+
-    osCabecalho()+'<div style="text-align:right"><h1>'+(o.status==='orcamento'?'ORÇAMENTO':'ORDEM DE SERVIÇO')+' Nº '+o.numero+'</h1><div>'+osEsc(o.data_abertura)+' · '+osEsc(OS_STATUS[o.status])+'</div>'+
-      (o.processo_tipo?'<div><b>'+osEsc(o.processo_tipo)+'</b></div>':'')+(o.protocolo?'<div>Protocolo '+osEsc(o.protocolo)+'</div>':'')+'</div></div>'+
-    '<div class="bx" style="margin-top:10px"><div class="tt">PROPRIETÁRIO</div>'+
-      '<div class="ln">'+L('Nome/Razão Social',c.nome,'60%')+L('CPF/CNPJ',c.cpf_cnpj)+'</div>'+
-      '<div class="ln">'+L('Responsável/Revenda',r.nome,'60%')+L('Fone Responsável/Revenda',r.cel||r.fone)+'</div>'+
-      '<div class="ln">'+L('Endereço',[c.endereco,c.numero].filter(Boolean).join(', '),'60%')+L('Bairro',c.bairro)+'</div>'+
-      '<div class="ln">'+L('Complemento',c.complemento,'60%')+L('CEP',c.cep)+'</div>'+
-      '<div class="ln">'+L('Cidade',c.cidade,'60%')+L('Telefone(s)',[c.cel,c.fone].filter(Boolean).join(' / '))+'</div></div>'+
-    '<div class="bx"><div class="tt">VEÍCULO</div>'+
-      '<div class="ln">'+L('Placa',v.placa)+L('Renavam',v.renavam)+L('Chassi',v.chassi)+L('Marca/Modelo',v.modelo)+'</div>'+
-      '<div class="ln">'+L('Ano Fab/Mod',[v.ano_fab,v.ano_mod].filter(Boolean).join('/')||v.ano)+L('Combustível',v.combustivel)+L('Cor',v.cor)+L('Categoria',v.categoria)+'</div>'+
-      '<div class="ln">'+L('Restrição',o.restricao_financeira,'60%')+L('Financeira',o.financeira)+'</div></div>'+
-    '<div class="ln">'+L('Proprietário Anterior',o.proprietario_anterior,'60%')+'</div>'+
-    '<div class="ln">'+L('Data Nota/CRV',osBr(o.data_nf_crv))+L('Valor Nota/CRV',o.valor_nf_crv!=null?osR(o.valor_nf_crv):'')+'</div>'+
-    '<div class="bx" style="border:0"><div class="tt">TAXAS / DÉBITOS / DESPESAS</div>'+
-      '<table class="ti"><tr><th>Descrição</th><th style="text-align:right">Valor</th></tr>'+(it||'<tr><td colspan="2">—</td></tr>')+'</table>'+
-      '<div class="tot"><span>Custos <b>'+osR(o.itens_valor)+'</b></span><span>Honorário <b>'+osR(o.honorario)+'</b></span>'+(o.desconto>0?'<span>Desconto <b>− '+osR(o.desconto)+'</b></span>':'')+'<span>Valor Total <b>'+osR(o.total)+'</b></span></div>'+
-      '<div class="tot" style="justify-content:flex-end;gap:30px"><span>Adiantado <b>'+osR(o.pago)+'</b></span><span>Saldo <b>'+osR(o.devedor)+'</b></span></div></div>'+
-    (o.obs?'<h2>Observações</h2><div style="white-space:pre-wrap">'+osEsc(o.obs)+'</div>':'')+
-    (o.status==='orcamento'&&o.validade?'<p>Orçamento válido até '+osBr(o.validade)+'.</p>':'')+
-    '<div class="ass">_______________________________________<br>'+osEsc(c.nome||'Cliente')+'</div>');
+  var d=OS.atual, o=d.os;
+  var w=window.open('','_blank'); if(!w){ osMsg('Libere os pop-ups para imprimir.','err'); return; }
+  w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+(o.status==='orcamento'?'Orçamento ':'OS ')+o.numero+'</title><style>'+BD_CSS+
+    'body{margin:0;background:#fff}.bd{padding:6mm 8mm}@page{size:A4;margin:6mm}@media print{.nao-imp{display:none}}'+
+    '.nao-imp{text-align:center;padding:10px}.nao-imp button{font-size:15px;padding:8px 22px;cursor:pointer}</style></head><body>'+
+    '<div class="nao-imp"><button onclick="window.print()">🖨 Imprimir / salvar PDF</button></div>'+osDocHtml(d)+'</body></html>');
+  w.document.close();
+  setTimeout(function(){ try{ w.focus(); w.print(); }catch(e){} },400);
 }
 function osRecibo(){
   var d=OS.atual, o=d.os, fav=d.responsavel||d.cliente||{};
@@ -1699,7 +1762,7 @@ function osPermSalvar(uid, el){
   var tr=el.closest('tr'), q=function(k){ return tr.querySelector('[data-k="'+k+'"] input').checked; };
   osApi('/api/os/permissoes','PUT',{id:uid, ver_lucro:q('ver_lucro'), dar_baixa:q('dar_baixa')}).then(function(){ osMsg('✓ Permissão salva.'); }).catch(osErr);
 }
-var OS_EMP_CAMPOS=['empresa_nome','empresa_fone','empresa_cidade','empresa_endereco','pix_chave','pix_nome','pix_cidade','pix_banco'];
+var OS_EMP_CAMPOS=['empresa_nome','empresa_fone','empresa_cidade','empresa_endereco','empresa_email','pix_chave','pix_nome','pix_cidade','pix_banco'];
 function osEmpresaSalvar(){
   var c={}; OS_EMP_CAMPOS.forEach(function(k){ c[k]=osE('osf-'+k).value; });
   osApi('/api/os-config','POST',c).then(function(){ osMsg('✓ Dados da empresa salvos.'); osCarregarCad(true); }).catch(osErr);

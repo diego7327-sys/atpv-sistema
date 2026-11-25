@@ -212,7 +212,7 @@ SEED_PENDENCIAS = ["PONTUAÇÃO", "SUSPENSÃO", "SUSPENSÃO CNH", "RECEBER",
                    "PROCESSO JUDICIAL", "ALT IMETRO"]
 
 # Dados da empresa que saem no orçamento enviado ao cliente (Financeiro → Cadastros)
-CFG_EMPRESA = ("empresa_nome", "empresa_fone", "empresa_endereco", "empresa_cidade",
+CFG_EMPRESA = ("empresa_nome", "empresa_fone", "empresa_endereco", "empresa_cidade", "empresa_email",
                "pix_chave", "pix_nome", "pix_cidade", "pix_banco")
 
 STATUS_OS = {
