@@ -1490,7 +1490,7 @@ function osAbaReq(){
     (falta.length||faltaV.length?'<div class="alert" style="display:block;margin:0 0 12px;background:rgba(255,165,2,.1);border:1px solid rgba(255,165,2,.4);color:var(--warn)">⚠ Falta no cadastro: <b>'+falta.concat(faltaV).join(', ')+'</b>. O DETRAN recusa requerimento incompleto — <a href="#" onclick="OS.aba=\'cadastro\';osRender();return false" style="color:var(--acc2)">completar no Cadastro →</a></div>':'')+
     '<div class="rq-grid">'+OS_REQS.map(function(m){
       return '<button type="button" class="rq-card" onclick="osReqAbrir(\''+m.id+'\')"><b>'+osEsc(m.nome)+'</b><span>'+osEsc(m.sub)+'</span></button>'; }).join('')+'</div>'+
-    '<p class="os-small" style="margin-top:10px">Todos saem com a declaração do despachante, o carimbo e a sua assinatura (a mesma da procuração ATPV, em Configurações). A linha de assinatura do cliente já vai marcada para a assinatura pelo WhatsApp.</p></div>';
+    '<p class="os-small" style="margin-top:10px">Todos saem com o carimbo do despachante e a sua assinatura (a mesma da procuração ATPV, em Configurações). A linha de assinatura do cliente já vai marcada para a assinatura pelo WhatsApp.</p></div>';
   osE('os-aba-corpo').innerHTML=h;
 }
 function osReqFalta(d,vei){
@@ -1528,7 +1528,7 @@ function osReqDados(){
   return {nome:up(c.nome), doc:up(c.cpf_cnpj), rg:up(c.rg)+(c.rg_org?' '+up(c.rg_org):''), end:up(c.endereco), num:up(c.numero), compl:up(c.complemento),
     bairro:up(c.bairro), mun:mun, uf:uf, cep:up(c.cep), cel:up(c.cel), fone:up(c.fone), email:(c.email||'').trim().toLowerCase(),
     placa:up(v.placa), modelo:up(v.modelo), chassi:up(v.chassi), renavam:up(v.renavam), anoFab:up(v.ano_fab), anoMod:up(v.ano_mod),
-    local:(cfg.cidade||'ANÁPOLIS/GO').toUpperCase(), dataExt:Number(p[2])+' de '+MES[Number(p[1])-1]+' de '+p[0], cfg:cfg};
+    local:(cfg.cidade||'ANÁPOLIS/GO').toUpperCase(), localTxt:(function(c){ c=(c||'ANÁPOLIS/GO').toLowerCase().replace(/(^|[\s\/-])([a-zà-ú])/g,function(m,p1,p2){ return p1+p2.toUpperCase(); }); return c.replace(/\/([a-z]{2})$/i,function(m,u){ return '/'+u.toUpperCase(); }); })(cfg.cidade), dataExt:Number(p[2])+' de '+MES[Number(p[1])-1]+' de '+p[0], cfg:cfg};
 }
 function osReqGerar(id, modo){
   var m=OS_REQS.filter(function(x){ return x.id===id; })[0];
@@ -1549,170 +1549,190 @@ function osReqGerar(id, modo){
   osFechar(); osMsg('✓ '+m.nome+' gerado.');
 }
 
-// ── motor do PDF ──
-function rqNovo(){ var J=window.jspdf.jsPDF; var doc=new J({unit:'mm',format:'a4'}); return {doc:doc,y:14,ML:16,TW:178,W:210}; }
-function rqPg(S,h){ if(S.y+h>286){ S.doc.addPage(); S.y=16; } }
-function rqFit(S,t,x,y,maxW,sz,min,al){ var d=S.doc; d.setFontSize(sz); while(sz>(min||6) && d.getTextWidth(t)>maxW){ sz-=0.2; d.setFontSize(sz); } d.text(t,x,y,al?{align:al}:undefined); }
-function rqCab(S,linhas){ var d=S.doc; d.setFont('helvetica','bold'); d.setTextColor(25,25,25);
-  linhas.forEach(function(l,i){ d.setFontSize(i===linhas.length-1?10:8); d.text(l,S.W/2,S.y,{align:'center'}); S.y+=i===linhas.length-1?5:3.8; }); S.y+=1; }
-function rqTit(S,t,sub){ var d=S.doc; d.setDrawColor(20,20,20); d.setLineWidth(0.5); d.line(S.ML,S.y,S.ML+S.TW,S.y); S.y+=6;
-  d.setFont('helvetica','bold'); d.setTextColor(15,15,15); rqFit(S,t,S.W/2,S.y,S.TW,12.5,9,'center'); S.y+=sub?4.6:6;
-  if(sub){ d.setFont('helvetica','normal'); d.setFontSize(8); d.setTextColor(70,70,70); d.text(sub,S.W/2,S.y,{align:'center'}); S.y+=5; } }
-function rqSec(S,t){ rqPg(S,14); var d=S.doc; d.setFillColor(30,36,54); d.roundedRect(S.ML,S.y,S.TW,5.4,1.2,1.2,'F');
-  d.setFont('helvetica','bold'); d.setFontSize(7.6); d.setTextColor(255,255,255); d.text(t,S.W/2,S.y+3.8,{align:'center'}); S.y+=8.6; d.setTextColor(0,0,0); }
-function rqCampos(S,cols){ rqPg(S,10); var d=S.doc, x=S.ML;
-  cols.forEach(function(c){ var w=S.TW*c[2];
-    d.setFont('helvetica','normal'); d.setFontSize(6.3); d.setTextColor(110,110,110); d.text(c[0],x,S.y);
-    d.setTextColor(10,10,10); d.setFont('helvetica','normal');
-    if(c[1]) rqFit(S,c[1],x,S.y+4.4,w-3,9.6,6.4); else { d.setDrawColor(150,150,150); d.setLineWidth(0.25); d.line(x,S.y+4.8,x+w-4,S.y+4.8); }
-    x+=w; });
-  S.y+=9; }
-function rqPar(S,t,o){ o=o||{}; var d=S.doc, sz=o.sz||9.2; d.setFont('helvetica',o.b?'bold':'normal'); d.setFontSize(sz); d.setTextColor(15,15,15);
-  var W2=o.w||S.TW, lines=d.splitTextToSize(t,W2), lh=sz*0.3528*1.32; rqPg(S,lines.length*lh+2);
-  if(o.c){ lines.forEach(function(l){ d.text(l,S.W/2,S.y,{align:'center'}); S.y+=lh; }); }
-  else { lines.forEach(function(l,i){ d.text(l,(o.x||S.ML),S.y,(i<lines.length-1&&!o.nj)?{align:'justify',maxWidth:W2}:undefined); S.y+=lh; }); }
-  S.y+=o.esp==null?2:o.esp; }
-function rqChecks(S,itens){ rqPg(S,8); var d=S.doc, x=S.ML; d.setFont('helvetica','normal'); d.setFontSize(9); d.setTextColor(15,15,15);
-  itens.forEach(function(it){ var t='( '+(it[1]?'X':'  ')+' )  '+it[0]; var w=d.getTextWidth(t)+9;
-    if(x+w>S.ML+S.TW){ x=S.ML; S.y+=5.4; }
-    d.text('(',x,S.y); d.setFont('helvetica','bold'); d.text(it[1]?'X':'',x+2.1,S.y); d.setFont('helvetica','normal'); d.text(')  '+it[0],x+4.6,S.y); x+=w; });
-  S.y+=7; }
-function rqData(S,D){ rqPg(S,8); var d=S.doc; d.setFont('helvetica','normal'); d.setFontSize(9.5); d.setTextColor(15,15,15); d.text(D.local+', '+D.dataExt+'.',S.ML+S.TW,S.y,{align:'right'}); S.y+=4; }
-function rqAssin(S,rot){ rqPg(S,20); S.y+=13; var d=S.doc, x1=S.W/2-55, x2=S.W/2+55;
-  d.setFont('helvetica','normal'); d.setFontSize(8); d.setTextColor(255,255,255);            // marca invisível p/ assinatura digital (WhatsApp)
-  var anc='<<signer1>>'; d.text(anc,S.W/2-d.getTextWidth(anc)/2,S.y-2.5);
-  d.setDrawColor(60,60,60); d.setLineWidth(0.3); d.line(x1,S.y,x2,S.y); S.y+=3.8;
-  d.setFontSize(7.6); d.setTextColor(80,80,80); d.text(rot,S.W/2,S.y,{align:'center'}); S.y+=6; d.setTextColor(0,0,0); }
-// declaração + carimbo com a assinatura (mesmo padrão da procuração ATPV)
-function rqDesp(S,D,txt,atesto){ if(!D.carimbo) return; rqPg(S,32); var d=S.doc, cfg=D.cfg||{}, decW=S.TW-70, cbW=64, cbX=S.ML+S.TW-cbW, y0=S.y;
-  d.setFont('helvetica','normal'); d.setFontSize(7.2); var ls=d.splitTextToSize(txt,decW-8), decH=Math.max(26,8+ls.length*3.3);
-  d.setDrawColor(190,190,190); d.setLineWidth(0.3); d.roundedRect(S.ML,y0,decW,decH,1.5,1.5,'D');
-  d.setFont('helvetica','bold'); d.setFontSize(7); d.setTextColor(40,40,40); d.text('DECLARAÇÃO DO DESPACHANTE',S.ML+4,y0+4.6);
-  d.setFont('helvetica','normal'); d.setFontSize(7.2); d.setTextColor(50,50,50); d.text(ls,S.ML+4,y0+8.6);
-  var cbH=25; d.setDrawColor(70,70,70); d.setLineWidth(0.4); d.rect(cbX,y0,cbW,cbH,'D');
-  d.setFontSize(4.8); d.setTextColor(30,30,30);
-  atesto.forEach(function(l,i){ d.text(l,cbX+cbW/2,y0+3.4+i*2.5,{align:'center'}); });
-  if(cfg.assinatura){ try{ d.addImage(cfg.assinatura,'PNG',cbX+17,y0+9.4,30,7.5,'assinDesp','FAST'); }catch(e){ try{ d.addImage(cfg.assinatura,'PNG',cbX+17,y0+9.4,30,7.5); }catch(e2){} } }
-  d.setLineWidth(0.25); d.line(cbX+6,y0+17.4,cbX+cbW-6,y0+17.4);
-  d.setFont('helvetica','bold'); rqFit(S,'DIEGO CAETANO SILVA — '+(cfg.nome||'DIEGO DESPACHANTE').toUpperCase(),cbX+cbW/2,y0+19.9,cbW-6,5.4,3.6,'center');
-  d.setFont('helvetica','normal'); d.setFontSize(5); d.text('CAETANO DESPACHANTE LTDA · CÓD.: '+(cfg.cod||'2670'),cbX+cbW/2,y0+22.4,{align:'center'});
-  S.y=y0+Math.max(decH,cbH)+4; d.setTextColor(0,0,0); }
-function rqLista(S,tit,itens){ var d=S.doc, sz=6.6, lh=sz*0.3528*1.3; rqPg(S,8);
-  if(tit){ d.setFont('helvetica','bold'); d.setFontSize(7); d.setTextColor(40,40,40); var tl=d.splitTextToSize(tit,S.TW); d.text(tl,S.ML,S.y); S.y+=3.2*tl.length+0.4; }
-  d.setFont('helvetica','normal'); d.setFontSize(sz); d.setTextColor(60,60,60);
-  itens.forEach(function(it){ var ls=d.splitTextToSize(it,S.TW-4); rqPg(S,ls.length*lh); d.text(ls,S.ML+2,S.y); S.y+=ls.length*lh+0.6; }); S.y+=1.2; }
-function rqRodape(S,t){ var d=S.doc, n=d.getNumberOfPages(); for(var i=1;i<=n;i++){ d.setPage(i); d.setDrawColor(200,200,200); d.setLineWidth(0.3); d.line(S.ML,289,S.ML+S.TW,289);
-  d.setFont('helvetica','italic'); d.setFontSize(6.4); d.setTextColor(140,140,140); d.text(t,S.W/2,292.5,{align:'center'}); } d.setPage(n); }
-
-var RQ_TXT_DESP='Declaro, sob as penas da lei, que a assinatura aposta neste instrumento foi colhida em conformidade com o procedimento adotado, assumindo a responsabilidade civil e criminal pelas informações e atos declaratórios aqui consignados, nos limites da atuação profissional.';
-var RQ_ROD_DETRAN='Departamento Estadual de Trânsito de Goiás — www.detran.go.gov.br — Av. Atílio Corrêa Lima, s/n, Cidade Jardim — CEP 74.425-091 — Goiânia/GO';
+// ── motor do PDF (visual da procuração modelo: título espaçado, faixas azul-marinho, texto corrido) ──
+var RQ_NAVY=[31,56,100], RQ_FUNDO=[243,245,249], RQ_OURO=[176,138,78];
+function rqNovo(){ var J=window.jspdf.jsPDF; var doc=new J({unit:'mm',format:'a4'}); return {doc:doc,y:16,ML:20,TW:170,W:210}; }
+function rqPg(S,h){ if(S.y+h>284){ S.doc.addPage(); S.y=18; } }
+function rqCor(d,c){ d.setTextColor(c[0],c[1],c[2]); }
+// texto com letras espaçadas (centralizado ou à esquerda)
+function rqEsp(S,t,x,y,sz,cs,centro){ var d=S.doc; d.setFontSize(sz); var w=d.getTextWidth(t)+cs*(t.length-1); d.text(t,centro?x-w/2:x,y,{charSpace:cs}); return w; }
+// texto corrido com **negrito**, justificado; devolve a altura (draw=false só mede)
+function rqRich(S,txt,x,w,sz,o){ o=o||{}; var d=S.doc, lh=sz*0.3528*(o.lh||1.42), y=S.y, total=0, fonte=o.font||'times', neg=false;
+  String(txt).split('\n').forEach(function(par,pi){
+    var pal=[];
+    par.split(/\s+/).forEach(function(w){ if(!w) return; var runs=[];
+      w.split('**').forEach(function(seg,i){ if(i>0) neg=!neg; if(seg) runs.push({t:seg,b:neg||!!o.b}); });
+      if(runs.length) pal.push({runs:runs}); });
+    d.setFontSize(sz); d.setFont(fonte,'normal'); var sp=d.getTextWidth(' ');
+    var med=function(p){ return p.runs.reduce(function(a,r){ d.setFont(fonte,r.b?'bold':(o.i?'italic':'normal')); r.w=d.getTextWidth(r.t); return a+r.w; },0); };
+    var linhas=[], cur=[], cw=0;
+    pal.forEach(function(p){ p.w=med(p); var nw=cw+(cur.length?sp:0)+p.w; if(cur.length && nw>w){ linhas.push(cur); cur=[p]; cw=p.w; } else { cur.push(p); cw=nw; } });
+    if(cur.length) linhas.push(cur);
+    linhas.forEach(function(l,li){
+      if(o.draw!==false){
+        var ult=li===linhas.length-1, soma=l.reduce(function(a,p){ return a+p.w; },0);
+        var gap=(!ult && !o.nj && l.length>1)?(w-soma)/(l.length-1):sp, cx=x;
+        if(o.c) cx=x+(w-(soma+sp*(l.length-1)))/2;
+        rqCor(d,o.cor||[20,20,20]);
+        l.forEach(function(p){ var rx=cx; p.runs.forEach(function(r){ d.setFont(fonte,r.b?'bold':(o.i?'italic':'normal')); d.text(r.t,rx,y+total); rx+=r.w; }); cx+=p.w+gap; });
+      }
+      total+=lh; });
+    if(pi<String(txt).split('\n').length-1) total+=lh*0.25;
+  });
+  return total; }
+function rqTopo(S,org,tit,sub){ var d=S.doc;
+  if(org){ d.setFont('times','normal'); rqCor(d,[110,110,110]); rqEsp(S,org,S.W/2,S.y,7.4,0.6,true); S.y+=8; } else S.y+=4;
+  d.setFont('times','bold'); rqCor(d,RQ_NAVY); var sz=22, cs=2.6; d.setFontSize(sz);
+  while(sz>13 && d.getTextWidth(tit)+cs*(tit.length-1)>S.TW){ sz-=0.5; cs=Math.max(1,cs-0.12); d.setFontSize(sz); }
+  rqEsp(S,tit,S.W/2,S.y+2,sz,cs,true); S.y+=8;
+  if(sub){ d.setFont('times','italic'); rqCor(d,[95,95,95]); d.setFontSize(10); d.text(sub,S.W/2,S.y,{align:'center',maxWidth:S.TW}); S.y+=3.6; }
+  d.setDrawColor(110,110,110); d.setLineWidth(0.35); d.line(S.ML,S.y,S.ML+S.TW,S.y); d.line(S.ML,S.y+0.8,S.ML+S.TW,S.y+0.8); S.y+=7; }
+// quadro: faixa azul com o título + fundo claro com os parágrafos
+function rqCard(S,tit,pars,sz){ var d=S.doc, pad=2.8, sz2=sz||9.9, W2=S.TW-2*pad, alt=0;
+  pars=pars.filter(Boolean);
+  pars.forEach(function(p,i){ alt+=rqRich(S,p,0,W2,sz2,{draw:false})+(i<pars.length-1?1.6:0); });
+  var hb=6.6, h=hb+pad+alt+1.8; rqPg(S,h+5); var y0=S.y;
+  d.setFillColor(RQ_FUNDO[0],RQ_FUNDO[1],RQ_FUNDO[2]); d.setDrawColor(RQ_NAVY[0],RQ_NAVY[1],RQ_NAVY[2]); d.setLineWidth(0.4); d.rect(S.ML,y0,S.TW,h,'FD');
+  d.setFillColor(RQ_NAVY[0],RQ_NAVY[1],RQ_NAVY[2]); d.rect(S.ML,y0,S.TW,hb,'F');
+  d.setFont('times','bold'); d.setTextColor(255,255,255); rqEsp(S,tit,S.ML+pad,y0+4.5,8.2,1.5);
+  S.y=y0+hb+pad+3.3;
+  pars.forEach(function(p,i){ S.y+=rqRich(S,p,S.ML+pad,W2,sz2)+(i<pars.length-1?1.6:0); });
+  S.y=y0+h+5; }
+function rqTitulo(S,t){ S.y+=1.6; rqPg(S,14); var d=S.doc; d.setFont('times','bold'); rqCor(d,RQ_NAVY); rqEsp(S,t,S.ML,S.y,9.4,1.7);
+  d.setDrawColor(RQ_NAVY[0],RQ_NAVY[1],RQ_NAVY[2]); d.setLineWidth(0.35); d.line(S.ML,S.y+1.6,S.ML+S.TW,S.y+1.6); S.y+=5.8; }
+function rqPar(S,t,o){ o=o||{}; var sz=o.sz||9.9, h=rqRich(S,t,0,o.w||S.TW,sz,{draw:false,b:o.b,i:o.i}); rqPg(S,h+2);
+  S.y+=rqRich(S,t,o.x||S.ML,o.w||S.TW,sz,o); S.y+=(o.esp==null?1.8:o.esp); }
+// lista numerada com números dourados
+function rqLista(S,itens,o){ o=o||{}; var d=S.doc, sz=o.sz||9.4, ind=o.ind||6;
+  itens.forEach(function(it,i){ var num=o.nums?o.nums[i]:(i+1)+'.'; var h=rqRich(S,it,0,S.TW-ind,sz,{draw:false}); rqPg(S,h+1);
+    d.setFont('times','bold'); d.setFontSize(sz); rqCor(d,RQ_OURO); d.text(num,S.ML+(o.x||1),S.y);
+    S.y+=rqRich(S,it,S.ML+ind,S.TW-ind,sz,{nj:o.nj})+(o.gap==null?0.9:o.gap); });
+  S.y+=2; }
+function rqChecks(S,itens,rot){ rqPg(S,9); var d=S.doc, x=S.ML;
+  if(rot){ d.setFont('times','bold'); d.setFontSize(9.6); rqCor(d,RQ_NAVY); d.text(rot,x,S.y); x+=d.getTextWidth(rot)+4; }
+  d.setFont('times','normal'); d.setFontSize(10);
+  itens.forEach(function(it){ var w=d.getTextWidth(it[0])+11; if(x+w>S.ML+S.TW){ x=S.ML; S.y+=6; }
+    d.setDrawColor(RQ_NAVY[0],RQ_NAVY[1],RQ_NAVY[2]); d.setLineWidth(0.35); d.rect(x,S.y-3.1,3.6,3.6);
+    if(it[1]){ d.setFont('times','bold'); rqCor(d,RQ_NAVY); d.text('X',x+0.75,S.y); d.setFont('times','normal'); }
+    rqCor(d,[20,20,20]); d.text(it[0],x+5.4,S.y); x+=w; });
+  S.y+=7.5; }
+function rqData(S,D,esq){ rqPg(S,40); var d=S.doc; d.setFont('times','normal'); d.setFontSize(10.4); rqCor(d,[20,20,20]);
+  var t=D.localTxt+', '+D.dataExt+'.'; d.text(t,S.W/2,S.y,{align:'center'}); S.y+=6; }
+// assinatura do cliente (esquerda) + carimbo do despachante com a assinatura (direita)
+function rqFim(S,D,nome,sub,atesto){ var d=S.doc, cbW=66, cbH=28, temCb=D.carimbo; rqPg(S,cbH+6); var y0=S.y;
+  var ax1=temCb?S.ML+2:S.W/2-48, ax2=temCb?S.ML+92:S.W/2+48, ly=y0+17;
+  d.setFont('helvetica','normal'); d.setFontSize(8); d.setTextColor(255,255,255);              // marca invisível p/ assinatura pelo WhatsApp
+  var anc='<<signer1>>'; d.text(anc,(ax1+ax2)/2-d.getTextWidth(anc)/2,ly-2.5);
+  d.setDrawColor(RQ_NAVY[0],RQ_NAVY[1],RQ_NAVY[2]); d.setLineWidth(0.35); d.line(ax1,ly,ax2,ly);
+  d.setFont('times','bold'); rqCor(d,RQ_NAVY); d.setFontSize(10); var nm=nome||'Assinatura';
+  while(d.getTextWidth(nm)>ax2-ax1 && d.getFontSize()>7) d.setFontSize(d.getFontSize()-0.3);
+  d.text(nm,(ax1+ax2)/2,ly+4.4,{align:'center'});
+  d.setFont('times','normal'); d.setFontSize(8.4); rqCor(d,[95,95,95]); d.text(sub,(ax1+ax2)/2,ly+8.4,{align:'center',maxWidth:ax2-ax1});
+  if(temCb){ var cfg=D.cfg||{}, cx=S.ML+S.TW-cbW;
+    d.setDrawColor(RQ_NAVY[0],RQ_NAVY[1],RQ_NAVY[2]); d.setLineWidth(0.45); d.roundedRect(cx,y0,cbW,cbH,1.2,1.2,'D');
+    d.setFont('times','italic'); d.setFontSize(7); rqCor(d,[95,95,95]); d.text('Carimbo do despachante',cx+cbW/2,y0+3.6,{align:'center'});
+    d.setFont('helvetica','normal'); d.setFontSize(4.8); rqCor(d,[30,30,30]);
+    atesto.forEach(function(l,i){ d.text(l,cx+cbW/2,y0+7+i*2.4,{align:'center'}); });
+    if(cfg.assinatura){ try{ d.addImage(cfg.assinatura,'PNG',cx+18,y0+13,30,7.2,'assinDesp','FAST'); }catch(e){ try{ d.addImage(cfg.assinatura,'PNG',cx+18,y0+13,30,7.2); }catch(e2){} } }
+    d.setDrawColor(70,70,70); d.setLineWidth(0.25); d.line(cx+7,y0+20.6,cx+cbW-7,y0+20.6);
+    d.setFont('times','bold'); d.setFontSize(7); rqCor(d,RQ_NAVY); d.text('DIEGO CAETANO SILVA — DESPACHANTE',cx+cbW/2,y0+23.4,{align:'center'});
+    d.setFont('times','normal'); d.setFontSize(6.2); rqCor(d,[60,60,60]); d.text('Caetano Despachante Ltda · Cód. '+(cfg.cod||'2670'),cx+cbW/2,y0+26.2,{align:'center'}); }
+  S.y=Math.max(y0+cbH,ly+9)+5; d.setTextColor(0,0,0); }
+function rqRodape(S){ var d=S.doc, n=d.getNumberOfPages(), t='DIEGO DESPACHANTE · Caetano Despachante Ltda · Código DETRAN 2670 · Av. Brasil, 464 - Vila Jussara · Anápolis/GO · (62) 99110-1506';
+  for(var i=1;i<=n;i++){ d.setPage(i); d.setDrawColor(190,190,190); d.setLineWidth(0.3); d.line(S.ML,287,S.ML+S.TW,287);
+    d.setFont('times','italic'); d.setFontSize(7.4); d.setTextColor(140,140,140); d.text(t,S.W/2,291,{align:'center'}); } d.setPage(n); }
+// blocos de texto reaproveitados
+function rqB(x,n){ return x?'**'+x+'**':Array(n||18).join('_'); }
+function rqTxtPessoa(D,papel){
+  return rqB(D.nome,40)+', inscrito(a) no CPF/CNPJ sob o nº '+rqB(D.doc)+', portador(a) do RG nº '+rqB(D.rg)+'.\n'+
+    'Endereço: '+([D.end,D.num?'nº '+D.num:'',D.compl,D.bairro].filter(Boolean).join(', ')||Array(40).join('_'))+', '+(D.mun?D.mun+(D.uf?'/'+D.uf:''):'__________')+', CEP '+(D.cep||'__________')+
+    ([D.cel,D.fone].filter(Boolean).length?' · Telefone: '+[D.cel,D.fone].filter(Boolean).join(' / '):'')+(D.email&&papel!=='sem-email'?' · E-mail: '+D.email:'')+'.'; }
+function rqTxtVeiculo(D){
+  return 'Placa '+rqB(D.placa,10)+' · Marca/Modelo '+rqB(D.modelo,24)+(D.anoFab||D.anoMod?' · Ano '+rqB([D.anoFab,D.anoMod].filter(Boolean).join('/')):'')+
+    '\nChassi '+rqB(D.chassi,24)+(D.renavam?' · Renavam '+rqB(D.renavam):''); }
+var RQ_ORG='ESTADO DE GOIÁS · DEPARTAMENTO ESTADUAL DE TRÂNSITO · DETRAN-GO';
+var RQ_ATESTO_REQ=['ATESTO SOB AS PENAS DA LEI CIVIL E CRIMINAL','QUE A ASSINATURA NESTE REQUERIMENTO','É DE PRÓPRIO PUNHO DO(A) INTERESSADO(A).'];
 var RQ_DOCS_GVEI=[
-  ['1 - Baixa de Restrição Administrativa (Média Monta):',[
-    'a) NOTAS FISCAIS de aquisição de equipamentos/materiais utilizados no conserto do veículo, bem como das NOTAS FISCAIS dos serviços efetivados em oficina credenciada pelo Detran (em caso de cópias, estas devem ser autenticadas);',
-    'b) Certificado de Segurança Veicular emitido pelo INMETRO (CSV);','c) Laudo Técnico de Vistoria (informatizado) emitido pelo Detran;','d) CRV (Certificado de Registro de Veículo) original;',
-    'e) Cópia da Carteira de Identidade e CPF ou CNH, juntamente com originais para conferência;','f) Comprovante de endereço - CÓPIA E ORIGINAL (vide site www.detran.go.gov.br no link: Comprovantes de Endereço);']],
-  ['2 - Baixa de Veículo:',[
-    'a) Laudo Técnico de Vistoria (com o devido recolhimento do recorte do chassi e das placas);','b) CRV (Certificado de Registro de Veículo) original;',
-    'c) Cópia da Carteira de Identidade e CPF ou CNH, juntamente com originais para conferência;','d) Comprovante de endereço - CÓPIA E ORIGINAL (vide site www.detran.go.gov.br no link: Comprovantes de Endereço);',
-    'e) Todos os débitos do veículo, até a data da baixa, deverão estar quitados;']],
-  ['3 - Cópia de Processo do Arquivo:',[
-    'a) Cópia da Carteira de Identidade ou CNH e CPF, juntamente com originais para conferência;','b) Cópia autenticada do Contrato Social e documentos dos sócios administradores, se for empresa;',
-    'c) Comprovante de endereço - CÓPIA E ORIGINAL (vide site www.detran.go.gov.br no link: Comprovantes de Endereço);',
-    'OBS: Comprovantes de endereço aceitos pelo DETRAN-GO: vide site www.detran.go.gov.br no link: Comprovantes de Endereço. Em casos de PROCURAÇÃO, seguir ainda as orientações descritas no site www.detran.go.gov.br no link: Serviços com Procuração.']]];
-function rqInteressado(S,D,tel){
-  rqSec(S,'1 - IDENTIFICAÇÃO DO(A) INTERESSADO(A)');
-  rqCampos(S,[['Nome',D.nome,.62],['CPF / CNPJ',D.doc,.38]]);
-  rqCampos(S,[['RG',D.rg,.4],['',' ',.6]]);
-  rqSec(S,'2 - ENDEREÇO DO(A) INTERESSADO(A)');
-  rqCampos(S,[['Rua, Avenida, etc.',[D.end,D.num,D.compl].filter(Boolean).join(', '),1]]);
-  rqCampos(S,[['Bairro / Setor',D.bairro,.34],['Município',D.mun,.34],['UF',D.uf,.1],['CEP',D.cep,.22]]);
-  if(tel!==false) rqCampos(S,[['E-mail',D.email,.6],['Telefones',[D.cel,D.fone].filter(Boolean).join(' / '),.4]]);
-}
-function rqGvei(S,D,tit,checks,motivo){
-  rqCab(S,['ESTADO DE GOIÁS','DEPARTAMENTO ESTADUAL DE TRÂNSITO DE GOIÁS','DETRAN-GO']);
-  rqTit(S,tit); rqChecks(S,checks); rqInteressado(S,D);
-  rqSec(S,'3 - DADOS DO VEÍCULO'); rqCampos(S,[['Placa',D.placa,.18],['Marca / Modelo',D.modelo,.42],['Chassi',D.chassi,.4]]);
-  rqSec(S,'4 - MOTIVOS DA SOLICITAÇÃO'); rqPar(S,motivo||' ',{sz:9.6,nj:true});
-  rqPar(S,'Responsabilizo-me, sob as penas da Lei Civil e Penal, pela presente requisição.',{esp:0.6});
-  rqPar(S,'Nestes termos, pede deferimento.',{esp:3}); rqData(S,D); rqAssin(S,'Assinatura do(a) interessado(a)');
-  rqDesp(S,D,RQ_TXT_DESP,['ATESTO SOB AS PENAS DA LEI CIVIL E CRIMINAL','QUE A ASSINATURA NO REQUERIMENTO É','DE PRÓPRIO PUNHO DO(A) INTERESSADO(A).']);
-  RQ_DOCS_GVEI.forEach(function(g){ rqLista(S,g[0],g[1]); });
-  rqRodape(S,RQ_ROD_DETRAN);
+  ['**Baixa de Restrição Administrativa (Média Monta):** notas fiscais de aquisição de equipamentos/materiais utilizados no conserto do veículo e notas fiscais dos serviços efetivados em oficina credenciada pelo Detran (cópias autenticadas); Certificado de Segurança Veicular emitido pelo INMETRO (CSV); Laudo Técnico de Vistoria (informatizado) emitido pelo Detran; CRV original; cópia da Carteira de Identidade e CPF ou CNH, com originais para conferência; comprovante de endereço (cópia e original).',
+   '**Baixa de Veículo:** Laudo Técnico de Vistoria (com o recolhimento do recorte do chassi e das placas); CRV original; cópia da Carteira de Identidade e CPF ou CNH, com originais para conferência; comprovante de endereço (cópia e original); todos os débitos do veículo, até a data da baixa, quitados.',
+   '**Cópia de Processo do Arquivo:** cópia da Carteira de Identidade ou CNH e CPF, com originais para conferência; cópia autenticada do Contrato Social e documentos dos sócios administradores, se for empresa; comprovante de endereço (cópia e original).',
+   'Comprovantes de endereço aceitos e orientações para serviços com procuração: site www.detran.go.gov.br.']];
+function rqGvei(S,D,tit,sub,checks,motivo){
+  rqTopo(S,RQ_ORG,tit,sub);
+  rqChecks(S,checks,'Solicitação:');
+  rqCard(S,'INTERESSADO(A)',[rqTxtPessoa(D)]);
+  rqCard(S,'VEÍCULO',[rqTxtVeiculo(D)]);
+  rqTitulo(S,'MOTIVOS DA SOLICITAÇÃO'); rqPar(S,'**'+(motivo||'')+'**',{nj:true,esp:3});
+  rqPar(S,'Responsabilizo-me, sob as penas da Lei Civil e Penal, pela presente requisição. Nestes termos, pede deferimento.',{esp:5});
+  rqData(S,D); rqFim(S,D,D.nome,'Interessado(a) · CPF/CNPJ '+(D.doc||'__________'),RQ_ATESTO_REQ);
+  rqTitulo(S,'DOCUMENTOS EXIGIDOS'); rqLista(S,RQ_DOCS_GVEI[0],{sz:8.4,gap:0.6});
+  rqRodape(S);
 }
 var OS_REQ_PDF={
   alt:function(S,D,C){
-    rqCab(S,['ESTADO DE GOIÁS','SECRETARIA DE ESTADO DE SEGURANÇA PÚBLICA E JUSTIÇA','DEPARTAMENTO ESTADUAL DE TRÂNSITO DE GOIÁS','DETRAN-GO']);
-    rqTit(S,'REQUERIMENTO PARA ALTERAÇÃO DE CARACTERÍSTICA VEICULAR');
-    rqPar(S,'AO SENHOR PRESIDENTE DA COMISSÃO '+(C.comissao||'______________________________________________'),{b:true,sz:9,esp:3});
-    rqSec(S,'01 - IDENTIFICAÇÃO DO(A) PROPRIETÁRIO(A)'); rqCampos(S,[['Nome',D.nome,.62],['CPF / CNPJ Nº',D.doc,.38]]);
-    rqSec(S,'02 - ENDEREÇO'); rqCampos(S,[['Rua, Avenida, Praça, etc.',[D.end,D.compl].filter(Boolean).join(', '),.62],['Número',D.num,.14],['Fone',[D.cel,D.fone].filter(Boolean).join(' / '),.24]]);
-    rqCampos(S,[['Bairro / Distrito',D.bairro,.36],['Município',D.mun,.32],['UF',D.uf,.1],['CEP',D.cep,.22]]);
-    rqSec(S,'03 - IDENTIFICAÇÃO DO VEÍCULO A SER ALTERADO'); rqCampos(S,[['Placa',D.placa,.3],['Chassi',D.chassi,.7]]);
-    rqSec(S,'04 - ALTERAÇÃO PRETENDIDA'); rqPar(S,[C.alt1,C.alt2,C.alt3].filter(Boolean).join('\n'),{sz:10,b:true,nj:true,esp:3});
-    rqPar(S,'O(A) PROPRIETÁRIO(A) REQUER A V.Sª. SE DIGNE A DESBLOQUEAR O LAUDO DE VISTORIA, VISTA DA DOCUMENTAÇÃO ANEXA, QUE O(A) PROPRIETÁRIO(A) ACIMA IDENTIFICADO(A) ATENDE ÀS EXIGÊNCIAS CONTIDAS NA PORTARIA Nº 91/2004 DESTE DETRAN.',{sz:8.8});
-    rqPar(S,'O(A) REQUERENTE DECLARA SER AUTÊNTICA E VERDADEIRA A DOCUMENTAÇÃO APRESENTADA.',{sz:8.8});
-    rqPar(S,'NESTES TERMOS, PEDE DEFERIMENTO.',{sz:9,b:true,c:true,esp:3}); rqData(S,D);
-    rqAssin(S,'ASSINATURA DO(A) PROPRIETÁRIO(A) OU REPRESENTANTE LEGAL');
-    rqDesp(S,D,RQ_TXT_DESP,['ATESTO SOB AS PENAS DA LEI CIVIL E CRIMINAL','QUE A ASSINATURA NO REQUERIMENTO É','DE PRÓPRIO PUNHO DO(A) PROPRIETÁRIO(A).']);
-    rqLista(S,'IMPORTANTE: TODOS OS CAMPOS ACIMA DEVERÃO SER DEVIDAMENTE PREENCHIDOS, SOB PENA DE RECUSA DO REQUERIMENTO. ANEXAR AO PRESENTE REQUERIMENTO:',[
-      '1- AUTORIZAÇÃO PRÉVIA OU AUTORIZAÇÃO DE REGULARIZAÇÃO DE ALTERAÇÃO DE CARACTERÍSTICA (VISTORIA) DEVIDAMENTE ASSINADA PELO VISTORIADOR E GERENTE/SUPERVISOR;',
-      '2- C.R.V. EM ORIGINAL/REQUERIMENTO DE 2ª VIA DE CRV; E CERTIDÃO DE ARQUIVO;','3- CÓPIA AUTENTICADA DA CARTEIRA DE IDENTIDADE DO PROPRIETÁRIO OU REPRESENTANTE LEGAL;','4- CÓPIA AUTENTICADA DO C.P.F. OU C.N.P.J.;',
-      '5- CÓPIA AUTENTICADA OU ORIGINAL DO COMPROVANTE DE ENDEREÇO ATUALIZADO; CASO NÃO ESTEJA EM NOME DO PROPRIETÁRIO, DEVERÁ APRESENTAR TERMO DE RESPONSABILIDADE;',
-      '6- FOTOGRAFIAS ANTES E DEPOIS DA ALTERAÇÃO DO VEÍCULO, ONDE APRESENTEM AS PARTES FRONTAL, LATERAIS E TRASEIRA EVIDENCIANDO A SUA PLACA OU A PARTE INTERNA, PARA O CASO DE AUTORIZAÇÃO PRÉVIA; NO CASO DE "AUTORIZAÇÃO DE REGULARIZAÇÃO", APENAS AS FOTOGRAFIAS DEPOIS, DEVIDAMENTE VISTADAS PELO VISTORIADOR RESPONSÁVEL;',
-      '7- C.S.V. (CERTIFICADO DE SEGURANÇA VEICULAR) DE ENTIDADE CREDENCIADA PELO INMETRO (EXCETO P/ ALTERAÇÃO DE COR);',
-      '8- NOTA FISCAL/COMPROVANTE DE PROCEDÊNCIA DOS MATERIAIS UTILIZADOS NA ALTERAÇÃO (ORIGINAL, ONDE APRESENTE O NOME DO PROPRIETÁRIO OU OS DADOS DO VEÍCULO OU DECLARAÇÃO EMITIDA PELO PROPRIETÁRIO); EXCETO PARA ALTERAÇÃO DE COR;',
-      '9- NOTA FISCAL DE SERVIÇOS EXECUTADOS NA ALTERAÇÃO (ORIGINAL, DEVIDAMENTE PREENCHIDA EM NOME DO PROPRIETÁRIO OU QUE APRESENTE OS DADOS VEICULARES; A OFICINA DEVE ESTAR CREDENCIADA NESTE DETRAN PARA EMPRESAS SEDIADAS NO ESTADO DE GOIÁS).']);
-    rqRodape(S,RQ_ROD_DETRAN);
+    rqTopo(S,'ESTADO DE GOIÁS · SECRETARIA DE ESTADO DE SEGURANÇA PÚBLICA E JUSTIÇA · DETRAN-GO','REQUERIMENTO','Alteração de característica veicular');
+    rqPar(S,'Ao Senhor Presidente da Comissão '+(C.comissao?'**'+C.comissao+'**':'______________________________________')+'.',{esp:4,nj:true});
+    rqCard(S,'PROPRIETÁRIO(A)',[rqTxtPessoa(D,'sem-email')]);
+    rqCard(S,'VEÍCULO A SER ALTERADO',[rqTxtVeiculo(D)]);
+    rqTitulo(S,'ALTERAÇÃO PRETENDIDA'); rqPar(S,'**'+[C.alt1,C.alt2,C.alt3].filter(Boolean).join('\n')+'**',{nj:true,esp:3});
+    rqTitulo(S,'PEDIDO');
+    rqPar(S,'O(A) proprietário(a) acima identificado(a) requer a V.Sª. se digne a **desbloquear o laudo de vistoria**, vista da documentação anexa, que atende às exigências contidas na **Portaria nº 91/2004** deste DETRAN. O(A) requerente declara ser autêntica e verdadeira a documentação apresentada.');
+    rqPar(S,'Nestes termos, pede deferimento.',{esp:5});
+    rqData(S,D); rqFim(S,D,D.nome,'Proprietário(a) ou representante legal',RQ_ATESTO_REQ);
+    rqTitulo(S,'ANEXAR AO REQUERIMENTO');
+    rqLista(S,['Autorização prévia ou autorização de regularização de alteração de característica (vistoria), assinada pelo vistoriador e gerente/supervisor;',
+      'C.R.V. original / requerimento de 2ª via de CRV e certidão de arquivo;','Cópia autenticada da Carteira de Identidade do proprietário ou representante legal;','Cópia autenticada do C.P.F. ou C.N.P.J.;',
+      'Comprovante de endereço atualizado (cópia autenticada ou original); se não estiver em nome do proprietário, termo de responsabilidade;',
+      'Fotografias antes e depois da alteração (frente, laterais e traseira evidenciando a placa, ou a parte interna) para autorização prévia; na "autorização de regularização", apenas as fotos depois, vistadas pelo vistoriador;',
+      'C.S.V. (Certificado de Segurança Veicular) de entidade credenciada pelo INMETRO (exceto alteração de cor);',
+      'Nota fiscal/comprovante de procedência dos materiais utilizados na alteração (original, com nome do proprietário ou dados do veículo, ou declaração do proprietário), exceto alteração de cor;',
+      'Nota fiscal dos serviços executados na alteração (original, em nome do proprietário ou com os dados do veículo; oficina credenciada no DETRAN para empresas sediadas em Goiás).',
+      '**Todos os campos deverão ser devidamente preenchidos, sob pena de recusa do requerimento.**'],{sz:8.3,gap:0.4,nums:['1.','2.','3.','4.','5.','6.','7.','8.','9.','!']});
+    rqRodape(S);
   },
-  gerencia:function(S,D,C){ rqGvei(S,D,'REQUERIMENTO À GERÊNCIA DE VEÍCULOS',[['Baixa de Restrição Administrativa',C.g1],['Baixa de Veículo',C.g2],['Outros',C.g3]],[C.mot1,C.mot2,C.mot3].filter(Boolean).join(', ')); },
-  leilao:function(S,D,C){ rqGvei(S,D,'REQUERIMENTO À COMISSÃO ESPECIAL DE LEILÃO',[['Baixa de débitos',C.l1],['Baixa restrição',C.l2],['Outros',C.l3]],C.mot); },
+  gerencia:function(S,D,C){ rqGvei(S,D,'REQUERIMENTO','À Gerência de Veículos',[['Baixa de Restrição Administrativa',C.g1],['Baixa de Veículo',C.g2],['Outros',C.g3]],[C.mot1,C.mot2,C.mot3].filter(Boolean).join(', ')); },
+  leilao:function(S,D,C){ rqGvei(S,D,'REQUERIMENTO','À Comissão Especial de Leilão',[['Baixa de débitos',C.l1],['Baixa de restrição',C.l2],['Outros',C.l3]],C.mot); },
   resid:function(S,D,C){
-    rqCab(S,['GOVERNO DE GOIÁS','DEPARTAMENTO ESTADUAL DE TRÂNSITO DE GOIÁS — DETRAN-GO','PORTARIA 122/2015/GP/GJUR']);
-    rqTit(S,'DECLARAÇÃO DE RESIDÊNCIA','ANEXO I'); S.y+=2;
-    var b=function(x,n){ return x||Array(n||22).join('_'); };
-    rqPar(S,'EU, '+b(D.nome,40)+', portador(a) da Carteira de Identidade nº '+b(D.rg)+' e do CPF nº '+b(D.doc)+', DECLARO que resido à '+b(D.end,40)+', nº '+b(D.num,8)+
-      (D.compl?', complemento: '+D.compl:'')+', Setor: '+b(D.bairro)+', Cidade: '+b(D.mun)+(D.uf?'/'+D.uf:'')+', CEP: '+b(D.cep,12)+'.',{sz:10.4,esp:3});
-    rqPar(S,'Fone fixo: '+(D.fone||'____________________')+'          Celular: '+(D.cel||'____________________'),{sz:10,nj:true,esp:4});
-    rqPar(S,'E RESPONSABILIZO-ME, sob as penas da lei penal, civil e administrativa, pela autenticidade do endereço acima transcrito, cuja declaração de endereço representa a expressão da verdade, sujeitando-me às sanções estabelecidas no art. 299 do Código Penal (Falsificação ideológica) e no art. 242 do Código de Trânsito Brasileiro (infração gravíssima, multa e 7 (sete) pontos na ACC, Permissão para Dirigir/CNH do(a) declarante), caso seja configurada falsa declaração.',{sz:10.4,esp:5});
-    rqData(S,D); rqAssin(S,'Assinatura do(a) declarante'); S.y+=2;
-    rqDesp(S,D,'CAETANO DESPACHANTE LTDA — Diego Despachante, código 2670. Declaramos, sob as penas da lei, que a assinatura da Declaração é de próprio punho do outorgante, feita em nossa presença, assumindo responsabilidade civil e criminal.',
-      ['ATESTO SOB AS PENAS DA LEI CIVIL E CRIMINAL','QUE A ASSINATURA NA DECLARAÇÃO É','DE PRÓPRIO PUNHO DO(A) DECLARANTE.']);
-    rqRodape(S,'DIEGO DESPACHANTE — Caetano Despachante Ltda — Código DETRAN 2670 — Av. Brasil, 464 - Vila Jussara — Anápolis-GO');
+    rqTopo(S,'GOVERNO DE GOIÁS · DETRAN-GO · PORTARIA Nº 122/2015/GP/GJUR','DECLARAÇÃO DE RESIDÊNCIA','Anexo I da Portaria nº 122/2015');
+    rqCard(S,'DECLARANTE',[rqB(D.nome,40)+', portador(a) da Carteira de Identidade nº '+rqB(D.rg)+', inscrito(a) no CPF sob o nº '+rqB(D.doc)+'.',
+      'Fone fixo: '+(D.fone||'________________')+'   ·   Celular: '+(D.cel||'________________')]);
+    rqTitulo(S,'DECLARAÇÃO');
+    rqPar(S,'**DECLARO** que resido à '+rqB([D.end,D.num?'nº '+D.num:'',D.compl].filter(Boolean).join(', '),40)+', Setor '+rqB(D.bairro)+', Cidade '+rqB(D.mun?D.mun+(D.uf?'/'+D.uf:''):'')+', CEP '+rqB(D.cep,12)+'.',{esp:3});
+    rqPar(S,'E **RESPONSABILIZO-ME**, sob as penas da lei penal, civil e administrativa, pela autenticidade do endereço acima transcrito, cuja declaração de endereço representa a expressão da verdade, sujeitando-me às sanções estabelecidas no **art. 299 do Código Penal** (falsificação ideológica) e no **art. 242 do Código de Trânsito Brasileiro** (infração gravíssima, multa e 7 (sete) pontos na ACC, Permissão para Dirigir/CNH do(a) declarante), caso seja configurada falsa declaração.',{esp:10});
+    rqData(S,D); rqFim(S,D,D.nome,'Declarante · CPF '+(D.doc||'__________'),['ATESTO SOB AS PENAS DA LEI CIVIL E CRIMINAL','QUE A ASSINATURA NESTA DECLARAÇÃO É DE','PRÓPRIO PUNHO DO(A) DECLARANTE, EM NOSSA PRESENÇA.']);
+    rqRodape(S);
   },
   copia:function(S,D,C){
-    rqCab(S,['ESTADO DE GOIÁS','DEPARTAMENTO ESTADUAL DE TRÂNSITO DE GOIÁS','DETRAN-GO']);
-    rqTit(S,'REQUERIMENTO DE USUÁRIO DIRIGIDO A:');
-    [['PRESIDÊNCIA',false],['DIRETORIA DE GESTÃO, PLANEJAMENTO E FINANÇAS',false],['DIRETORIA DE OPERAÇÕES',false],['DIRETORIA TÉCNICA E ATENDIMENTO',false],['Outros (especificar): CPASCNH',true]]
-      .forEach(function(k){ rqChecks(S,[k]); S.y-=2.2; }); S.y+=3;
+    rqTopo(S,RQ_ORG,'REQUERIMENTO','Requerimento de usuário — cópia integral de processo de suspensão de CNH');
+    rqChecks(S,[['Presidência',false],['Dir. de Gestão, Planejamento e Finanças',false],['Diretoria de Operações',false],['Diretoria Técnica e Atendimento',false],['Outros: CPASCNH',true]],'Dirigido a:');
     var D2={}; for(var k in D) D2[k]=D[k]; D2.email=C.email||D.email;
-    rqInteressado(S,D2);
-    rqSec(S,'3 - SOLICITAÇÃO');
-    rqPar(S,'SOLICITO CÓPIA INTEGRAL DO PROCESSO DE SUSPENSÃO DE CNH — REGISTRO Nº '+(C.registro||'______________')+', PROCESSO Nº '+(C.processo||'______________')+(C.auto?', AUTO Nº '+C.auto:'')+
-      ', PARA SER ENVIADA AO E-MAIL: diego7327@hotmail.com',{sz:10,b:true,esp:3});
-    rqPar(S,'Responsabilizo-me, sob as penas da Lei Civil e Penal, pela presente requisição. Nestes termos, pede deferimento.',{esp:3});
-    rqData(S,D); rqAssin(S,'Assinatura do(a) interessado(a)');
-    rqDesp(S,D,RQ_TXT_DESP,['ATESTO SOB AS PENAS DA LEI CIVIL E CRIMINAL','QUE A ASSINATURA NO REQUERIMENTO É','DE PRÓPRIO PUNHO DO(A) INTERESSADO(A).']);
-    rqLista(S,'Observações importantes:',['a) Caso necessário, anexar ao presente requerimento cópia de toda a documentação que deu causa à solicitação pretendida e/ou que seja importante para a apreciação do pedido;',
-      'b) Autuar o processo no PROTOCOLO GERAL do DETRAN/GO ou CIRETRAN;','c) Todos os campos acima deverão ser devidamente preenchidos, sob pena de recusa do requerimento.']);
-    rqRodape(S,RQ_ROD_DETRAN);
+    rqCard(S,'INTERESSADO(A)',[rqTxtPessoa(D2)]);
+    rqTitulo(S,'SOLICITAÇÃO');
+    rqPar(S,'Solicito **cópia integral do processo de suspensão do direito de dirigir**, registro da CNH nº '+rqB(C.registro)+', processo nº '+rqB(C.processo)+(C.auto?', auto de infração nº **'+C.auto+'**':'')+
+      ', a ser enviada para o e-mail **diego7327@hotmail.com**.',{esp:3});
+    rqPar(S,'Responsabilizo-me, sob as penas da Lei Civil e Penal, pela presente requisição. Nestes termos, pede deferimento.',{esp:6});
+    rqData(S,D); rqFim(S,D,D.nome,'Interessado(a) · CPF '+(D.doc||'__________'),RQ_ATESTO_REQ);
+    rqTitulo(S,'OBSERVAÇÕES IMPORTANTES');
+    rqLista(S,['Caso necessário, anexar cópia de toda a documentação que deu causa à solicitação e/ou que seja importante para a apreciação do pedido;',
+      'Autuar o processo no Protocolo Geral do DETRAN/GO ou CIRETRAN;','Todos os campos deverão ser devidamente preenchidos, sob pena de recusa do requerimento.'],{sz:8.8,nums:['a)','b)','c)']});
+    rqRodape(S);
   },
   proc:function(S,D,C){
-    S.y=20; rqTit(S,'PROCURAÇÃO'); S.y+=1;
-    var b=function(x,n){ return x||Array(n||22).join('_'); };
-    rqPar(S,'Pelo presente instrumento de procuração, o(a) Outorgante: '+b(D.nome,40)+', nacionalidade: BRASILEIRO(A), RG nº '+b(D.rg)+', CPF/CNPJ: '+b(D.doc)+', endereço: '+
-      [D.end,D.compl,D.num,D.bairro,(D.mun?D.mun+(D.uf?'/'+D.uf:''):'')].filter(Boolean).join(', ')+(D.cep?', CEP '+D.cep:'')+
-      ', nomeia e constitui seu bastante procurador o Escritório de Despachante DIEGO DESPACHANTE, CÓD. 2670, com sede à Avenida Brasil Sul, 464 - Bairro Vila Jussara, cidade de Anápolis, Estado de Goiás, para, como se presente fosse, representá-lo(a) junto aos seguintes órgãos: DETRAN/GO, JARI, DEFRVA/GO, DNIT, GOINFRA, DPRF, SMT, SEFAZ-GO e CIRETRANs, para solicitação dos serviços de:',{sz:10});
-    rqPar(S,C.servicos,{sz:10.6,b:true,nj:true,esp:3});
-    rqSec(S,'DO VEÍCULO');
-    rqCampos(S,[['Marca / Modelo',D.modelo,.55],['Ano fab. / mod.',[D.anoFab,D.anoMod].filter(Boolean).join('/'),.2],['Placa',D.placa,.25]]);
-    rqCampos(S,[['Chassi',D.chassi,.6],['Renavam',D.renavam,.4]]); S.y+=3;
-    rqPar(S,'podendo, para tanto, requerer e assinar o que necessário for, efetuar pagamentos, receber e dar quitações, alegar, concordar, discordar, prestar declarações e informações, enfim, praticar quaisquer outros atos que se fizerem necessários para o fiel cumprimento deste Mandato, o que desde já fica dado por firme e valioso.',{sz:10,esp:3});
-    rqPar(S,'TERMO DE RESPONSABILIDADE',{b:true,sz:9.6,c:true,esp:1});
-    rqPar(S,'Conforme qualificação acima descrita e comprovante de endereço em anexo, responsabilizo-me, sob as penas da lei, penal e civilmente, pela confirmação do citado endereço, a qual representa a expressão da verdade. Em caso de configuração de delito pela mencionada confirmação, sujeito-me às penas previstas no artigo 299 do Código Penal (falsificação ideológica) e no artigo 242 do Código de Trânsito Brasileiro (infração gravíssima, multa no valor de R$ 293,47 e sete pontos na CNH/Permissão para Dirigir do declarante).',{sz:9.2});
-    rqPar(S,'Por ser verdade, firmo a presente em uma só via.',{sz:9.2,esp:3}); rqData(S,D); rqAssin(S,'Assinatura do Outorgante');
-    rqDesp(S,D,'Caetano Despachante LTDA, Diego Despachante. Declaramos, sob as penas da lei, que a assinatura da Procuração é de próprio punho do outorgante, feita em nossa presença, assumindo a responsabilidade civil e criminal.',
-      ['ATESTO SOB AS PENAS DA LEI CIVIL E CRIMINAL','QUE A ASSINATURA NA PROCURAÇÃO É','DE PRÓPRIO PUNHO DO OUTORGANTE.']);
-    rqRodape(S,'DIEGO DESPACHANTE — Caetano Despachante Ltda — Código DETRAN 2670 — Av. Brasil, 464 - Vila Jussara — Anápolis-GO');
+    rqTopo(S,null,'PROCURAÇÃO','Instrumento particular de mandato — serviços junto aos órgãos de trânsito');
+    rqCard(S,'OUTORGANTE',[rqB(D.nome,40)+', brasileiro(a), portador(a) do RG nº '+rqB(D.rg)+', inscrito(a) no CPF/CNPJ sob o nº '+rqB(D.doc)+'.',
+      'Endereço: '+([D.end,D.num?'nº '+D.num:'',D.compl,D.bairro].filter(Boolean).join(', ')||Array(40).join('_'))+', '+(D.mun?D.mun+(D.uf?'/'+D.uf:''):'__________')+', CEP '+(D.cep||'__________')+'.']);
+    rqCard(S,'OUTORGADO',['**DIEGO CAETANO SILVA**, brasileiro, despachante, inscrito no CPF sob o nº 014.255.091-42, estabelecido no escritório **CAETANO DESPACHANTE LTDA** (nome fantasia Diego Despachante), inscrito no CNPJ sob o nº 08.965.960/0001-06, **código do escritório nº 2670**.',
+      'Escritório: Avenida Brasil, nº 464, Vila Jussara, Anápolis/GO · Telefone: (62) 99110-1506 · E-mail: diego7327@hotmail.com.']);
+    rqTitulo(S,'OBJETO');
+    rqPar(S,'Pelo presente instrumento, o(a) OUTORGANTE nomeia e constitui seu bastante procurador o OUTORGADO, para, como se presente fosse, representá-lo(a) perante o **DETRAN/GO**, a **JARI**, a **DEFRVA/GO**, o **DNIT**, a **GOINFRA**, a **DPRF**, a **SMT**, a **SEFAZ-GO** e as **CIRETRANs**, para solicitação dos serviços de **'+C.servicos+'**, do veículo:',{esp:2});
+    rqCard(S,'VEÍCULO',[rqTxtVeiculo(D)]);
+    rqTitulo(S,'PODERES');
+    rqLista(S,['Requerer e assinar o que necessário for;','Efetuar pagamentos, receber e dar quitações;','Alegar, concordar, discordar, prestar declarações e informações;',
+      'Praticar quaisquer outros atos que se fizerem necessários para o fiel cumprimento deste mandato, o que desde já fica dado por firme e valioso.'],{sz:9.6,gap:0.4});
+    rqTitulo(S,'TERMO DE RESPONSABILIDADE');
+    rqPar(S,'Conforme qualificação acima e comprovante de endereço em anexo, responsabilizo-me, sob as penas da lei, penal e civilmente, pela confirmação do citado endereço, a qual representa a expressão da verdade. Em caso de configuração de delito, sujeito-me às penas previstas no **artigo 299 do Código Penal** (falsificação ideológica) e no **artigo 242 do Código de Trânsito Brasileiro** (infração gravíssima, multa de R$ 293,47 e sete pontos na CNH/Permissão para Dirigir do declarante). Por ser verdade, firmo a presente em uma só via.',{sz:9.3,esp:4});
+    rqData(S,D); rqFim(S,D,D.nome,'Outorgante · CPF/CNPJ '+(D.doc||'__________'),['ATESTO SOB AS PENAS DA LEI CIVIL E CRIMINAL','QUE A ASSINATURA NA PROCURAÇÃO É DE PRÓPRIO','PUNHO DO OUTORGANTE, FEITA EM NOSSA PRESENÇA.']);
+    rqRodape(S);
   }
 };
 
