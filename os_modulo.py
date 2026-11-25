@@ -215,6 +215,10 @@ SEED_PENDENCIAS = ["PONTUAÇÃO", "SUSPENSÃO", "SUSPENSÃO CNH", "RECEBER",
 CFG_EMPRESA = ("empresa_nome", "empresa_fone", "empresa_endereco", "empresa_cidade", "empresa_email",
                "pix_chave", "pix_nome", "pix_cidade", "pix_banco")
 
+EMPRESA_PADRAO = {"empresa_nome": "Diego Despachante", "empresa_fone": "(62) 99110-1506 · (62) 99267-3252",
+                  "empresa_endereco": "Av. Brasil, 464 - Vila Jussara", "empresa_cidade": "Anápolis-GO",
+                  "empresa_email": "diego7327@hotmail.com"}
+
 STATUS_OS = {
     'orcamento':  'Orçamento',
     'andamento':  'Em andamento',
@@ -718,7 +722,7 @@ def registrar(app, db, login_required):
             out['os_numero_inicial'] = row['valor'] if row else ''
             cur.execute("SELECT chave, valor FROM config WHERE chave = ANY(%s)", (list(CFG_EMPRESA),))
             emp = {k: '' for k in CFG_EMPRESA}
-            emp['empresa_nome'] = 'Diego Despachante'
+            emp.update(EMPRESA_PADRAO)  # vale enquanto não for alterado em Financeiro > Cadastros
             for r in cur.fetchall():
                 if r['valor'] is not None:
                     emp[r['chave']] = r['valor']
@@ -1207,9 +1211,26 @@ def registrar(app, db, login_required):
             if not o:
                 return jsonify({"erro": "OS não encontrada"}), 404
             try:
-                _add_item(cur, o['id'], d)
+                iid = _add_item(cur, o['id'], d)
             except ValueError as e:
                 return jsonify({"erro": str(e)}), 400
+            cur.execute("SELECT descricao, qtd, valor, custo FROM os_itens WHERE id=%s", (iid,))
+            it = cur.fetchone()
+            _ocorrencia(cur, o['id'], 'outras', 'Item lançado: %s — R$ %s' % (it['descricao'], _br(it['valor'] * it['qtd'])))
+            pg = d.get("pago_agora") or {}
+            if pg.get("conta_id"):
+                if not _perms(cur)['dar_baixa']:
+                    return jsonify({"erro": "Só quem dá baixa pode lançar saída do caixa."}), 403
+                valor = (it['custo'] or it['valor']) * it['qtd']
+                agora = _agora()
+                cur.execute("""INSERT INTO lancamentos (natureza, vencimento, pago_em, descricao, favorecido, documento,
+                                   valor, valor_pago, conta_id, centro_id, forma_pgto_id, os_id, obs, user_nome, empresa_id)
+                               VALUES ('pagar', %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s, %s, %s, %s, %s)""",
+                            (agora.date(), agora, "PAGAMENTO: %s — O.S. Nº %s" % (it['descricao'], numero),
+                             (pg.get("favorecido") or "").strip(), str(numero), valor, valor, pg["conta_id"],
+                             pg.get("forma_id") or None, o['id'], '', _eu(), session.get('empresa_id')))
+                _ocorrencia(cur, o['id'], 'outras', 'Despesa paga pelo escritório: %s — R$ %s (saiu do caixa)'
+                            % (it['descricao'], _br(valor)))
             _toca(cur, o['id'])
         return jsonify({"ok": True})
 
