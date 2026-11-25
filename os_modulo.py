@@ -173,6 +173,13 @@ CREATE TABLE IF NOT EXISTS servico_pacotes (
 
 ALTER TABLE IF EXISTS processos ADD COLUMN IF NOT EXISTS os_id BIGINT REFERENCES ordens_servico(id) ON DELETE SET NULL;
 ALTER TABLE IF EXISTS usuarios  ADD COLUMN IF NOT EXISTS conta_padrao_id BIGINT;
+ALTER TABLE IF EXISTS usuarios  ADD COLUMN IF NOT EXISTS ver_lucro BOOLEAN DEFAULT FALSE;
+ALTER TABLE IF EXISTS usuarios  ADD COLUMN IF NOT EXISTS dar_baixa BOOLEAN DEFAULT FALSE;
+ALTER TABLE os_recebimentos ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'confirmado';
+ALTER TABLE os_recebimentos ADD COLUMN IF NOT EXISTS baixa_por TEXT DEFAULT '';
+ALTER TABLE os_recebimentos ADD COLUMN IF NOT EXISTS baixa_em TIMESTAMPTZ;
+ALTER TABLE os_recebimentos ADD COLUMN IF NOT EXISTS recusa_motivo TEXT DEFAULT '';
+CREATE INDEX IF NOT EXISTS os_receb_status_idx ON os_recebimentos (status);
 ALTER TABLE IF EXISTS usuarios  ADD COLUMN IF NOT EXISTS forma_padrao_id BIGINT;
 """
 
@@ -388,6 +395,26 @@ def registrar(app, db, login_required):
             return f(*a, **k)
         return dec
 
+    def _perms(cur=None):
+        """ver_lucro / dar_baixa: admin sempre; outros só se o admin marcar."""
+        if _admin():
+            return {"ver_lucro": True, "dar_baixa": True, "admin": True}
+        def busca(c):
+            c.execute("SELECT ver_lucro, dar_baixa FROM usuarios WHERE id = %s", (str(session.get('user_id')),))
+            return c.fetchone() or {}
+        u = busca(cur) if cur is not None else None
+        if u is None:
+            with db() as c2:
+                u = busca(c2)
+        return {"ver_lucro": bool(u.get('ver_lucro')), "dar_baixa": bool(u.get('dar_baixa')), "admin": False}
+
+    CAMPOS_LUCRO = ('custo', 'lucro', 'lucro_terceiros', 'taxas', 'honorarios')
+
+    def _sem_lucro_os(o):
+        for k in CAMPOS_LUCRO:
+            o.pop(k, None)
+        return o
+
     def _os_por_numero(cur, numero, incluir_excluida=False):
         cur.execute("SELECT * FROM ordens_servico WHERE numero = %s" +
                     ("" if incluir_excluida else " AND excluida_em IS NULL"), (numero,))
@@ -419,7 +446,8 @@ def registrar(app, db, login_required):
     SQL_TOTAIS = """
         COALESCE((SELECT SUM(i.valor*i.qtd) FROM os_itens i WHERE i.os_id = o.id),0) AS itens_valor,
         COALESCE((SELECT SUM(i.custo*i.qtd) FROM os_itens i WHERE i.os_id = o.id),0) AS itens_custo,
-        COALESCE((SELECT SUM(r.valor) FROM os_recebimentos r WHERE r.os_id = o.id),0) AS pago,
+        COALESCE((SELECT SUM(r.valor) FROM os_recebimentos r WHERE r.os_id = o.id AND r.status = 'confirmado'),0) AS pago,
+        COALESCE((SELECT SUM(r.valor) FROM os_recebimentos r WHERE r.os_id = o.id AND r.status = 'pendente'),0) AS aguardando,
         COALESCE((SELECT COUNT(*) FROM os_pendencias p WHERE p.os_id = o.id AND NOT p.resolvida),0) AS pend_abertas
     """
 
@@ -429,6 +457,7 @@ def registrar(app, db, login_required):
         itens_custo = _f(d.pop('itens_custo', 0))
         honor = _f(d.get('honorario'))
         pago = _f(d.pop('pago', 0))
+        aguardando = _f(d.pop('aguardando', 0))
         desc = _f(d.get('desconto'))
         total = round(itens_valor + honor - desc, 2)
         # orçamento e OS cancelada não geram saldo a receber
@@ -441,6 +470,7 @@ def registrar(app, db, login_required):
             'lucro_terceiros': round(itens_valor - itens_custo, 2),
             'lucro': round(honor + itens_valor - itens_custo - desc, 2),
             'desconto': desc,
+            'aguardando_baixa': round(aguardando, 2),
             'taxas': round(itens_custo, 2),
             'honorarios': round(honor + itens_valor - itens_custo, 2),
             'status_label': STATUS_OS.get(d.get('status'), d.get('status')),
@@ -497,6 +527,8 @@ def registrar(app, db, login_required):
                            WHERE (o.cliente_id = %s OR o.responsavel_id = %s) AND o.excluida_em IS NULL
                            ORDER BY o.numero DESC LIMIT 100""", (cid, cid))
             oss = [_os_saida(r) for r in cur.fetchall()]
+            if not _perms(cur)['ver_lucro']:
+                oss = [_sem_lucro_os(x) for x in oss]
             cur.execute("SELECT * FROM veiculos WHERE proprietario_id = %s ORDER BY placa", (cid,))
             veics = [_veiculo_saida(r) for r in cur.fetchall()]
         return jsonify({"cliente": _cliente_saida(c), "os": oss, "veiculos": veics})
@@ -623,6 +655,7 @@ def registrar(app, db, login_required):
     def os_servicos_get():
         todos = request.args.get("todos") == "1"
         with db() as cur:
+            vl = _perms(cur)['ver_lucro']
             cur.execute("""SELECT s.*, c.nome AS centro_nome, pt.nome AS processo_tipo FROM servicos s
                            LEFT JOIN centros_valor c ON c.id = s.centro_id
                            LEFT JOIN processo_tipos pt ON pt.id = s.processo_tipo_id""" +
@@ -632,6 +665,8 @@ def registrar(app, db, login_required):
                 x = dict(r)
                 x['valor_padrao'] = _f(x['valor_padrao'])
                 x['custo_padrao'] = _f(x['custo_padrao'])
+                if not vl:
+                    x.pop('custo_padrao', None)
                 out.append(x)
         return jsonify(out)
 
@@ -851,6 +886,11 @@ def registrar(app, db, login_required):
         if a.get("devedor") == "1":
             itens = [x for x in itens if x['devedor'] > 0.004]
         soma = {k: round(sum(x[k] for x in itens), 2) for k in ('total', 'pago', 'devedor', 'custo', 'honorario', 'lucro')}
+        if not _perms()['ver_lucro']:
+            for x in itens:
+                _sem_lucro_os(x)
+            for k in ('custo', 'lucro'):
+                soma.pop(k, None)
         return jsonify({"itens": itens, "total": len(itens), "soma": soma})
 
     @app.route("/api/os/painel", methods=["GET"])
@@ -886,17 +926,20 @@ def registrar(app, db, login_required):
             cur.execute("""SELECT COALESCE(SUM(t.total - t.pago),0) AS dev, COUNT(*) FILTER (WHERE t.total - t.pago > 0.004) AS n
                            FROM (SELECT o.honorario - COALESCE(o.desconto,0) +
                                    COALESCE((SELECT SUM(i.valor*i.qtd) FROM os_itens i WHERE i.os_id=o.id),0) AS total,
-                                   COALESCE((SELECT SUM(r.valor) FROM os_recebimentos r WHERE r.os_id=o.id),0) AS pago
+                                   COALESCE((SELECT SUM(r.valor) FROM os_recebimentos r WHERE r.os_id=o.id AND r.status='confirmado'),0) AS pago
                                  FROM ordens_servico o
                                  WHERE o.excluida_em IS NULL AND o.status NOT IN ('orcamento','cancelada')) t
                            WHERE t.total - t.pago > 0.004""")
             dv = cur.fetchone()
             cur.execute("""SELECT COALESCE(SUM(valor),0) AS v FROM os_recebimentos
-                           WHERE (quando AT TIME ZONE 'America/Sao_Paulo')::date = """ + HOJE_SQL)
+                           WHERE status = 'confirmado' AND (quando AT TIME ZONE 'America/Sao_Paulo')::date = """ + HOJE_SQL)
             recebido_hoje = _f(cur.fetchone()['v'])
+            cur.execute("SELECT COUNT(*) AS n, COALESCE(SUM(valor),0) AS v FROM os_recebimentos WHERE status = 'pendente'")
+            pb = cur.fetchone()
         return jsonify({"por_status": por_status, "por_tipo": por_tipo, "pendencias": pend,
                         "devedor_total": _f(dv['dev']), "devedor_qtd": dv['n'],
-                        "recebido_hoje": recebido_hoje})
+                        "recebido_hoje": recebido_hoje,
+                        "baixa_pendente_qtd": pb['n'], "baixa_pendente_valor": _f(pb['v'])})
 
     # ── ORDEM DE SERVIÇO: uma ──────────────────────────────────
     def _os_completa(cur, numero, incluir_excluida=False):
@@ -936,6 +979,7 @@ def registrar(app, db, login_required):
             x = dict(x)
             x['valor'] = _f(x['valor'])
             x['quando'] = _dt(x['quando'])
+            x['baixa_em'] = _dt(x.get('baixa_em'))
             receb.append(x)
         cur.execute("SELECT * FROM os_ocorrencias WHERE os_id = %s ORDER BY id DESC", (oid,))
         ocor = [dict(x, quando=_dt(x['quando'])) for x in cur.fetchall()]
@@ -970,6 +1014,12 @@ def registrar(app, db, login_required):
             d = _os_completa(cur, numero, incluir_excluida=True)
         if not d:
             return jsonify({"erro": "OS não encontrada"}), 404
+        pm = _perms()
+        if not pm['ver_lucro']:
+            _sem_lucro_os(d['os'])
+            for it in d['itens']:
+                it.pop('custo', None)
+        d['perm'] = pm
         return jsonify(d)
 
     @app.route("/api/os", methods=["POST"])
@@ -1115,6 +1165,15 @@ def registrar(app, db, login_required):
     # ── itens ──────────────────────────────────────────────────
     def _add_item(cur, oid, it):
         sid = it.get("servico_id") or None
+        if not _perms(cur)['ver_lucro'] and it.get("tipo_item") in ('taxa', 'hon'):
+            # funcionário escolhe só se o item é taxa (repasse) ou honorário; o custo é calculado aqui
+            it = dict(it)
+            if sid:
+                it.pop("custo", None)
+                if it.get("tipo_item") == 'hon':
+                    it["custo"] = "0"
+            else:
+                it["custo"] = it.get("valor") if it.get("tipo_item") == 'taxa' else "0"
         desc = (it.get("descricao") or "").strip().upper()
         valor, custo = it.get("valor"), it.get("custo")
         if sid:
@@ -1162,10 +1221,17 @@ def registrar(app, db, login_required):
             o = _os_por_numero(cur, numero)
             if not o:
                 return jsonify({"erro": "OS não encontrada"}), 404
-            cur.execute("""UPDATE os_itens SET descricao=%s, qtd=%s, valor=%s, custo=%s
-                           WHERE id=%s AND os_id=%s""",
-                        ((d.get("descricao") or "").strip().upper(), _num(d.get("qtd"), Decimal('1')) or Decimal('1'),
-                         _num(d.get("valor")), _num(d.get("custo")), iid, o['id']))
+            if "custo" in d and _perms(cur)['ver_lucro']:
+                cur.execute("""UPDATE os_itens SET descricao=%s, qtd=%s, valor=%s, custo=%s
+                               WHERE id=%s AND os_id=%s""",
+                            ((d.get("descricao") or "").strip().upper(), _num(d.get("qtd"), Decimal('1')) or Decimal('1'),
+                             _num(d.get("valor")), _num(d.get("custo")), iid, o['id']))
+            else:  # sem ver lucro: mantém o custo; se o valor ficar menor que o custo, o custo acompanha
+                v = _num(d.get("valor"))
+                cur.execute("""UPDATE os_itens SET descricao=%s, qtd=%s, valor=%s, custo=LEAST(custo, %s)
+                               WHERE id=%s AND os_id=%s""",
+                            ((d.get("descricao") or "").strip().upper(), _num(d.get("qtd"), Decimal('1')) or Decimal('1'),
+                             v, v, iid, o['id']))
             _toca(cur, o['id'])
         return jsonify({"ok": True})
 
@@ -1185,6 +1251,16 @@ def registrar(app, db, login_required):
         return jsonify({"ok": True})
 
     # ── recebimentos (gera o crédito sozinho) ─────────────────
+    def _gerar_lancamento(cur, os_id, numero, quando, valor, conta_id, centro, forma_id, obs, fav, quem):
+        cur.execute("""INSERT INTO lancamentos (natureza, vencimento, pago_em, descricao, favorecido,
+                           documento, valor, valor_pago, conta_id, centro_id, forma_pgto_id, os_id,
+                           obs, user_nome, empresa_id)
+                       VALUES ('receber', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                       RETURNING id""",
+                    (quando.date(), quando, "PAGAMENTO DE SERVIÇO CONFORME O.S. Nº %s" % numero, fav, str(numero),
+                     valor, valor, conta_id, centro, forma_id, os_id, obs, quem, session.get('empresa_id')))
+        return cur.fetchone()['id']
+
     @app.route("/api/os/<int:numero>/recebimentos", methods=["POST"])
     @equipe
     def os_receber(numero):
@@ -1201,8 +1277,12 @@ def registrar(app, db, login_required):
             if not r:
                 return jsonify({"erro": "OS não encontrada"}), 404
             o = r['os']
-            if float(valor) > o['devedor'] + 0.004:
-                return jsonify({"erro": "Valor maior que o saldo devedor (R$ %s)." % _br(o['devedor'])}), 400
+            livre = o['devedor'] - o.get('aguardando_baixa', 0)
+            if float(valor) > livre + 0.004:
+                msg = "Valor maior que o saldo devedor (R$ %s)." % _br(o['devedor'])
+                if o.get('aguardando_baixa'):
+                    msg += " Já há R$ %s informado aguardando baixa." % _br(o['aguardando_baixa'])
+                return jsonify({"erro": msg}), 400
             centro = d.get("centro_id") or None
             if not centro:  # centro = serviço principal da OS
                 for it in r['itens']:
@@ -1214,36 +1294,91 @@ def registrar(app, db, login_required):
                 if dd and dd != quando.date():
                     quando = datetime.combine(dd, quando.timetz())
             fav = (r['responsavel'] or r['cliente'] or {}).get('nome', '')
-            desc = "PAGAMENTO DE SERVIÇO CONFORME O.S. Nº %s" % numero
-            cur.execute("""INSERT INTO lancamentos (natureza, vencimento, pago_em, descricao, favorecido,
-                               documento, valor, valor_pago, conta_id, centro_id, forma_pgto_id, os_id,
-                               obs, user_nome, empresa_id)
-                           VALUES ('receber', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                           RETURNING id""",
-                        (quando.date(), quando, desc, fav, str(numero), valor, valor, d["conta_id"],
-                         centro, d["forma_pgto_id"], o['id'], (d.get("obs") or "").strip(), _eu(),
-                         session.get('empresa_id')))
-            lid = cur.fetchone()['id']
+            obs = (d.get("obs") or "").strip()
+            baixa = _perms(cur)['dar_baixa']
+            lid = None
+            if baixa:
+                lid = _gerar_lancamento(cur, o['id'], numero, quando, valor, d["conta_id"], centro,
+                                        d["forma_pgto_id"], obs, fav, _eu())
             cur.execute("""INSERT INTO os_recebimentos (os_id, quando, valor, forma_pgto_id, conta_id,
-                               centro_id, obs, user_nome, lancamento_id)
-                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                        (o['id'], quando, valor, d["forma_pgto_id"], d["conta_id"], centro,
-                         (d.get("obs") or "").strip(), _eu(), lid))
+                               centro_id, obs, user_nome, lancamento_id, status, baixa_por, baixa_em)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                        (o['id'], quando, valor, d["forma_pgto_id"], d["conta_id"], centro, obs, _eu(), lid,
+                         'confirmado' if baixa else 'pendente', _eu() if baixa else '', _agora() if baixa else None))
             cur.execute("SELECT nome FROM formas_pgto WHERE id=%s", (d["forma_pgto_id"],))
             fn = (cur.fetchone() or {}).get('nome', '')
-            _ocorrencia(cur, o['id'], 'outras', 'Recebido R$ %s (%s)' % (_br(valor), fn))
+            if baixa:
+                _ocorrencia(cur, o['id'], 'outras', 'Recebido R$ %s (%s) — baixa por %s' % (_br(valor), fn, _eu()))
+            else:
+                _ocorrencia(cur, o['id'], 'outras', 'Recebimento de R$ %s (%s) informado por %s — AGUARDANDO BAIXA'
+                            % (_br(valor), fn, _eu()))
             _toca(cur, o['id'])
+        return jsonify({"ok": True, "status": 'confirmado' if baixa else 'pendente'})
+
+    @app.route("/api/os-recebimentos/pendentes", methods=["GET"])
+    @equipe
+    def os_receb_pendentes():
+        with db() as cur:
+            cur.execute("""SELECT r.*, o.numero, f.nome AS forma, c.nome AS conta, cl.nome AS cliente_nome, v.placa
+                           FROM os_recebimentos r
+                           JOIN ordens_servico o ON o.id = r.os_id
+                           LEFT JOIN formas_pgto f ON f.id = r.forma_pgto_id
+                           LEFT JOIN contas c ON c.id = r.conta_id
+                           LEFT JOIN clientes cl ON cl.id = o.cliente_id
+                           LEFT JOIN veiculos v ON v.id = o.veiculo_id
+                           WHERE r.status = 'pendente' ORDER BY r.quando""")
+            out = [dict(x, valor=_f(x['valor']), quando=_dt(x['quando']), baixa_em=_dt(x['baixa_em']))
+                   for x in cur.fetchall()]
+            pm = _perms(cur)
+        return jsonify({"itens": out, "pode_dar_baixa": pm['dar_baixa']})
+
+    @app.route("/api/os-recebimentos/<int:rid>/baixa", methods=["POST"])
+    @equipe
+    def os_receb_baixa(rid):
+        d = request.get_json() or {}
+        aceitar = d.get("acao") != 'recusar'
+        with db(commit=True) as cur:
+            if not _perms(cur)['dar_baixa']:
+                return jsonify({"erro": "Só quem tem permissão dá baixa em recebimento."}), 403
+            cur.execute("""SELECT r.*, o.numero, o.id AS oid FROM os_recebimentos r
+                           JOIN ordens_servico o ON o.id = r.os_id WHERE r.id = %s FOR UPDATE""", (rid,))
+            r = cur.fetchone()
+            if not r or r['status'] != 'pendente':
+                return jsonify({"erro": "Este recebimento não está aguardando baixa."}), 400
+            if aceitar:
+                full = _os_completa(cur, r['numero'], incluir_excluida=True)
+                if float(r['valor']) > full['os']['devedor'] + 0.004:
+                    return jsonify({"erro": "Valor maior que o saldo devedor atual (R$ %s)." % _br(full['os']['devedor'])}), 400
+                fav = (full['responsavel'] or full['cliente'] or {}).get('nome', '')
+                lid = _gerar_lancamento(cur, r['oid'], r['numero'], r['quando'], r['valor'], r['conta_id'],
+                                        r['centro_id'], r['forma_pgto_id'], r['obs'], fav, r['user_nome'])
+                cur.execute("""UPDATE os_recebimentos SET status='confirmado', lancamento_id=%s, baixa_por=%s,
+                               baixa_em=NOW() WHERE id=%s""", (lid, _eu(), rid))
+                _ocorrencia(cur, r['oid'], 'outras', 'Baixa confirmada por %s: R$ %s (informado por %s)'
+                            % (_eu(), _br(r['valor']), r['user_nome']))
+            else:
+                motivo = (d.get("motivo") or "").strip()
+                cur.execute("""UPDATE os_recebimentos SET status='recusado', baixa_por=%s, baixa_em=NOW(),
+                               recusa_motivo=%s WHERE id=%s""", (_eu(), motivo, rid))
+                _ocorrencia(cur, r['oid'], 'outras', 'Recebimento de R$ %s informado por %s foi RECUSADO por %s%s'
+                            % (_br(r['valor']), r['user_nome'], _eu(), (' — ' + motivo) if motivo else ''))
+            _toca(cur, r['oid'])
         return jsonify({"ok": True})
 
     @app.route("/api/os/<int:numero>/recebimentos/<int:rid>", methods=["DELETE"])
     @equipe
     def os_receb_del(numero, rid):
-        if not _admin():
-            return jsonify({"erro": "Só o administrador exclui recebimento."}), 403
         with db(commit=True) as cur:
             o = _os_por_numero(cur, numero)
             if not o:
                 return jsonify({"erro": "OS não encontrada"}), 404
+            cur.execute("SELECT status, user_nome FROM os_recebimentos WHERE id=%s AND os_id=%s", (rid, o['id']))
+            x = cur.fetchone()
+            if not x:
+                return jsonify({"ok": True})
+            proprio_pendente = x['status'] == 'pendente' and x['user_nome'] == _eu()
+            if not _admin() and not proprio_pendente:
+                return jsonify({"erro": "Só o administrador exclui recebimento com baixa."}), 403
             cur.execute("DELETE FROM os_recebimentos WHERE id=%s AND os_id=%s RETURNING valor, lancamento_id",
                         (rid, o['id']))
             r = cur.fetchone()
@@ -1252,6 +1387,34 @@ def registrar(app, db, login_required):
                     cur.execute("DELETE FROM lancamentos WHERE id=%s", (r['lancamento_id'],))
                 _ocorrencia(cur, o['id'], 'outras', 'Recebimento excluído: R$ %s' % _br(r['valor']))
             _toca(cur, o['id'])
+        return jsonify({"ok": True})
+
+    # ── permissões: quem vê lucro e quem dá baixa ─────────────
+    @app.route("/api/os/minhas-permissoes", methods=["GET"])
+    @equipe
+    def os_minhas_perms():
+        return jsonify(_perms())
+
+    @app.route("/api/os/permissoes", methods=["GET"])
+    @equipe
+    def os_perms_lista():
+        if not _admin():
+            return jsonify({"erro": "Sem permissão"}), 403
+        with db() as cur:
+            cur.execute("""SELECT id, nome, login, perfil, COALESCE(ver_lucro,FALSE) AS ver_lucro,
+                                  COALESCE(dar_baixa,FALSE) AS dar_baixa
+                           FROM usuarios WHERE ativo AND perfil IN ('admin','funcionario') ORDER BY nome""")
+            return jsonify([dict(r) for r in cur.fetchall()])
+
+    @app.route("/api/os/permissoes", methods=["PUT"])
+    @equipe
+    def os_perms_salvar():
+        if not _admin():
+            return jsonify({"erro": "Sem permissão"}), 403
+        d = request.get_json() or {}
+        with db(commit=True) as cur:
+            cur.execute("UPDATE usuarios SET ver_lucro=%s, dar_baixa=%s WHERE id=%s",
+                        (_sim(d.get("ver_lucro"), False), _sim(d.get("dar_baixa"), False), str(d.get("id"))))
         return jsonify({"ok": True})
 
     # ── ocorrências, pendências, documentos ────────────────────

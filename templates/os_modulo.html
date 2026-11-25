@@ -347,6 +347,10 @@ input[type=date].os-dt,.fg input[type=date]{color-scheme:dark}
         </div>
         <div style="text-align:right"><button class="os-b pri" onclick="osEmpresaSalvar()">Salvar dados da empresa</button></div>
       </div>
+      <div class="os-box os-adm" style="display:none"><h4>🔒 Quem pode ver custo/lucro e dar baixa em recebimento</h4>
+        <p class="os-small" style="margin-bottom:8px">Você (administrador) sempre pode. Para os outros, só se marcar aqui. Quem não pode ver lucro não vê custo, margem nem lucro em nenhuma tela. Quem não pode dar baixa só <b>informa</b> o recebimento — fica aguardando você conferir.</p>
+        <div class="table-wrap" style="margin:0"><table><thead><tr><th>Usuário</th><th>Perfil</th><th style="text-align:center">Ver custo e lucro</th><th style="text-align:center">Dar baixa</th></tr></thead><tbody id="osf-perm"></tbody></table></div>
+      </div>
       <div class="os-box os-adm" style="display:none"><h4>Numeração da OS</h4>
         <div class="os-linha">
           <div class="fg"><label>Próxima OS começa em (para continuar a numeração do BitDesp)</label><input id="osf-numini" placeholder="ex.: 35600"></div>
@@ -440,12 +444,16 @@ function osCarregarCad(forcar){
 }
 
 // ── entrada do módulo ──
+function osVL(){ return !!(OS.perm&&OS.perm.ver_lucro); }
+function osBX(){ return !!(OS.perm&&OS.perm.dar_baixa); }
 function osEntrar(){
+  osApi('/api/os/minhas-permissoes').then(function(p){ OS.perm=p; }).catch(function(){ OS.perm={}; });
   osApi('/api/me').then(function(d){
     OS.perfil=d.perfil||'';
     document.querySelectorAll('.os-adm').forEach(function(el){ el.style.display=osAdm()?'':'none'; });
   }).catch(function(){});
-  osCarregarCad(true).then(function(){ osVer(OS.vista||'lista'); }).catch(osErr);
+  Promise.all([osCarregarCad(true), osApi('/api/os/minhas-permissoes').then(function(p){ OS.perm=p; })])
+    .then(function(){ osVer(OS.vista||'lista'); }).catch(osErr);
 }
 function osVer(v){
   OS.vista=v;
@@ -472,7 +480,8 @@ function osPainel(){
     c.forEach(function(x){ h+='<div class="os-card" onclick="osFiltroSt(\''+x[0]+'\')"><div class="v" style="color:'+x[2]+'">'+(s[x[0]]||0)+'</div><div class="l">'+x[1]+'</div></div>'; });
     var venc=(p.pendencias||[]).filter(function(x){return x.dias<0;}).length;
     h+='<div class="os-card" onclick="osFiltroDev()"><div class="v" style="color:var(--red);font-size:16px">'+osR(p.devedor_total)+'</div><div class="l">A receber ('+p.devedor_qtd+' OS)</div></div>';
-    h+='<div class="os-card"><div class="v" style="color:var(--acc);font-size:16px">'+osR(p.recebido_hoje)+'</div><div class="l">Recebido hoje</div></div>';
+    h+='<div class="os-card"><div class="v" style="color:var(--acc);font-size:16px">'+osR(p.recebido_hoje)+'</div><div class="l">Recebido hoje (com baixa)</div></div>';
+    if(p.baixa_pendente_qtd>0) h+='<div class="os-card" style="border-color:rgba(255,165,2,.6)" onclick="osBaixasModal()"><div class="v" style="color:var(--warn);font-size:16px">'+osR(p.baixa_pendente_valor)+'</div><div class="l">⏳ '+p.baixa_pendente_qtd+' aguardando baixa</div></div>';
     h+='<div class="os-card" onclick="osE(\'os-pend-painel\').scrollIntoView({behavior:\'smooth\'})"><div class="v" style="color:'+(venc?'var(--red)':'var(--mut)')+'">'+(p.pendencias||[]).length+'</div><div class="l">Pendências vencendo'+(venc?' · '+venc+' vencidas':'')+'</div></div>';
     osE('os-cards').innerHTML=h;
     var pt=p.por_tipo||[], ftp=osE('os-ftp').value;
@@ -521,7 +530,7 @@ function osLista(){
     });
     osE('os-tbody').innerHTML=h||'<tr><td colspan="9" class="os-vazio">Nenhuma OS encontrada.</td></tr>';
     osE('os-tfoot').innerHTML=d.itens.length?'<tr class="os-soma"><td colspan="6">'+d.total+' OS'+(d.total>=300?' (mostrando as 300 mais recentes)':'')+
-      ' · honorários '+osR(d.soma.honorario)+' · lucro '+osR(d.soma.lucro)+'</td><td class="os-money">'+osN(d.soma.total)+'</td><td class="os-money">'+osN(d.soma.pago)+'</td><td class="os-money os-dev">'+osN(d.soma.devedor)+'</td></tr>':'';
+      ' · honorários '+osR(d.soma.honorario)+(d.soma.lucro!==undefined?' · lucro 🔒 '+osR(d.soma.lucro):'')+'</td><td class="os-money">'+osN(d.soma.total)+'</td><td class="os-money">'+osN(d.soma.pago)+'</td><td class="os-money os-dev">'+osN(d.soma.devedor)+'</td></tr>':'';
   }).catch(osErr);
 }
 
@@ -697,16 +706,16 @@ function osNova(tipo){
       '</div><div class="fg"><label>Observação para o cliente (vai na mensagem)</label><textarea class="os-ta" id="osn-obscli" style="min-height:48px" placeholder="Ex.: trazer o CRV assinado e reconhecido em cartório" oninput="nvAtualizar()"></textarea></div>'+
       '<div class="nv-resumo"><div class="nv-l"><span>Subtotal</span><b id="nvt-sub">R$ 0,00</b></div><div class="nv-l"><span>Desconto</span><b id="nvt-desc">− R$ 0,00</b></div>'+
         '<div class="nv-total"><span>TOTAL</span><b id="nvt-total">R$ 0,00</b></div>'+
-        '<div class="nv-split"><div class="nv-sp1"><span>Taxas Detran / terceiros</span><b id="nvt-taxas">R$ 0,00</b></div><div class="nv-sp2"><span>Honorários</span><b id="nvt-hons">R$ 0,00</b></div></div></div>'+
+        '<div class="nv-split nv-vl"><div class="nv-sp1"><span>Taxas Detran / terceiros</span><b id="nvt-taxas">R$ 0,00</b></div><div class="nv-sp2"><span>Honorários</span><b id="nvt-hons">R$ 0,00</b></div></div></div>'+
       '<div class="nv-so-os nv-adi"><div class="os-g5">'+
-        '<div class="fg" style="grid-column:span 2"><label>Entrada / adiantado agora (R$)</label><input id="nva-valor" placeholder="0,00" oninput="nvAtualizar()"></div>'+
+        '<div class="fg" style="grid-column:span 2"><label>Entrada / adiantado agora (R$)'+(osBX()?'':' ⏳ fica aguardando baixa')+'</label><input id="nva-valor" placeholder="0,00" oninput="nvAtualizar()"></div>'+
         '<div class="fg" style="grid-column:span 2"><label>Forma</label><select id="nva-forma">'+osOpts(c.formas,(c.meus_padroes||{}).forma_id,'— forma —')+'</select></div>'+
         '<div class="fg" style="grid-column:span 2"><label>Conta</label><select id="nva-conta">'+osOpts(c.contas,(c.meus_padroes||{}).conta_id||((c.contas||[]).filter(function(x){return x.ativo&&x.nome==='SICRED';})[0]||{}).id,'— conta —')+'</select></div>'+
       '</div><div class="os-small" id="nvt-saldo"></div></div>'+
       '<div id="nv-pix"></div></div>'+
     '</div><div class="nv-dir"><div class="nv-cel"><div class="nv-cel-top"><span class="nv-av">'+osEsc((emp.empresa_nome||'D').slice(0,1))+'</span><div><b>'+osEsc(emp.empresa_nome||'Diego Despachante')+'</b><small>prévia da mensagem</small></div></div>'+
       '<div class="nv-chat"><div class="nv-bolha" id="nv-msg"></div></div></div>'+
-      '<label class="nv-op"><input type="checkbox" id="nv-sep" checked onchange="nvAtualizar()"> Mostrar taxas e honorários separados</label>'+
+      '<p class="os-small" style="margin:0 2px 4px">🔒 O cliente vê só os serviços e o total — nunca custo, taxa por dentro ou lucro.</p>'+
       '<label class="nv-op"><input type="checkbox" id="nv-inpix" checked onchange="nvAtualizar()"> Incluir PIX (copia e cola)</label>'+
       '<button class="nv-bt nv-whats" onclick="osNovaSalvar(\'whats\')">Salvar e enviar no WhatsApp</button>'+
       '<div class="nv-bts"><button class="nv-bt" onclick="osNovaSalvar(\'imagem\')">Salvar e gerar imagem</button><button class="nv-bt" onclick="nvCopiarMsg()">Copiar mensagem</button></div>'+
@@ -738,7 +747,7 @@ function nvItemServ(){
   var s=OS.serv.filter(function(x){ return String(x.id)===osE('nvi-serv').value; })[0];
   if(!s) return;
   osE('nvi-desc').value=s.nome; osE('nvi-valor').value=osN(s.valor_padrao);
-  osE('nvi-tipo').value = Number(s.custo_padrao)>0 ? 'taxa' : 'hon';
+  osE('nvi-tipo').value = (s.custo_padrao===undefined||Number(s.custo_padrao)>0) ? 'taxa' : 'hon';
   osE('nvi-valor').focus(); osE('nvi-valor').select();
 }
 function nvItemTecla(e){
@@ -749,7 +758,7 @@ function nvItemTecla(e){
   nvItemAdd();
 }
 function nvAddServico(s, qtd){
-  OS.nova.itens.push({servico_id:s.id, descricao:s.nome, qtd:qtd||1, valor:Number(s.valor_padrao)||0, custo:Number(s.custo_padrao)||0});
+  OS.nova.itens.push({servico_id:s.id, descricao:s.nome, qtd:qtd||1, valor:Number(s.valor_padrao)||0, custo:Number(s.custo_padrao)||0, tipo:'taxa'});
 }
 function nvItemAdd(){
   var desc=osE('nvi-desc').value.trim().toUpperCase(), sid=osE('nvi-serv').value||null;
@@ -758,7 +767,7 @@ function nvItemAdd(){
   if(!desc){ osMsg('Escolha da tabela ou digite a descrição do item.','err'); osE('nvi-desc').focus(); return; }
   var qtd=nvNum(osE('nvi-qtd').value)||1, valor=nvNum(osE('nvi-valor').value);
   if(!(valor>0)){ osMsg('Informe o valor do item.','err'); osE('nvi-valor').focus(); return; }
-  var it={servico_id:s?s.id:null, descricao:desc, qtd:qtd, valor:valor, custo:0};
+  var it={servico_id:s?s.id:null, descricao:desc, qtd:qtd, valor:valor, custo:0, tipo:osE('nvi-tipo').value};
   if(s){ it.custo=Number(s.custo_padrao)||0; if(osE('nvi-tipo').value==='hon') it.custo=0; else if(it.custo>valor) it.custo=valor; }
   else it.custo = osE('nvi-tipo').value==='hon' ? 0 : valor;
   OS.nova.itens.push(it);
@@ -789,12 +798,13 @@ function nvTag(it){
 }
 function nvItensRender(){
   var h=OS.nova.itens.map(function(it,i){
-    return '<tr><td>'+osEsc(it.descricao)+(nvTipoItem(it)==='misto'?'<div class="os-small">taxa '+osR(it.custo)+' + honorário '+osR(it.valor-it.custo)+'</div>':'')+'</td>'+
+    return '<tr><td>'+osEsc(it.descricao)+(osVL()&&nvTipoItem(it)==='misto'?'<div class="os-small">taxa '+osR(it.custo)+' + honorário '+osR(it.valor-it.custo)+'</div>':'')+'</td>'+
       '<td><input class="nv-val" style="text-align:center" value="'+osN(it.qtd).replace(',00','')+'" onchange="nvItemQtd('+i+',this.value)"></td>'+
       '<td><input class="nv-val" value="'+osN(it.valor)+'" onchange="nvItemValor('+i+',this.value)"></td>'+
       '<td class="os-money"><b>'+osR(it.valor*it.qtd)+'</b></td>'+
-      '<td style="text-align:center"><button type="button" class="nv-tagbt" title="Clique para trocar entre taxa e honorário" onclick="nvItemTrocaTipo('+i+')">'+nvTag(it)+'</button></td>'+
+      '<td style="text-align:center">'+(osVL()?'<button type="button" class="nv-tagbt" title="Clique para trocar entre taxa e honorário" onclick="nvItemTrocaTipo('+i+')">'+nvTag(it)+'</button>':(it.servico_id?'':'<span class="os-small">'+(it.tipo==='hon'?'honorário':'taxa')+'</span>'))+'</td>'+
       '<td><button type="button" class="os-b del" onclick="nvItemDel('+i+')">✕</button></td></tr>'; }).join('');
+  document.querySelectorAll('#osv-nova .nv-vl').forEach(function(e){ e.style.display=osVL()?'':'none'; });
   osE('nvi-tbody').innerHTML=h||'<tr><td colspan="6" class="os-vazio" style="padding:14px">Nenhum serviço ainda. Use um pacote, escolha da tabela ou digite um item.</td></tr>';
   nvAtualizar();
 }
@@ -809,7 +819,7 @@ function nvAtualizar(){
   if(!OS.nova || !osE('nvt-sub')) return;
   var k=nvCalc();
   osE('nvt-sub').textContent=osR(k.sub); osE('nvt-desc').textContent='− '+osR(k.desc); osE('nvt-total').textContent=osR(k.total);
-  osE('nvt-taxas').textContent=osR(k.taxas); osE('nvt-hons').textContent=osR(k.hons-k.desc);
+  if(osVL()){ osE('nvt-taxas').textContent=osR(k.taxas); osE('nvt-hons').textContent=osR(k.hons-k.desc); }
   var ad=osE('nva-valor')?nvNum(osE('nva-valor').value):0;
   osE('nvt-saldo').innerHTML = (OS.nova.tipo==='os'&&ad>0) ? (ad>k.total+0.004?'<span class="os-dev">A entrada é maior que o total.</span>':'Fica devendo depois da entrada: <b class="'+(k.total-ad>0.004?'os-dev':'os-ok')+'">'+osR(k.total-ad)+'</b>') : '';
   osE('nv-msg').innerHTML=osEsc(osMsgTexto(nvDadosCliente(null))).replace(/\*([^*\n]+)\*/g,'<b>$1</b>').replace(/\n/g,'<br>');
@@ -823,7 +833,7 @@ function nvDadosCliente(numero){
     cliente:osE('nc-nome').value.trim().toUpperCase(), placa:osE('nv-placa').value.trim().toUpperCase(), modelo:osE('nv-modelo').value.trim().toUpperCase(),
     itens:OS.nova.itens.map(function(it){ return {descricao:it.descricao,qtd:it.qtd,valor:it.valor}; }),
     honorario:nvNum(osE('osn-hon').value), desconto:k.desc, subtotal:k.sub, total:k.total, taxas:k.taxas, hons:k.hons-k.desc,
-    obs:osE('osn-obscli').value.trim(), sep:osE('nv-sep').checked, pix:osE('nv-inpix').checked,
+    obs:osE('osn-obscli').value.trim(), sep:false, pix:osE('nv-inpix').checked,
     pago:(OS.nova.tipo==='os'&&osE('nva-valor'))?Math.min(nvNum(osE('nva-valor').value),k.total):0,
     devedor:Math.round((k.total-((OS.nova.tipo==='os'&&osE('nva-valor'))?Math.min(nvNum(osE('nva-valor').value),k.total):0))*100)/100};
 }
@@ -832,8 +842,8 @@ function osDadosDaOS(){
   return {numero:o.numero, tipo:o.status==='orcamento'?'orcamento':'os', data:(o.data_abertura||'').slice(0,10), validade:o.status==='orcamento'?o.validade:null,
     cliente:(d.cliente||{}).nome||'', placa:v.placa||'', modelo:v.modelo||'',
     itens:d.itens.map(function(i){ return {descricao:i.descricao,qtd:i.qtd,valor:i.valor}; }),
-    honorario:o.honorario, desconto:o.desconto||0, subtotal:o.itens_valor+o.honorario, total:o.total, taxas:o.taxas, hons:o.honorarios-(o.desconto||0),
-    obs:o.obs_cliente||'', sep:true, pix:true, pago:o.pago, devedor:o.devedor};
+    honorario:o.honorario, desconto:o.desconto||0, subtotal:o.itens_valor+o.honorario, total:o.total,
+    obs:o.obs_cliente||'', sep:false, pix:true, pago:o.pago, devedor:o.devedor};
 }
 function osMsgTexto(x){
   var emp=(OS.cad||{}).empresa||{}, L=[];
@@ -845,7 +855,6 @@ function osMsgTexto(x){
   x.itens.forEach(function(i){ L.push('• '+i.descricao+(i.qtd!=1?' ('+String(i.qtd).replace('.',',')+'x)':'')+' — '+osR(i.valor*i.qtd)); });
   if(x.honorario>0) L.push('• Honorários do despachante — '+osR(x.honorario));
   L.push('');
-  if(x.sep){ L.push('Taxas (Detran e terceiros): '+osR(x.taxas)); L.push('Honorários: '+osR(x.hons+x.desconto)); }
   if(x.desconto>0) L.push('Desconto: − '+osR(x.desconto));
   L.push('*TOTAL: '+osR(x.total)+'*');
   if(x.pago>0){ L.push('Entrada / já pago: '+osR(x.pago)); L.push('*Falta pagar: '+osR(x.devedor)+'*'); }
@@ -913,8 +922,7 @@ function osCardHtml(x){
     '<div class="oc-cli"><div><div class="oc-k2">CLIENTE</div><div class="oc-nome">'+osEsc(x.cliente||'—')+'</div>'+(x.modelo?'<div class="oc-mod">'+osEsc(x.modelo)+'</div>':'')+'</div>'+
       (x.placa?'<div><div class="oc-k2">PLACA</div><div class="oc-placa"><div class="oc-pbr">BRASIL</div><div class="oc-pn">'+osEsc(x.placa.replace('-',''))+'</div></div></div>':'')+'</div>'+
     '<table class="oc-t"><thead><tr><th>SERVIÇO</th><th class="c">QTD</th><th class="r">VALOR UN.</th><th class="r">TOTAL</th></tr></thead><tbody>'+linhas+'</tbody></table>'+
-    '<div class="oc-res">'+(x.sep?'<div><span>Taxas (Detran e terceiros)</span><b>'+osR(x.taxas)+'</b></div><div><span>Honorários do despachante</span><b>'+osR(x.hons+x.desconto)+'</b></div>':'')+
-      (x.desconto>0?'<div><span>Desconto</span><b>− '+osR(x.desconto)+'</b></div>':'')+'</div>'+
+    '<div class="oc-res">'+(x.desconto>0?'<div><span>Subtotal</span><b>'+osR(x.subtotal)+'</b></div><div><span>Desconto</span><b>− '+osR(x.desconto)+'</b></div>':'')+'</div>'+
     '<div class="oc-tot"><span>TOTAL</span><b>'+osR(x.total)+'</b></div>'+
     (x.pago>0?'<div class="oc-res"><div><span>Já pago</span><b>'+osR(x.pago)+'</b></div><div><span><b>Falta pagar</b></span><b>'+osR(x.devedor)+'</b></div></div>':'')+
     (x.obs?'<div class="oc-obs"><div class="oc-k2">OBSERVAÇÃO</div>'+osEsc(x.obs)+'</div>':'')+
@@ -995,7 +1003,8 @@ function osNovaSalvar(acao){
     return osApi('/api/os','POST',{tipo:OS.nova.tipo, cliente_id:cid, responsavel_id:(rid&&rid!==cid)?rid:null, veiculo_id:vid,
       honorario:osN(nvNum(osE('osn-hon').value)), desconto:osN(k.desc), obs:osE('osn-obs').value, obs_cliente:osE('osn-obscli').value,
       processo_tipo_id:osE('osn-tipo').value, validade:dadosMsg.validade,
-      itens: OS.nova.itens.map(function(it){ return {servico_id:it.servico_id, descricao:it.descricao, valor:osN(it.valor), custo:osN(Math.min(it.custo,it.valor)), qtd:osN(it.qtd)}; })});
+      itens: OS.nova.itens.map(function(it){ var x={servico_id:it.servico_id, descricao:it.descricao, valor:osN(it.valor), qtd:osN(it.qtd), tipo_item:it.tipo||'taxa'};
+        if(osVL()) x.custo=osN(Math.min(it.custo,it.valor)); return x; })});
   }).then(function(r){
     numero=r.numero;
     if(adi<=0) return null;
@@ -1042,7 +1051,8 @@ function osRender(){
      '<div style="margin-top:8px;font-size:13px"><b>'+osEsc(d.cliente?d.cliente.nome:'—')+'</b>'+(d.veiculo?' · '+osEsc(d.veiculo.placa)+' '+osEsc(d.veiculo.modelo||''):'')+
      (d.responsavel?'<div class="os-small">Responsável: '+osEsc(d.responsavel.nome)+'</div>':'')+'</div></div>'+
      '<div class="os-tot"><div><b>'+osR(o.total)+'</b><span>Total</span></div><div><b class="os-ok">'+osR(o.pago)+'</b><span>Pago</span></div>'+
-     '<div><b class="'+(o.devedor>0.004?'os-dev':'os-ok')+'">'+osR(o.devedor)+'</b><span>Devedor</span></div></div></div>';
+     '<div><b class="'+(o.devedor>0.004?'os-dev':'os-ok')+'">'+osR(o.devedor)+'</b><span>Devedor</span></div>'+
+     (o.aguardando_baixa>0?'<div style="border-color:rgba(255,165,2,.5)"><b style="color:var(--warn)">'+osR(o.aguardando_baixa)+'</b><span>⏳ Aguardando baixa</span></div>':'')+'</div></div>';
   if(!exc){
     h+='<div class="os-acoes">';
     if(o.status==='orcamento') h+='<button class="os-b pri" onclick="osConverter()">✓ Aprovar orçamento → gerar OS</button>';
@@ -1130,19 +1140,21 @@ function osSalvarCadastro(){
 function osAbaItens(){
   var d=OS.atual, o=d.os, ro=!!o.excluida_em;
   var sv='<option value="">— item avulso (digite a descrição) —</option>';
-  OS.serv.forEach(function(s){ sv+='<option value="'+s.id+'">'+osEsc(s.nome)+' — '+osR(s.valor_padrao)+' / custo '+osR(s.custo_padrao)+'</option>'; });
+  var vl=osVL();
+  OS.serv.forEach(function(s){ sv+='<option value="'+s.id+'">'+osEsc(s.nome)+' — '+osR(s.valor_padrao)+(vl?' / custo '+osR(s.custo_padrao):'')+'</option>'; });
   var h='';
   if(!ro) h+='<div class="os-box"><h4>Lançar item (taxa, débito ou serviço)</h4><div class="os-linha">'+
     '<div class="fg" style="flex:3"><label>Da tabela</label><select id="osi-serv" onchange="osItemServ()">'+sv+'</select></div>'+
     '<div class="fg" style="flex:3"><label>Descrição</label><input id="osi-desc"></div>'+
     '<div class="fg" style="flex:0 0 70px;min-width:60px"><label>Qtd</label><input id="osi-qtd" value="1"></div>'+
     '<div class="fg"><label>Valor (R$)</label><input id="osi-valor" placeholder="0,00"></div>'+
-    '<div class="fg"><label>Custo (R$)</label><input id="osi-custo" placeholder="0,00"></div>'+
+    (vl?'<div class="fg"><label>Custo (R$)</label><input id="osi-custo" placeholder="0,00"></div>':
+        '<div class="fg"><label>É</label><select id="osi-tipo"><option value="taxa">Taxa / terceiro</option><option value="hon">Honorário</option></select></div>')+
     '<div class="fg" style="flex:0"><button class="os-b pri" onclick="osItemAdd()">+ Lançar</button></div></div></div>';
-  h+='<div class="table-wrap"><table><thead><tr><th>Descrição</th><th style="text-align:right">Qtd</th><th style="text-align:right">Valor</th><th style="text-align:right">Custo (terceiros)</th><th style="text-align:right">Margem</th><th>Lançado</th><th></th></tr></thead><tbody>';
+  h+='<div class="table-wrap"><table><thead><tr><th>Descrição</th><th style="text-align:right">Qtd</th><th style="text-align:right">Valor</th>'+(vl?'<th style="text-align:right">Custo (terceiros)</th><th style="text-align:right">Margem</th>':'')+'<th>Lançado</th><th></th></tr></thead><tbody>';
   d.itens.forEach(function(i){
-    h+='<tr><td>'+osEsc(i.descricao)+'</td><td class="os-money">'+osN(i.qtd).replace(',00','')+'</td><td class="os-money">'+osN(i.valor*i.qtd)+'</td><td class="os-money">'+osN(i.custo*i.qtd)+'</td>'+
-       '<td class="os-money">'+osN((i.valor-i.custo)*i.qtd)+'</td><td class="os-small">'+osEsc(i.criado)+' '+osEsc(i.user_nome)+'</td>'+
+    h+='<tr><td>'+osEsc(i.descricao)+'</td><td class="os-money">'+osN(i.qtd).replace(',00','')+'</td><td class="os-money">'+osN(i.valor*i.qtd)+'</td>'+
+       (vl?'<td class="os-money">'+osN(i.custo*i.qtd)+'</td><td class="os-money">'+osN((i.valor-i.custo)*i.qtd)+'</td>':'')+'<td class="os-small">'+osEsc(i.criado)+' '+osEsc(i.user_nome)+'</td>'+
        '<td>'+(ro?'':'<button class="os-b" onclick="osItemEdit('+i.id+')">✎</button> <button class="os-b del" onclick="osItemDel('+i.id+')">✕</button>')+'</td></tr>';
   });
   if(!d.itens.length) h+='<tr><td colspan="7" class="os-vazio">Nenhum item lançado.</td></tr>';
@@ -1160,19 +1172,20 @@ function osAbaItens(){
      '<tr><td>− Adiantado / pago</td><td class="os-money os-ok">'+osR(o.pago)+'</td></tr>'+
      '<tr><td><b>= Saldo devedor</b></td><td class="os-money '+(o.devedor>0.004?'os-dev':'os-ok')+'"><b>'+osR(o.devedor)+'</b></td></tr>'+
      (o.devedor>0.004&&!ro&&o.status!=='orcamento'?'<tr><td colspan="2" style="padding:8px 0"><button class="os-b pri" style="width:100%" onclick="osReceberModal()">💰 Lançar entrada / pagamento</button></td></tr>':'')+
-     '<tr><td class="os-small">Custo de terceiros</td><td class="os-money os-small">'+osR(o.custo)+'</td></tr>'+
+     (o.aguardando_baixa>0?'<tr><td>⏳ Informado, aguardando baixa</td><td class="os-money" style="color:var(--warn)">'+osR(o.aguardando_baixa)+'</td></tr>':'')+
+     (vl?'<tr><td class="os-small">Custo de terceiros</td><td class="os-money os-small">'+osR(o.custo)+'</td></tr>'+
      '<tr><td class="os-small">Lucro sobre terceiros</td><td class="os-money os-small">'+osR(o.lucro_terceiros)+'</td></tr>'+
-     '<tr><td><b style="color:var(--acc)">Lucro da OS</b></td><td class="os-money" style="color:var(--acc)"><b>'+osR(o.lucro)+'</b></td></tr></table></div></div>';
+     '<tr><td><b style="color:var(--acc)">Lucro da OS 🔒</b></td><td class="os-money" style="color:var(--acc)"><b>'+osR(o.lucro)+'</b></td></tr>':'')+'</table></div></div>';
   osE('os-aba-corpo').innerHTML=h;
 }
 function osItemServ(){
   var s=OS.serv.filter(function(x){ return String(x.id)===osE('osi-serv').value; })[0];
   if(!s) return;
-  osE('osi-desc').value=s.nome; osE('osi-valor').value=osN(s.valor_padrao); osE('osi-custo').value=osN(s.custo_padrao);
+  osE('osi-desc').value=s.nome; osE('osi-valor').value=osN(s.valor_padrao); if(osE('osi-custo')) osE('osi-custo').value=osN(s.custo_padrao);
 }
 function osItemAdd(){
-  var c={servico_id:osE('osi-serv').value||null, descricao:osE('osi-desc').value, qtd:osE('osi-qtd').value,
-         valor:osE('osi-valor').value, custo:osE('osi-custo').value};
+  var c={servico_id:osE('osi-serv').value||null, descricao:osE('osi-desc').value, qtd:osE('osi-qtd').value, valor:osE('osi-valor').value};
+  if(osE('osi-custo')) c.custo=osE('osi-custo').value; else c.tipo_item=osE('osi-tipo').value;
   if(!c.descricao.trim() && !c.servico_id){ osMsg('Escolha da tabela ou digite a descrição.','err'); return; }
   osApi('/api/os/'+OS.atual.os.numero+'/itens','POST',c).then(function(){ osRecarregar('itens'); }).catch(osErr);
 }
@@ -1182,12 +1195,13 @@ function osItemEdit(iid){
     '<div class="fg"><label>Descrição</label><input id="osie-desc" value="'+osEsc(i.descricao)+'"></div>'+
     '<div class="g3"><div class="fg"><label>Qtd</label><input id="osie-qtd" value="'+osN(i.qtd)+'"></div>'+
     '<div class="fg"><label>Valor unitário (R$)</label><input id="osie-valor" value="'+osN(i.valor)+'"></div>'+
-    '<div class="fg"><label>Custo unitário (R$)</label><input id="osie-custo" value="'+osN(i.custo)+'"></div></div>'+
+    (osVL()?'<div class="fg"><label>Custo unitário (R$)</label><input id="osie-custo" value="'+osN(i.custo)+'"></div>':'')+'</div>'+
     '<div style="text-align:right"><button class="btn-main" onclick="osItemEditSalvar('+iid+')">Salvar</button></div>');
 }
 function osItemEditSalvar(iid){
-  osApi('/api/os/'+OS.atual.os.numero+'/itens/'+iid,'PUT',{descricao:osE('osie-desc').value,qtd:osE('osie-qtd').value,
-    valor:osE('osie-valor').value,custo:osE('osie-custo').value}).then(function(){ osFechar(); osRecarregar('itens'); }).catch(osErr);
+  var c={descricao:osE('osie-desc').value,qtd:osE('osie-qtd').value,valor:osE('osie-valor').value};
+  if(osE('osie-custo')) c.custo=osE('osie-custo').value;
+  osApi('/api/os/'+OS.atual.os.numero+'/itens/'+iid,'PUT',c).then(function(){ osFechar(); osRecarregar('itens'); }).catch(osErr);
 }
 function osItemDel(iid){
   if(!confirm('Remover este item da OS?')) return;
@@ -1200,25 +1214,58 @@ function osHonSalvar(){
 // ── aba Recebimentos ──
 function osAbaReceb(){
   var d=OS.atual, o=d.os;
-  var h='<div class="table-wrap"><table><thead><tr><th>Data</th><th>Descrição</th><th>Forma</th><th>Conta</th><th>Centro</th><th>Usuário</th><th style="text-align:right">Valor</th><th></th></tr></thead><tbody>';
+  var h='<div class="table-wrap"><table><thead><tr><th>Data</th><th>Forma / conta</th><th>Informado por</th><th>Situação</th><th style="text-align:right">Valor</th><th></th></tr></thead><tbody>';
   d.recebimentos.forEach(function(r){
-    h+='<tr><td>'+osEsc(r.quando)+'</td><td>PAGAMENTO CONFORME O.S. Nº '+o.numero+(r.obs?'<div class="os-small">'+osEsc(r.obs)+'</div>':'')+'</td><td>'+osEsc(r.forma||'')+'</td><td>'+osEsc(r.conta||'')+'</td><td>'+osEsc(r.centro||'')+'</td><td>'+osEsc(r.user_nome)+'</td>'+
-       '<td class="os-money os-ok">'+osN(r.valor)+'</td><td>'+(osAdm()&&!o.excluida_em?'<button class="os-b del" onclick="osRecebDel('+r.id+')">✕</button>':'')+'</td></tr>';
+    var st=r.status||'confirmado', sit, ac='';
+    if(st==='confirmado') sit='<span class="os-st st-entregue">✓ BAIXA DADA</span>'+(r.baixa_por?'<div class="os-small">'+osEsc(r.baixa_por)+' '+osEsc(r.baixa_em||'')+'</div>':'');
+    else if(st==='pendente'){ sit='<span class="os-st st-andamento">⏳ AGUARDANDO BAIXA</span>';
+      if(osBX()&&!o.excluida_em) ac='<button class="os-b pri" onclick="osBaixa('+r.id+',true)">✓ Dar baixa</button> <button class="os-b del" onclick="osBaixa('+r.id+',false)">Recusar</button>';
+      else if(r.user_nome===MEU_NOME_OS()) ac='<button class="os-b del" onclick="osRecebDel('+r.id+')">Cancelar</button>'; }
+    else sit='<span class="os-st st-cancelada">✕ RECUSADO</span><div class="os-small">'+osEsc(r.baixa_por||'')+(r.recusa_motivo?' — '+osEsc(r.recusa_motivo):'')+'</div>';
+    if(st==='confirmado' && osAdm() && !o.excluida_em) ac='<button class="os-b del" onclick="osRecebDel('+r.id+')">✕</button>';
+    h+='<tr style="'+(st==='recusado'?'opacity:.55':'')+'"><td>'+osEsc(r.quando)+(r.obs?'<div class="os-small">'+osEsc(r.obs)+'</div>':'')+'</td><td>'+osEsc(r.forma||'')+'<div class="os-small">'+osEsc(r.conta||'')+'</div></td>'+
+       '<td>'+osEsc(r.user_nome)+'</td><td>'+sit+'</td><td class="os-money '+(st==='confirmado'?'os-ok':'')+'" style="'+(st==='recusado'?'text-decoration:line-through':'')+'">'+osN(r.valor)+'</td><td style="white-space:nowrap">'+ac+'</td></tr>';
   });
-  if(!d.recebimentos.length) h+='<tr><td colspan="8" class="os-vazio">Nenhum recebimento.</td></tr>';
-  else h+='<tr class="os-soma"><td colspan="6">Total recebido</td><td class="os-money">'+osN(o.pago)+'</td><td></td></tr>';
+  if(!d.recebimentos.length) h+='<tr><td colspan="6" class="os-vazio">Nenhum recebimento.</td></tr>';
+  else h+='<tr class="os-soma"><td colspan="4">Total com baixa (pago)</td><td class="os-money">'+osN(o.pago)+'</td><td></td></tr>';
   h+='</tbody></table></div><div style="display:flex;gap:8px">';
-  if(o.devedor>0.004 && !o.excluida_em && o.status!=='orcamento') h+='<button class="os-b pri" onclick="osReceberModal()">💰 Receber '+osR(o.devedor)+'</button>';
+  if(o.devedor-(o.aguardando_baixa||0)>0.004 && !o.excluida_em && o.status!=='orcamento') h+='<button class="os-b pri" onclick="osReceberModal()">💰 '+(osBX()?'Receber':'Informar recebimento')+'</button>';
   if(o.pago>0) h+='<button class="os-b" onclick="osRecibo()">🧾 Emitir recibo</button>';
-  h+='</div><p class="cfg-note" style="margin-top:10px">Cada recebimento entra sozinho no extrato do Financeiro, na conta escolhida. Só o administrador exclui recebimento.</p>';
+  h+='</div><p class="cfg-note" style="margin-top:10px">'+(osBX()?'Recebimento lançado por você já entra com baixa. O que os funcionários informam fica <b>aguardando baixa</b> e só conta como pago (e entra no extrato) quando você confirma.':
+     'O recebimento que você informa fica <b>aguardando baixa</b>. Só conta como pago depois que o responsável conferir e dar a baixa.')+'</p>';
   osE('os-aba-corpo').innerHTML=h;
+}
+function MEU_NOME_OS(){ return (typeof MEU_NOME!=='undefined'&&MEU_NOME)?MEU_NOME:''; }
+function osBaixa(rid, aceitar, depois){
+  var motivo='';
+  if(!aceitar){ motivo=prompt('Motivo da recusa (aparece no histórico da OS):',''); if(motivo===null) return; }
+  else if(!confirm('Confirmar que este dinheiro entrou? A OS passa a contar como paga nesse valor e entra no extrato.')) return;
+  osApi('/api/os-recebimentos/'+rid+'/baixa','POST',{acao:aceitar?'aceitar':'recusar',motivo:motivo}).then(function(){
+    osMsg(aceitar?'✓ Baixa dada.':'Recebimento recusado.');
+    if(typeof depois==='function') depois(); else osRecarregar('recebimentos');
+  }).catch(osErr);
+}
+function osBaixasModal(){
+  osApi('/api/os-recebimentos/pendentes').then(function(r){
+    var h='<p class="os-small" style="margin-bottom:10px">Recebimentos informados pelos funcionários. Confira se o dinheiro entrou (PIX no extrato do banco, dinheiro no caixa) antes de dar a baixa.</p>'+
+      '<div class="table-wrap"><table><thead><tr><th>OS</th><th>Cliente / placa</th><th>Data</th><th>Forma / conta</th><th>Informado por</th><th style="text-align:right">Valor</th><th></th></tr></thead><tbody>';
+    r.itens.forEach(function(x){
+      h+='<tr><td class="os-num" style="cursor:pointer" onclick="osFechar();osAbrir('+x.numero+',\'recebimentos\')">'+x.numero+'</td><td>'+osEsc(x.cliente_nome||'')+'<div class="os-small">'+osEsc(x.placa||'')+'</div></td><td>'+osEsc(x.quando)+'</td>'+
+         '<td>'+osEsc(x.forma||'')+'<div class="os-small">'+osEsc(x.conta||'')+'</div></td><td>'+osEsc(x.user_nome)+'</td><td class="os-money"><b>'+osN(x.valor)+'</b></td>'+
+         '<td style="white-space:nowrap">'+(r.pode_dar_baixa?'<button class="os-b pri" onclick="osBaixa('+x.id+',true,osBaixasModal)">✓ Dar baixa</button> <button class="os-b del" onclick="osBaixa('+x.id+',false,osBaixasModal)">Recusar</button>':'')+'</td></tr>';
+    });
+    if(!r.itens.length) h+='<tr><td colspan="7" class="os-vazio">Nada aguardando baixa.</td></tr>';
+    osModal('Recebimentos aguardando baixa', h+'</tbody></table></div>', true);
+    osPainel();
+  }).catch(osErr);
 }
 function osReceberModal(){
   var o=OS.atual.os, c=OS.cad, mp=c.meus_padroes||{};
   var contaPad = mp.conta_id || ((c.contas||[]).filter(function(x){ return x.ativo && x.nome==='SICRED'; })[0]||{}).id;   // padrão do BitDesp
   osModal('Recebimento — OS Nº '+o.numero,
-    '<div class="os-ficha" style="margin-bottom:12px">Total '+osR(o.total)+' · Pago '+osR(o.pago)+' · <b class="os-dev">Devedor '+osR(o.devedor)+'</b></div>'+
-    '<div class="g2"><div class="fg"><label>Valor recebido (R$) — entrada ou total</label><input id="osr-valor" value="'+osN(o.devedor)+'"></div>'+
+    (osBX()?'':'<div class="alert" style="display:block;margin:0 0 12px;background:rgba(255,165,2,.1);border:1px solid rgba(255,165,2,.4);color:var(--warn)">⏳ Este recebimento fica <b>aguardando baixa</b>. Só conta como pago depois que o responsável conferir.</div>')+
+    '<div class="os-ficha" style="margin-bottom:12px">Total '+osR(o.total)+' · Pago '+osR(o.pago)+(o.aguardando_baixa>0?' · Aguardando baixa '+osR(o.aguardando_baixa):'')+' · <b class="os-dev">Devedor '+osR(o.devedor)+'</b></div>'+
+    '<div class="g2"><div class="fg"><label>Valor recebido (R$) — entrada ou total</label><input id="osr-valor" value="'+osN(Math.max(0,o.devedor-(o.aguardando_baixa||0)))+'"></div>'+
     '<div class="fg"><label>Data</label><input type="date" id="osr-data" value="'+osHoje()+'"></div>'+
     '<div class="fg"><label>Forma de pagamento *</label><select id="osr-forma">'+osOpts(c.formas,mp.forma_id,'— escolha —')+'</select></div>'+
     '<div class="fg"><label>Conta *</label><select id="osr-conta">'+osOpts(c.contas,contaPad,'— escolha —')+'</select></div></div>'+
@@ -1232,7 +1279,8 @@ function osReceber(){
          centro_id:osE('osr-centro').value||null, obs:osE('osr-obs').value};
   if(!c.forma_pgto_id){ osMsg('Escolha a forma de pagamento.','err'); return; }
   if(!c.conta_id){ osMsg('Escolha a conta.','err'); return; }
-  osApi('/api/os/'+OS.atual.os.numero+'/recebimentos','POST',c).then(function(){ osFechar(); osMsg('✓ Recebimento lançado.'); osRecarregar('recebimentos'); }).catch(osErr);
+  osApi('/api/os/'+OS.atual.os.numero+'/recebimentos','POST',c).then(function(r){ osFechar();
+    osMsg(r.status==='pendente'?'⏳ Recebimento informado. Fica aguardando a baixa do responsável.':'✓ Recebimento lançado com baixa.'); osRecarregar('recebimentos'); }).catch(osErr);
 }
 function osRecebDel(rid){
   if(!confirm('Excluir este recebimento? O lançamento no extrato também será apagado.')) return;
@@ -1376,7 +1424,7 @@ function osRecibo(){
     ', a importância de <b>'+osR(o.pago)+'</b>, proveniente de serviços prestados conforme a Ordem de Serviço nº <b>'+o.numero+'</b>'+
     (d.veiculo?', veículo placa '+osEsc(d.veiculo.placa):'')+'.</p>'+
     '<table style="margin-top:10px"><tr><th>Data</th><th>Forma</th><th class="r">Valor</th></tr>'+
-    d.recebimentos.map(function(r){ return '<tr><td>'+osEsc(r.quando)+'</td><td>'+osEsc(r.forma||'')+'</td><td class="r">'+osN(r.valor)+'</td></tr>'; }).join('')+'</table>'+
+    d.recebimentos.filter(function(r){ return (r.status||'confirmado')==='confirmado'; }).map(function(r){ return '<tr><td>'+osEsc(r.quando)+'</td><td>'+osEsc(r.forma||'')+'</td><td class="r">'+osN(r.valor)+'</td></tr>'; }).join('')+'</table>'+
     (o.devedor>0.004?'<p>Saldo devedor restante: <b>'+osR(o.devedor)+'</b>.</p>':'<p>Quitado.</p>')+
     '<p style="margin-top:20px">Anápolis-GO, '+hoje+'.</p><div class="ass">_______________________________________<br>Diego Caetano Silva</div>');
 }
@@ -1530,8 +1578,9 @@ function osSvLista(){
     osPacLista();
     var h='';
     l.forEach(function(s){
-      h+='<tr style="'+(s.ativo?'':'opacity:.45')+'"><td>'+osEsc(s.nome)+'</td><td class="os-money">'+osN(s.valor_padrao)+'</td><td class="os-money">'+osN(s.custo_padrao)+'</td>'+
-         '<td class="os-money">'+osN(s.valor_padrao-s.custo_padrao)+'</td><td>'+(s.processo_tipo?'<span class="os-tp">'+osEsc(s.processo_tipo)+'</span>':'')+'</td><td class="os-small">'+osEsc(s.centro_nome||'')+'</td><td>'+(s.ativo?'Sim':'Não')+'</td>'+
+      var vl=s.custo_padrao!==undefined;
+      h+='<tr style="'+(s.ativo?'':'opacity:.45')+'"><td>'+osEsc(s.nome)+'</td><td class="os-money">'+osN(s.valor_padrao)+'</td><td class="os-money">'+(vl?osN(s.custo_padrao):'🔒')+'</td>'+
+         '<td class="os-money">'+(vl?osN(s.valor_padrao-s.custo_padrao):'🔒')+'</td><td>'+(s.processo_tipo?'<span class="os-tp">'+osEsc(s.processo_tipo)+'</span>':'')+'</td><td class="os-small">'+osEsc(s.centro_nome||'')+'</td><td>'+(s.ativo?'Sim':'Não')+'</td>'+
          '<td>'+(osAdm()?'<button class="os-b" onclick="osSvEditar('+s.id+')">✎</button>':'')+'</td></tr>';
     });
     osE('os-sv-tbody').innerHTML=h||'<tr><td colspan="8" class="os-vazio">Nenhum serviço.</td></tr>';
@@ -1622,6 +1671,12 @@ function osFinCads(){
     osE('osf-mp-forma').innerHTML=osOpts(c.formas,mp.forma_id,'— nenhuma —');
     osE('osf-numini').value=c.os_numero_inicial||'';
     OS_EMP_CAMPOS.forEach(function(k){ var e=osE('osf-'+k); if(e) e.value=(c.empresa||{})[k]||''; });
+    if(osAdm()) osApi('/api/os/permissoes').then(function(l){
+      osE('osf-perm').innerHTML=l.map(function(u){ var adm=u.perfil==='admin';
+        var cb=function(k){ return '<input type="checkbox" style="width:18px;height:18px;accent-color:var(--acc)" '+(adm||u[k]?'checked':'')+(adm?' disabled':'')+' onchange="osPermSalvar(\''+osEsc(u.id)+'\',this)">'; };
+        return '<tr data-uid="'+osEsc(u.id)+'"><td>'+osEsc(u.nome||u.login)+'</td><td>'+osEsc(u.perfil)+'</td><td style="text-align:center" data-k="ver_lucro">'+cb('ver_lucro')+'</td><td style="text-align:center" data-k="dar_baixa">'+cb('dar_baixa')+'</td></tr>'; }).join('')
+        || '<tr><td colspan="4" class="os-vazio">Nenhum funcionário cadastrado.</td></tr>';
+    }).catch(osErr);
     osE('osf-prox').textContent='Próxima OS a ser aberta: nº '+c.proximo_numero;
     var blocos=[['tipos','Tipos de processo'],['contas','Contas'],['formas','Formas de pagamento'],['centros','Centros de valores'],['pendencias','Tipos de pendência']];
     var h='';
@@ -1640,6 +1695,10 @@ function osCadRen(t,id){ var x=OS.cad[t].filter(function(i){return i.id===id;})[
   osApi('/api/fin/'+t,'POST',{id:id,nome:n,ativo:x.ativo}).then(osFinCads).catch(osErr); }
 function osCadAtivo(t,id,v){ var x=OS.cad[t].filter(function(i){return i.id===id;})[0]; osApi('/api/fin/'+t,'POST',{id:id,nome:x.nome,ativo:v}).then(osFinCads).catch(osErr); }
 function osMeusPadroes(){ osApi('/api/fin/meus-padroes','PUT',{conta_id:osE('osf-mp-conta').value||null,forma_id:osE('osf-mp-forma').value||null}).then(function(){ osMsg('✓ Padrões salvos.'); osCarregarCad(true); }).catch(osErr); }
+function osPermSalvar(uid, el){
+  var tr=el.closest('tr'), q=function(k){ return tr.querySelector('[data-k="'+k+'"] input').checked; };
+  osApi('/api/os/permissoes','PUT',{id:uid, ver_lucro:q('ver_lucro'), dar_baixa:q('dar_baixa')}).then(function(){ osMsg('✓ Permissão salva.'); }).catch(osErr);
+}
 var OS_EMP_CAMPOS=['empresa_nome','empresa_fone','empresa_cidade','empresa_endereco','pix_chave','pix_nome','pix_cidade','pix_banco'];
 function osEmpresaSalvar(){
   var c={}; OS_EMP_CAMPOS.forEach(function(k){ c[k]=osE('osf-'+k).value; });
