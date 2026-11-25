@@ -1387,75 +1387,87 @@ function osJanela(titulo, corpo){
   w.document.close();
 }
 function osCabecalho(){ return '<div class="cab"><div><h1>Diego Despachante</h1><div>Caetano Despachante Ltda · CNPJ 08.965.960/0001-06 · Anápolis-GO</div></div>'; }
-// ═══ OS COMPLETA — documento no modelo do BitDesp (mesma coisa na tela e na impressão) ═══
+// ═══ OS COMPLETA — mesmo visual do orçamento (tela e impressão) ═══
 var BD_CSS=
-'.bd{background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.35;max-width:840px;margin:0 auto;padding:16px 18px 10px}'+
+'.bd{background:#fff;color:#1b2b27;font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;line-height:1.4;max-width:860px;margin:0 auto;border-radius:14px;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
 '.bd *{box-sizing:border-box}'+
-'.bd-cab{display:flex;align-items:center;border:1.5px solid #000;padding:8px 12px;gap:14px}'+
-'.bd-logo{width:86px;height:58px;border-radius:8px;background:#0f3d33;color:#f4c64e;font-size:34px;font-weight:900;display:flex;align-items:center;justify-content:center;flex:none}'+
-'.bd-emp{flex:1;text-align:center}.bd-emp b{display:block;font-size:17px;letter-spacing:.02em}.bd-emp div{font-size:11.5px}'+
-'.bd-lin{display:flex;align-items:center;justify-content:space-between;border:1.5px solid #000;border-top:0;padding:5px 12px;font-size:13px;gap:10px}'+
-'.bd-lin .n{font-size:16px}.bd-lin small{font-size:9.5px;display:block;line-height:1.1}'+
-'.bd-faixa{background:#000;color:#fff;font-weight:800;font-size:14px;padding:4px 10px;margin-top:6px;letter-spacing:.02em}'+
-'.bd-box{border:1.5px solid #000;border-top:0;padding:4px 10px 6px}'+
-'.bd-r{display:flex;flex-wrap:wrap;gap:1px 14px;padding:1px 0}.bd-r>span{flex:1 1 auto}.bd-r>.dir{flex:0 0 auto;text-align:right;min-width:36%}'+
-'.bd-r b{font-weight:700}'+
-'.bd-fora{padding:3px 10px 0}'+
-'.bd-tab{width:76%;margin:6px auto 0;border-collapse:collapse}'+
-'.bd-tab th{background:#7f7f7f;color:#fff;font-weight:400;text-align:left;padding:3px 8px;border:0}'+
-'.bd-tab td{background:#d0d0d0;border:0;border-bottom:2px solid #fff;padding:2px 8px;color:#000}'+
-'.bd-tab .v{text-align:right;white-space:nowrap}'+
-'.bd-tot{width:76%;margin:4px auto 0;display:grid;grid-template-columns:1fr 1fr 1fr;font-size:12.5px;row-gap:1px}'+
-'.bd-tot b{font-weight:700}.bd-tot .c3{text-align:right}'+
-'.bd-tot .dv{grid-column:3;text-align:right;border-top:1.5px solid #000;padding-top:2px;margin-top:3px}'+
-'.bd-obs{border:1.5px solid #000;border-top:0;min-height:120px;padding:8px 10px;white-space:pre-wrap}'+
-'.bd-ass{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}'+
-'.bd-ass>div{border:1.5px solid #000;padding:8px 10px 6px;text-align:center;font-size:10.5px;display:flex;flex-direction:column;justify-content:space-between;min-height:118px}'+
-'.bd-ass .ln{border-top:1px solid #000;margin:26px 18px 0;padding-top:3px;font-size:11px}'+
-'.bd-rod{text-align:center;font-size:11.5px;margin-top:8px}'+
-'.bd table{font-size:12.5px!important}.bd th{text-transform:none!important;letter-spacing:0!important;font-size:12.5px!important;color:#fff!important;font-family:Arial,sans-serif!important}'+
-'.bd td{font-family:Arial,sans-serif!important}';
+'.bd-top{background:#0f3d33;color:#fff;display:flex;justify-content:space-between;align-items:center;padding:18px 26px;gap:16px}'+
+'.bd-marca{display:flex;gap:14px;align-items:center}'+
+'.bd-logo{width:54px;height:54px;border-radius:12px;background:#f4c64e;color:#0f3d33;font-size:30px;font-weight:900;display:flex;align-items:center;justify-content:center;flex:none}'+
+'.bd-emp{font-size:21px;font-weight:800;line-height:1.1}.bd-sub{font-size:11.5px;color:#b9d6cc;margin-top:3px;line-height:1.35}'+
+'.bd-num{text-align:right}.bd-k{font-size:10.5px;letter-spacing:.14em;color:#b9d6cc;font-weight:700}'+
+'.bd-n{font-size:30px;font-weight:900;line-height:1.05}.bd-d{font-size:11.5px;color:#b9d6cc}'+
+'.bd-chip{display:inline-block;margin-top:5px;background:#f4c64e;color:#0f3d33;border-radius:12px;padding:2px 10px;font-size:10.5px;font-weight:800;letter-spacing:.06em}'+
+'.bd-faixa{height:5px;background:linear-gradient(90deg,#1f9d7a 60%,#f4c64e 60%)}'+
+'.bd-sec{padding:14px 26px 4px}'+
+'.bd-tit{font-size:10.5px;letter-spacing:.14em;color:#1f9d7a;font-weight:800;margin-bottom:8px;display:flex;align-items:center;gap:8px}'+
+'.bd-tit:after{content:"";flex:1;height:1px;background:#dfe8e5}'+
+'.bd-cli{display:flex;justify-content:space-between;gap:18px;align-items:flex-start}'+
+'.bd-nome{font-size:19px;font-weight:800;line-height:1.15}'+
+'.bd-info{font-size:12.5px;color:#4d625c;margin-top:3px}.bd-info b{color:#1b2b27;font-weight:700}'+
+'.bd-placa{border:2px solid #1b2b27;border-radius:6px;overflow:hidden;text-align:center;min-width:128px;flex:none}'+
+'.bd-pbr{background:#1f4e9e;color:#fff;font-size:8.5px;font-weight:800;letter-spacing:.2em;padding:1px 0}'+
+'.bd-pn{font-size:22px;font-weight:900;letter-spacing:.08em;padding:1px 10px;font-family:Arial,sans-serif;color:#1b2b27}'+
+'.bd-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px 14px}'+
+'.bd-c span{display:block;font-size:9.5px;letter-spacing:.1em;color:#6b7f79;font-weight:700;text-transform:uppercase}'+
+'.bd-c b{display:block;font-size:13px;font-weight:700;color:#1b2b27;word-break:break-word}'+
+'.bd-c.s2{grid-column:span 2}'+
+'.bd table.bd-t{width:100%;border-collapse:collapse;font-size:13px!important}'+
+'.bd-t th{font-size:10px!important;letter-spacing:.1em!important;color:#6b7f79!important;border-bottom:2px solid #1b2b27!important;padding:6px 4px!important;text-align:left;background:none!important;font-weight:700;text-transform:uppercase!important}'+
+'.bd-t td{border-bottom:1px solid #e3e9e7;padding:7px 4px;color:#1b2b27;background:none;font-family:inherit}'+
+'.bd-t .c{text-align:center!important}.bd-t .r{text-align:right!important;white-space:nowrap}.bd-t .b{font-weight:800}.bd-t .neg{color:#b42318}'+
+'.bd-tot{margin:10px 26px 0;background:#0f3d33;border-radius:10px;padding:13px 18px;display:flex;justify-content:space-between;align-items:center}'+
+'.bd-tot span{color:#cfe9df;font-weight:800;letter-spacing:.14em;font-size:12.5px}.bd-tot b{color:#f4c64e;font-size:28px;font-weight:900}'+
+'.bd-pg{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 26px 0}'+
+'.bd-pg>div{border-radius:10px;padding:9px 14px;display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:700;letter-spacing:.06em}'+
+'.bd-pg .ok{background:#e6f5ef;color:#14684f}.bd-pg .dv{background:#fdecea;color:#b42318}.bd-pg .qt{background:#e6f5ef;color:#14684f}'+
+'.bd-pg b{font-size:18px;font-weight:900}'+
+'.bd-obs{background:#f4f8f6;border-radius:8px;padding:10px 12px;min-height:58px;white-space:pre-wrap;font-size:13px}'+
+'.bd-ass{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px 26px 0}'+
+'.bd-ass>div{border:1px solid #dfe8e5;border-radius:10px;padding:10px 12px;font-size:10.5px;color:#4d625c;display:flex;flex-direction:column;justify-content:space-between;min-height:132px;text-align:justify}'+
+'.bd-ass .ln{border-top:1.5px solid #1b2b27;margin:28px 10px 0;padding-top:4px;font-size:11px;color:#1b2b27;text-align:center;font-weight:700}'+
+'.bd-ass .ret{text-align:center;margin-top:8px;color:#1b2b27}'+
+'.bd-rod{margin:12px 26px 0;padding:10px 0 16px;border-top:1px solid #e3e9e7;font-size:11px;color:#6b7f79;text-align:center}';
 function osPlacaFmt(p){ p=String(p||'').toUpperCase().replace(/[^A-Z0-9]/g,''); return p.length===7?p.slice(0,3)+'-'+p.slice(3):p; }
-function osBRL(v){ v=Number(v)||0; return (v<0?'-':'')+osR(Math.abs(v)); }
 function osDocHtml(d){
   var o=d.os, c=d.cliente||{}, r=d.responsavel||{}, v=d.veiculo||{}, emp=(OS.cad||{}).empresa||{};
   var orc=o.status==='orcamento';
-  var V=function(rot,val,cls){ return '<span'+(cls?' class="'+cls+'"':'')+'>'+rot+': <b>'+osEsc(val==null?'':val)+'</b></span>'; };
-  var fones=[c.cel,c.fone].filter(Boolean).join(' / ');
-  var itens=d.itens.map(function(i){ return '<tr><td>'+osEsc(i.descricao)+(i.qtd!=1?' ('+osN(i.qtd).replace(',00','')+'x)':'')+'</td><td class="v">'+osBRL(i.valor*i.qtd)+'</td></tr>'; }).join('');
-  if(o.desconto>0) itens+='<tr><td>DESCONTO</td><td class="v">'+osBRL(-o.desconto)+'</td></tr>';
+  var C=function(rot,val,s2,sempre){ if(!sempre && (val==null||val==='')) return ''; return '<div class="bd-c'+(s2?' s2':'')+'"><span>'+rot+'</span><b>'+osEsc(val==null||val===''?'—':val)+'</b></div>'; };
   var agora=new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).replace(',','');
+  var end=[[c.endereco,c.numero].filter(Boolean).join(', '),c.complemento,c.bairro,c.cidade].filter(Boolean).join(' · ')+(c.cep?' · CEP '+c.cep:'');
+  var linhas=d.itens.map(function(i){ return '<tr><td>'+osEsc(i.descricao)+'</td><td class="c">'+osN(i.qtd).replace(',00','')+'</td><td class="r">'+osR(i.valor)+'</td><td class="r b">'+osR(i.valor*i.qtd)+'</td></tr>'; }).join('')+
+    (o.honorario>0?'<tr><td>Honorários do despachante</td><td class="c">1</td><td class="r">'+osR(o.honorario)+'</td><td class="r b">'+osR(o.honorario)+'</td></tr>':'')+
+    (o.desconto>0?'<tr><td>Desconto</td><td class="c"></td><td class="r"></td><td class="r b neg">− '+osR(o.desconto)+'</td></tr>':'');
   var nomeAss=osEsc((d.responsavel&&d.responsavel.nome)||c.nome||'');
+  var veic=C('Placa',osPlacaFmt(v.placa),0,1)+C('Renavam',v.renavam,0,1)+C('Chassi',v.chassi,1,1)+
+           C('Marca / Modelo',v.modelo,1,1)+C('Ano fab./mod.',[v.ano_fab,v.ano_mod].filter(Boolean).join('/')||v.ano,0,1)+C('Cor',v.cor,0,1)+
+           C('Combustível',v.combustivel)+C('Categoria',v.categoria)+C('Município',v.municipio)+C('Data de aquisição',osBr(o.data_nf_crv))+
+           C('Valor nota / CRV',o.valor_nf_crv?osR(o.valor_nf_crv):'')+C('Restrição',o.restricao_financeira)+C('Financeira',o.financeira)+
+           C('Proprietário anterior',o.proprietario_anterior,1)+C('Protocolo',o.protocolo)+C('Código web',o.codigo_web);
+  var rod=[emp.empresa_endereco,emp.empresa_cidade,emp.empresa_fone,emp.empresa_email].filter(Boolean).join(' · ');
   return '<div class="bd">'+
-    '<div class="bd-cab"><div class="bd-logo">'+osEsc((emp.empresa_nome||'D').slice(0,1))+'</div><div class="bd-emp"><b>'+osEsc((emp.empresa_nome||'Diego Despachante').toUpperCase())+'</b>'+
-      (emp.empresa_endereco?'<div>'+osEsc(emp.empresa_endereco.toUpperCase())+(emp.empresa_cidade?' - '+osEsc(emp.empresa_cidade.toUpperCase()):'')+'</div>':(emp.empresa_cidade?'<div>'+osEsc(emp.empresa_cidade.toUpperCase())+'</div>':''))+
-      (emp.empresa_fone?'<div>TELEFONE(S): '+osEsc(emp.empresa_fone)+'</div>':'')+(emp.empresa_email?'<div>'+osEsc(emp.empresa_email)+'</div>':'')+'</div></div>'+
-    '<div class="bd-lin"><span class="n">'+(orc?'ORÇAMENTO':'ORDEM DE SERVIÇO')+' Nº <b>'+o.numero+'</b></span>'+
-      '<span><small>Usuário:</small>'+osEsc((o.user_nome||'').toUpperCase())+'</span>'+
-      (o.processo_tipo?'<span><small>Tipo de processo:</small>'+osEsc(o.processo_tipo)+'</span>':'')+
-      '<span>'+(orc?'VÁLIDO ATÉ: <b>'+osBr(o.validade)+'</b>':'DATA DE EMISSÃO: <b>'+osEsc(agora)+'</b>')+'</span></div>'+
-    '<div class="bd-faixa">PROPRIETÁRIO</div><div class="bd-box">'+
-      '<div class="bd-r">'+V('Nome/Razão Social',c.nome)+V('CPF/CNPJ',c.cpf_cnpj,'dir')+'</div>'+
-      '<div class="bd-r">'+V('Responsável/Revenda',r.nome)+V('Fone Responsável/Revenda',r.cel||r.fone,'dir')+'</div>'+
-      '<div class="bd-r">'+V('Endereço',[c.endereco,c.numero].filter(Boolean).join(', '))+V('Bairro',c.bairro,'dir')+'</div>'+
-      '<div class="bd-r">'+V('Complemento',c.complemento)+V('CEP',c.cep,'dir')+'</div>'+
-      '<div class="bd-r">'+V('Cidade',c.cidade)+V('Telefone(s)',fones,'dir')+'</div></div>'+
-    '<div class="bd-faixa">VEÍCULO</div><div class="bd-box">'+
-      '<div class="bd-r">'+V('Placa',osPlacaFmt(v.placa))+V('Renavam',v.renavam)+V('Chassi',v.chassi)+V('Marca/Modelo',v.modelo)+'</div>'+
-      '<div class="bd-r">'+V('Ano Fab/Mod',[v.ano_fab,v.ano_mod].filter(Boolean).join('/')||v.ano||'')+V('Combustível',v.combustivel)+V('Cor',v.cor)+V('Categoria',v.categoria)+'</div>'+
-      '<div class="bd-r">'+V('Data de aquisição',osBr(o.data_nf_crv))+V('Município',v.municipio)+'</div>'+
-      '<div class="bd-r">'+V('Restrição',o.restricao_financeira)+V('Financeira',o.financeira,'dir')+'</div></div>'+
-    '<div class="bd-fora"><div class="bd-r">'+V('Proprietário Anterior',o.proprietario_anterior)+V('Protocolo',o.protocolo,'dir')+'</div>'+
-      '<div class="bd-r">'+V('Data Nota/CRV',osBr(o.data_nf_crv))+V('Valor Nota/CRV',o.valor_nf_crv!=null?osR(o.valor_nf_crv):osR(0))+'<span></span></div></div>'+
-    '<div class="bd-faixa">TAXAS/DÉBITOS/DESPESAS</div>'+
-      '<table class="bd-tab"><tr><th>Descrição</th><th class="v">Valor</th></tr>'+(itens||'<tr><td colspan="2">—</td></tr>')+'</table>'+
-      '<div class="bd-tot"><span>Custos <b>'+osR(o.itens_valor-(o.desconto||0))+'</b></span><span>Honorário <b>'+osR(o.honorario)+'</b></span><span class="c3">Valor Total <b>'+osR(o.total)+'</b></span>'+
-        '<span></span><span></span><span class="c3">Adiantado <b>'+osR(o.pago)+'</b></span>'+
-        '<span></span><span></span><span class="dv">Devedor <b>'+osR(o.devedor)+'</b></span></div>'+
-    '<div class="bd-faixa" style="margin-top:12px">OBSERVAÇÕES</div><div class="bd-obs">'+osEsc(o.obs_cliente||'')+'</div>'+
-    '<div class="bd-ass"><div><div>Autorizo a execução do serviço apresentado neste documento estando ciente dos valores cobrados e concordado com os mesmos. Também me comprometo a fornecer toda documentação necessária para conclusão do processo. Voluntariamente também decido ser representado pelo despachante emissor deste documento, junto à estampadora, na confecção e instalação da(s) placa(s), se aplicada neste processo. (Res. 780/2019-Contran).</div><div class="ln">'+nomeAss+'</div></div>'+
-      '<div><div>Declaro que conferi e retirei o(s) documento(s) conforme contratado nesta ordem de serviço, foram esclarecidas todas as dúvidas quanto débitos que incidem sobre o veículo isentando o despachante de quaisquer responsabilidade.<br><br>Retirado em ____/____/_______</div><div class="ln">'+nomeAss+'</div></div></div>'+
-    (o.codigo_web?'<div class="bd-rod">Código web do processo: <b>'+osEsc(o.codigo_web)+'</b></div>':'')+
+    '<div class="bd-top"><div class="bd-marca"><div class="bd-logo">'+osEsc((emp.empresa_nome||'D').slice(0,1))+'</div><div><div class="bd-emp">'+osEsc(emp.empresa_nome||'Diego Despachante')+'</div>'+
+      '<div class="bd-sub">'+osEsc([emp.empresa_endereco,emp.empresa_cidade].filter(Boolean).join(' · '))+(emp.empresa_fone||emp.empresa_email?'<br>'+osEsc([emp.empresa_fone,emp.empresa_email].filter(Boolean).join(' · ')):'')+'</div></div></div>'+
+      '<div class="bd-num"><div class="bd-k">'+(orc?'ORÇAMENTO':'ORDEM DE SERVIÇO')+'</div><div class="bd-n">Nº '+o.numero+'</div>'+
+      '<div class="bd-d">'+(orc&&o.validade?'válido até '+osBr(o.validade)+' · ':'')+'emitida '+osEsc(agora)+' · '+osEsc(o.user_nome||'')+'</div>'+
+      (o.processo_tipo?'<div class="bd-chip">'+osEsc(o.processo_tipo)+'</div>':'')+'</div></div>'+
+    '<div class="bd-faixa"></div>'+
+    '<div class="bd-sec"><div class="bd-tit">CLIENTE (PROPRIETÁRIO)</div><div class="bd-cli"><div>'+
+      '<div class="bd-nome">'+osEsc(c.nome||'—')+'</div>'+
+      '<div class="bd-info">CPF/CNPJ <b>'+osEsc(c.cpf_cnpj||'—')+'</b>'+([c.cel,c.fone].filter(Boolean).length?' · Telefone <b>'+osEsc([c.cel,c.fone].filter(Boolean).join(' / '))+'</b>':'')+(c.email?' · '+osEsc(c.email):'')+'</div>'+
+      (end?'<div class="bd-info">'+osEsc(end)+'</div>':'')+
+      (r.nome?'<div class="bd-info">Responsável / revenda: <b>'+osEsc(r.nome)+'</b>'+(r.cel||r.fone?' · '+osEsc(r.cel||r.fone):'')+'</div>':'')+
+      '</div>'+(v.placa?'<div class="bd-placa"><div class="bd-pbr">BRASIL</div><div class="bd-pn">'+osEsc(String(v.placa).replace('-',''))+'</div></div>':'')+'</div></div>'+
+    '<div class="bd-sec"><div class="bd-tit">VEÍCULO</div><div class="bd-grid">'+veic+'</div></div>'+
+    '<div class="bd-sec"><div class="bd-tit">SERVIÇOS, TAXAS E DESPESAS</div>'+
+      '<table class="bd-t"><thead><tr><th>Descrição</th><th class="c">Qtd</th><th class="r">Valor un.</th><th class="r">Total</th></tr></thead><tbody>'+(linhas||'<tr><td colspan="4">—</td></tr>')+'</tbody></table></div>'+
+    '<div class="bd-tot"><span>TOTAL</span><b>'+osR(o.total)+'</b></div>'+
+    (orc?'':'<div class="bd-pg"><div class="ok"><span>PAGO / ADIANTADO</span><b>'+osR(o.pago)+'</b></div>'+
+      (o.devedor>0.004?'<div class="dv"><span>FALTA PAGAR</span><b>'+osR(o.devedor)+'</b></div>':'<div class="qt"><span>SITUAÇÃO</span><b>QUITADO</b></div>')+'</div>')+
+    '<div class="bd-sec"><div class="bd-tit">OBSERVAÇÕES</div><div class="bd-obs">'+osEsc(o.obs_cliente||'')+'</div></div>'+
+    '<div class="bd-ass"><div><div>Autorizo a execução do serviço apresentado neste documento estando ciente dos valores cobrados e concordando com os mesmos. Também me comprometo a fornecer toda a documentação necessária para conclusão do processo. Voluntariamente também decido ser representado pelo despachante emissor deste documento, junto à estampadora, na confecção e instalação da(s) placa(s), se aplicada neste processo (Res. 780/2019-Contran).</div><div class="ln">'+nomeAss+'</div></div>'+
+      '<div><div>Declaro que conferi e retirei o(s) documento(s) conforme contratado nesta ordem de serviço, e foram esclarecidas todas as dúvidas quanto a débitos que incidem sobre o veículo, isentando o despachante de quaisquer responsabilidades.<div class="ret">Retirado em ____/____/________</div></div><div class="ln">'+nomeAss+'</div></div></div>'+
+    '<div class="bd-rod">'+osEsc(rod||(emp.empresa_nome||'Diego Despachante'))+'</div>'+
   '</div>';
 }
 function osAbaDoc(){
@@ -1465,7 +1477,7 @@ function osAbaDoc(){
     '<span class="os-small" style="margin-right:auto;align-self:center">É assim que sai impresso para o cliente assinar. Para alterar algo, use as abas Cadastro, Itens e Recebimentos.</span>'+
     '<button class="os-b" onclick="OS.aba=\'cadastro\';osRender()">✎ Editar cadastro</button>'+
     '<button class="os-b pri" onclick="osImprimir()">🖨 Imprimir / salvar PDF</button></div>'+
-    '<div style="background:#e9ecef;padding:18px;border-radius:10px;overflow-x:auto">'+osDocHtml(d)+'</div>';
+    '<div style="background:#0b1016;padding:18px;border-radius:10px;overflow-x:auto">'+osDocHtml(d)+'</div>';
   if(o.obs) h+='<div class="os-box" style="margin-top:12px"><h4>Observação interna (não sai na impressão)</h4><div style="white-space:pre-wrap">'+osEsc(o.obs)+'</div></div>';
   osE('os-aba-corpo').innerHTML=h;
 }
@@ -1473,7 +1485,10 @@ function osImprimir(){
   var d=OS.atual, o=d.os;
   var w=window.open('','_blank'); if(!w){ osMsg('Libere os pop-ups para imprimir.','err'); return; }
   w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+(o.status==='orcamento'?'Orçamento ':'OS ')+o.numero+'</title><style>'+BD_CSS+
-    'body{margin:0;background:#fff}.bd{padding:6mm 8mm}@page{size:A4;margin:6mm}@media print{.nao-imp{display:none}}'+
+    'body{margin:0;background:#fff}.bd{border-radius:0;max-width:none}@page{size:A4;margin:0}@media print{.nao-imp{display:none}.bd-ass,.bd-tot,.bd-pg{break-inside:avoid}'+
+    '.bd{font-size:12px}.bd-top{padding:12px 22px}.bd-sec{padding:9px 22px 2px}.bd-t td{padding:4px 4px}.bd-tit{margin-bottom:5px}'+
+    '.bd-tot{margin:8px 22px 0;padding:9px 16px}.bd-tot b{font-size:23px}.bd-pg{margin:7px 22px 0}.bd-pg>div{padding:6px 12px}.bd-pg b{font-size:15px}'+
+    '.bd-obs{min-height:40px;padding:7px 10px}.bd-ass{padding:9px 22px 0}.bd-ass>div{min-height:112px}.bd-ass .ln{margin-top:18px}.bd-rod{margin:8px 22px 0;padding:6px 0 8px}.bd-grid{gap:5px 14px}}'+
     '.nao-imp{text-align:center;padding:10px}.nao-imp button{font-size:15px;padding:8px 22px;cursor:pointer}</style></head><body>'+
     '<div class="nao-imp"><button onclick="window.print()">🖨 Imprimir / salvar PDF</button></div>'+osDocHtml(d)+'</body></html>');
   w.document.close();
