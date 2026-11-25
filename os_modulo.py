@@ -362,6 +362,12 @@ def registrar(app, db, login_required):
                     if not cur.fetchone():
                         cur.execute("INSERT INTO pendencia_tipos (nome) VALUES (%s)", (n,))
                 cur.execute("INSERT INTO migracoes (nome) VALUES ('os_pend_atalhos_v1')")
+            cur.execute("SELECT 1 FROM migracoes WHERE nome = 'os_pend_atalhos_v2'")
+            if not cur.fetchone():
+                # pontuação / suspensão / processo judicial ficam na aba Agenda de Prazos, não nos atalhos da OS
+                cur.execute("UPDATE pendencia_tipos SET ativo = FALSE WHERE upper(nome) = ANY(%s)",
+                            (["PONTUAÇÃO", "SUSPENSÃO", "SUSPENSÃO CNH", "PROCESSO JUDICIAL"],))
+                cur.execute("INSERT INTO migracoes (nome) VALUES ('os_pend_atalhos_v2')")
             _sincronizar_clientes(cur)
 
     def _sincronizar_clientes(cur, filtro_sql="", filtro_params=None):
