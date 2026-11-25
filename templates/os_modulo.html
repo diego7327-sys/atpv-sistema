@@ -1419,23 +1419,41 @@ function osRestaurar(){
 function osAbaPend(){
   var d=OS.atual, ro=!!d.os.excluida_em;
   var h='';
-  if(!ro) h+='<div class="os-box"><h4>Nova pendência / lembrete</h4><div class="os-linha">'+
-    '<div class="fg" style="flex:4"><label>O que é a pendência (digite)</label><input id="osp-desc" placeholder="ex.: Olhar se o processo finalizou no Detran" onkeydown="if(event.key===\'Enter\'){event.preventDefault();osE(\'osp-lim\').focus();}"></div>'+
+  if(!ro) h+='<div class="os-box"><h4>Nova pendência / lembrete</h4>'+osPendChips()+'<div class="os-linha">'+
+    '<div class="fg" style="flex:4"><label>O que é a pendência (clique num atalho ou digite)</label><input id="osp-desc" placeholder="ex.: Olhar se o processo finalizou no Detran" oninput="osE(\'osp-tipo\').value=\'\'" onkeydown="if(event.key===\'Enter\'){event.preventDefault();osE(\'osp-lim\').focus();}"><input type="hidden" id="osp-tipo"></div>'+
     '<div class="fg" style="flex:1.3"><label>Lembrar no dia</label><input type="date" id="osp-lim" onkeydown="if(event.key===\'Enter\'){event.preventDefault();osPendAdd();}"></div>'+
-    '<div class="fg" style="flex:1.3"><label>Tipo (opcional)</label><select id="osp-tipo">'+osOpts(OS.cad.pendencias,'','—')+'</select></div>'+
     '<div class="fg" style="flex:0"><label>&nbsp;</label><button class="os-b pri" onclick="osPendAdd()">+ Lançar</button></div></div>'+
     '<p class="os-small" style="margin:0">'+(osPT()?'Você vê as pendências de todos.':'Só você vê as pendências que marcar (o Diego vê de todos).')+' No dia marcado ela aparece no painel da lista de OS.</p></div>';
-  h+='<div class="table-wrap"><table><thead><tr><th></th><th>Pendência</th><th>Lembrar no dia</th><th>Tipo</th><th>Marcada por</th><th></th></tr></thead><tbody>';
+  h+='<div class="table-wrap"><table><thead><tr><th></th><th>Pendência</th><th>Lembrar no dia</th><th>Marcada por</th><th></th></tr></thead><tbody>';
   d.pendencias.forEach(function(p){
     var dd=p.resolvida?'<span class="os-small">resolvida '+osEsc(p.resolvida_em)+' '+osEsc(p.resolvida_por)+'</span>':
       (p.dias==null?'':p.dias<0?'<span class="os-venc">vencida há '+(-p.dias)+' dia(s)</span>':p.dias===0?'<span class="os-hj">vence hoje</span>':'<span class="os-small">em '+p.dias+' dia(s)</span>');
     h+='<tr style="'+(p.resolvida?'opacity:.5':'')+'"><td><input type="checkbox" '+(p.resolvida?'checked':'')+' '+(ro?'disabled':'')+' title="Resolvida" onchange="osPendResolver('+p.id+',this.checked)" style="accent-color:var(--acc);width:16px;height:16px"></td>'+
-       '<td style="font-weight:600">'+osEsc(p.descricao||p.tipo||'')+'</td><td>'+osBr(p.limite)+'<div>'+dd+'</div></td><td>'+osEsc(p.tipo||'—')+'</td><td class="os-small">'+osEsc(p.user_nome)+'<br>'+osEsc(p.lancado)+'</td>'+
+       '<td style="font-weight:600">'+osEsc(p.descricao||p.tipo||'')+'</td><td>'+osBr(p.limite)+'<div>'+dd+'</div></td><td class="os-small">'+osEsc(p.user_nome)+'<br>'+osEsc(p.lancado)+'</td>'+
        '<td>'+(ro?'':'<button class="os-b del" onclick="osPendDel('+p.id+')">✕</button>')+'</td></tr>';
   });
-  if(!d.pendencias.length) h+='<tr><td colspan="6" class="os-vazio">Sem pendências.</td></tr>';
+  if(!d.pendencias.length) h+='<tr><td colspan="5" class="os-vazio">Sem pendências.</td></tr>';
   osE('os-aba-corpo').innerHTML=h+'</tbody></table></div>';
   if(!ro) setTimeout(function(){ var e=osE('osp-desc'); if(e) e.focus(); },50);
+}
+var OS_PEND_FAV=['OLHAR SE FINALIZOU PROCESSO','VER SE PAGOU MULTA','MANDAR DIGITAL CLIENTE','FINALIZAR INCLUIR NA ANTT'];
+function osPendChips(){
+  var l=(OS.cad.pendencias||[]).filter(function(x){ return x.ativo; }).slice();
+  var ix=function(x){ var i=OS_PEND_FAV.indexOf((x.nome||'').toUpperCase()); return i<0?99:i; };
+  l.sort(function(a,b){ return ix(a)-ix(b); });
+  return '<div class="nv-chips" style="margin-bottom:10px">'+l.map(function(x){
+      return '<button type="button" class="nv-chip" onclick="osPendRapida('+x.id+')">+ '+osEsc(x.nome)+'</button>'; }).join('')+
+    (osAdm()?'<button type="button" class="nv-chip" style="border-style:dashed;opacity:.8" onclick="osPendAtalhoNovo()" title="Criar um novo atalho de pendência">＋ novo atalho</button>':'')+'</div>';
+}
+function osPendRapida(id){
+  var x=(OS.cad.pendencias||[]).filter(function(t){ return t.id===id; })[0]; if(!x) return;
+  osE('osp-desc').value=x.nome; osE('osp-tipo').value=x.id;
+  osE('osp-lim').focus();
+}
+function osPendAtalhoNovo(){
+  var n=(prompt('Texto do novo atalho de pendência (ex.: CONFERIR VISTORIA):')||'').trim().toUpperCase(); if(!n) return;
+  if((OS.cad.pendencias||[]).some(function(x){ return (x.nome||'').toUpperCase()===n; })){ osMsg('Esse atalho já existe (se estiver desativado, reative em Financeiro → Cadastros).','err'); return; }
+  osApi('/api/fin/pendencias','POST',{nome:n}).then(function(){ return osCarregarCad(true); }).then(function(){ osAbaPend(); osMsg('✓ Atalho criado: '+n); }).catch(osErr);
 }
 function osPendAdd(){
   var c={tipo_id:osE('osp-tipo').value||null, limite:osE('osp-lim').value, descricao:osE('osp-desc').value.trim()};
@@ -1865,7 +1883,7 @@ function osFinCads(){
         || '<tr><td colspan="5" class="os-vazio">Nenhum funcionário cadastrado.</td></tr>';
     }).catch(osErr);
     osE('osf-prox').textContent='Próxima OS a ser aberta: nº '+c.proximo_numero;
-    var blocos=[['tipos','Tipos de processo'],['contas','Contas'],['formas','Formas de pagamento'],['centros','Centros de valores'],['pendencias','Tipos de pendência']];
+    var blocos=[['tipos','Tipos de processo'],['contas','Contas'],['formas','Formas de pagamento'],['centros','Centros de valores'],['pendencias','Atalhos de pendência']];
     var h='';
     blocos.forEach(function(b){
       h+='<div class="os-box"><h4>'+b[1]+'</h4><ul>';

@@ -214,6 +214,7 @@ SEED_PENDENCIAS = ["PONTUAÇÃO", "SUSPENSÃO", "SUSPENSÃO CNH", "RECEBER",
                    "PROCESSO JUDICIAL", "ALT IMETRO"]
 
 # Dados da empresa que saem no orçamento enviado ao cliente (Financeiro → Cadastros)
+PEND_ATALHOS = ("OLHAR SE FINALIZOU PROCESSO", "VER SE PAGOU MULTA", "MANDAR DIGITAL CLIENTE", "FINALIZAR INCLUIR NA ANTT")
 CFG_EMPRESA = ("empresa_nome", "empresa_fone", "empresa_endereco", "empresa_cidade", "empresa_email",
                "pix_chave", "pix_nome", "pix_cidade", "pix_banco")
 
@@ -354,6 +355,13 @@ def registrar(app, db, login_required):
                                     ("Transferência", json.dumps([ids["TRANSFERÊNCIA NOME"], ids["VISTORIA"],
                                                                    ids["AGENDAMENTO VISTORIA"]])))
                 cur.execute("INSERT INTO migracoes (nome) VALUES ('os_pacotes_v1')")
+            cur.execute("SELECT 1 FROM migracoes WHERE nome = 'os_pend_atalhos_v1'")
+            if not cur.fetchone():
+                for n in PEND_ATALHOS:
+                    cur.execute("SELECT 1 FROM pendencia_tipos WHERE upper(nome) = upper(%s)", (n,))
+                    if not cur.fetchone():
+                        cur.execute("INSERT INTO pendencia_tipos (nome) VALUES (%s)", (n,))
+                cur.execute("INSERT INTO migracoes (nome) VALUES ('os_pend_atalhos_v1')")
             _sincronizar_clientes(cur)
 
     def _sincronizar_clientes(cur, filtro_sql="", filtro_params=None):
