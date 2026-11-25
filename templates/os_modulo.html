@@ -84,6 +84,21 @@
 .nv-p2 .nv-n{background:#ffc61a;color:#14213d}.nv-p2 .nv-ph{color:#ffd65c}
 .nv-p3{border-left:6px solid #00d4aa;background:linear-gradient(90deg,rgba(0,212,170,.09),rgba(0,212,170,.02) 45%)}
 .nv-p3 .nv-n{background:#00d4aa;color:#000}.nv-p3 .nv-ph{color:#3fe3c2}
+.ocx-bloco{margin-bottom:22px!important;padding:16px 18px 10px}
+.ocx-bloco .nv-ph{margin-bottom:10px}
+.ocx-c1{border-left:6px solid #4f8bff;background:linear-gradient(90deg,rgba(79,139,255,.12),rgba(79,139,255,.02) 50%)}
+.ocx-c1 .nv-n{background:#4f8bff;color:#fff}.ocx-c1 .nv-ph{color:#9dbcff}
+.ocx-c2{border-left:6px solid #b07cff;background:linear-gradient(90deg,rgba(176,124,255,.12),rgba(176,124,255,.02) 50%)}
+.ocx-c2 .nv-n{background:#b07cff;color:#fff}.ocx-c2 .nv-ph{color:#cfb0ff}
+.ocx-c3{border-left:6px solid #ff8c42;background:linear-gradient(90deg,rgba(255,140,66,.12),rgba(255,140,66,.02) 50%)}
+.ocx-c3 .nv-n{background:#ff8c42;color:#1b1200}.ocx-c3 .nv-ph{color:#ffb07a}
+.ocx-c4{border-left:6px solid #00d4aa;background:linear-gradient(90deg,rgba(0,212,170,.10),rgba(0,212,170,.02) 50%)}
+.ocx-c4 .nv-n{background:#00d4aa;color:#000}.ocx-c4 .nv-ph{color:#3fe3c2}
+.ocx-os{background:rgba(0,0,0,.18);border:1px solid var(--brd);border-radius:10px;padding:10px 14px;margin-bottom:12px}
+.ocx-os table{width:100%;border-collapse:collapse;font-size:14px}.ocx-os td{padding:6px 4px;border-bottom:1px solid rgba(255,255,255,.06)}
+.ocx-os td.r{text-align:right;font-family:var(--mono);white-space:nowrap}.ocx-os tr.t td{border:0;font-weight:800;font-size:15px}
+.ocx-obs label{font-size:13px!important;color:#ffc61a!important}
+.ocx-obs textarea{min-height:150px!important;font-size:15px!important;border-color:rgba(255,198,26,.45)!important}
 .nv-cep-st{display:block;font-size:11.5px;color:var(--mut);margin-top:3px;min-height:0}
 .nv-ph{display:flex;align-items:center;gap:10px;font-size:17px;font-weight:800;margin-bottom:12px;letter-spacing:.02em;text-transform:uppercase}
 .nv-n{width:30px;height:30px;border-radius:50%;background:var(--acc);color:#000;display:inline-flex;align-items:center;justify-content:center;font-size:15px;font-family:var(--mono)}
@@ -1118,18 +1133,21 @@ function osAbaCadastro(){
   OS.onPick=null;
   var g=function(lst,pfx){ return '<div class="os-g5">'+lst.map(function(x){ return nvCampo(pfx,x); }).join('')+'</div>'; };
   function inp(id,lb,v,tp){ return '<div class="fg"><label>'+lb+'</label><input id="'+id+'" '+(tp?'type="'+tp+'"':'')+' value="'+osEsc(v==null?'':v)+'"></div>'; }
+  var tt='<div class="ocx-os"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:6px"><b style="font-size:15px">'+(o.status==='orcamento'?'ORÇAMENTO':'ORDEM DE SERVIÇO')+' Nº '+o.numero+'</b><span class="os-small">'+osEsc(OS_STATUS[o.status]||o.status)+' · aberta em '+osEsc(o.data_abertura)+' · <a href="#" onclick="OS.aba=\'itens\';osRender();return false" style="color:var(--acc2)">editar itens →</a></span></div><table>';
+  d.itens.forEach(function(i){ tt+='<tr><td>'+osEsc(i.descricao)+'</td><td class="r" style="width:50px">'+osN(i.qtd).replace(',00','')+'</td><td class="r" style="width:120px">'+osR(i.valor*i.qtd)+'</td></tr>'; });
+  if(o.honorario>0) tt+='<tr><td>Honorários do despachante</td><td class="r">1</td><td class="r">'+osR(o.honorario)+'</td></tr>';
+  if(o.desconto>0) tt+='<tr><td>Desconto</td><td></td><td class="r">− '+osR(o.desconto)+'</td></tr>';
+  tt+='<tr class="t"><td>TOTAL</td><td></td><td class="r">'+osR(o.total)+'</td></tr>'+
+      '<tr><td class="os-small" colspan="2">Pago</td><td class="r os-ok">'+osR(o.pago)+'</td></tr>'+
+      '<tr><td class="os-small" colspan="2">Falta pagar</td><td class="r '+(o.devedor>0.004?'os-dev':'os-ok')+'">'+osR(o.devedor)+'</td></tr></table></div>';
   var h='<div data-enter id="osc-form">'+
-    '<div class="os-box nv-passo nv-p1"><div class="nv-ph"><span class="nv-n">1</span> Cliente e veículo <span class="nv-dica">complete ou corrija aqui mesmo</span></div>'+
-      '<div class="nv-sub">Veículo <span class="nv-st" id="nv-st"></span></div>'+g(NV_VEI,'nv-')+
-      '<div class="nv-sub">Cliente (proprietário) * <span class="nv-st" id="nc-st"></span></div>'+g(NV_CLI,'nc-')+
-      '<div class="nv-sub">Responsável / revenda — quem paga, se for outro <span class="nv-st" id="nr-st"></span></div>'+g(NV_RESP,'nr-')+'</div>'+
-    '<div class="os-box nv-passo nv-p2"><div class="nv-ph"><span class="nv-n">2</span> Dados da OS</div><div class="g3">'+
-      '<div class="fg"><label>Tipo de processo</label><select id="osc-tipo">'+osTiposOpts(o.processo_tipo_id,'— sem tipo —')+'</select></div>'+
-      inp('osc-desp','Despachante responsável',o.despachante)+inp('osc-cweb','Código web',o.codigo_web)+inp('osc-prot','Protocolo',o.protocolo)+
-      inp('osc-dnf','Data NF / CRV',o.data_nf_crv,'date')+inp('osc-vnf','Valor NF / CRV (R$)',o.valor_nf_crv!=null?osN(o.valor_nf_crv):'')+inp('osc-pant','Proprietário anterior',o.proprietario_anterior)+
-      inp('osc-rest','Restrição financeira',o.restricao_financeira)+inp('osc-fin','Financeira',o.financeira)+
-      (o.status==='orcamento'?inp('osc-val','Validade do orçamento',o.validade,'date'):'<div></div>')+
-    '</div><div class="fg"><label>Observações</label><textarea class="os-ta" id="osc-obs" style="min-height:90px">'+osEsc(o.obs||'')+'</textarea></div></div>';
+    '<div class="os-box ocx-bloco ocx-c1"><div class="nv-ph"><span class="nv-n">1</span> Veículo <span class="nv-st" id="nv-st"></span></div>'+g(NV_VEI,'nv-')+'</div>'+
+    '<div class="os-box ocx-bloco ocx-c2"><div class="nv-ph"><span class="nv-n">2</span> Cliente (proprietário) * <span class="nv-st" id="nc-st"></span></div>'+g(NV_CLI,'nc-')+'</div>'+
+    '<div class="os-box ocx-bloco ocx-c3"><div class="nv-ph"><span class="nv-n">3</span> Responsável / revenda — quem paga, se for outro <span class="nv-st" id="nr-st"></span></div>'+g(NV_RESP,'nr-')+'</div>'+
+    '<div class="os-box ocx-bloco ocx-c4"><div class="nv-ph"><span class="nv-n">4</span> Dados da OS</div>'+tt+
+      '<div class="g3"><div class="fg"><label>Tipo de processo</label><select id="osc-tipo">'+osTiposOpts(o.processo_tipo_id,'— sem tipo —')+'</select></div>'+
+      (o.status==='orcamento'?inp('osc-val','Validade do orçamento',o.validade,'date'):'')+'</div>'+
+      '<div class="fg ocx-obs"><label>📝 Observações da OS (anotações internas — o cliente não vê)</label><textarea class="os-ta" id="osc-obs">'+osEsc(o.obs||'')+'</textarea></div></div>';
   if(d.processos && d.processos.length){
     h+='<div class="os-box"><h4>Processos de recurso ligados</h4>';
     d.processos.forEach(function(p){ h+='<div class="os-small">#'+p.id+' · '+osEsc(p.tipo)+' · '+osEsc(p.fase)+' · '+osEsc(p.status)+(p.ait?' · AIT '+osEsc(p.ait):'')+(p.prazo_final?' · prazo '+osBr(p.prazo_final):'')+'</div>'; });
@@ -1138,11 +1156,11 @@ function osAbaCadastro(){
   if(!ro) h+='<div style="text-align:right"><button class="btn-main" id="osc-salvar" onclick="osSalvarCadastro()">Salvar cadastro</button></div>';
   osE('os-aba-corpo').innerHTML=h+'</div>';
   osE('nr-tipo').value='revenda';
-  if(d.veiculo){ nvPreencher('nv-',NV_VEI,d.veiculo); nvSt('nv-','✓ veículo desta OS — pode completar aqui','var(--acc)'); }
-  if(d.cliente){ nvPreencher('nc-',NV_CLI,d.cliente); nvSt('nc-','✓ cliente desta OS — pode completar aqui','var(--acc)'); }
+  if(d.veiculo){ nvPreencher('nv-',NV_VEI,d.veiculo); nvSt('nv-','✓ pode completar aqui','var(--acc)'); }
+  if(d.cliente){ nvPreencher('nc-',NV_CLI,d.cliente); nvSt('nc-','✓ pode completar aqui','var(--acc)'); }
   if(d.responsavel){ nvPreencher('nr-',NV_RESP,d.responsavel); nvSt('nr-','✓ responsável desta OS','var(--acc)'); }
   if(ro) document.querySelectorAll('#osc-form input,#osc-form select,#osc-form textarea').forEach(function(x){ x.disabled=true; });
-  else setTimeout(function(){ var v=[].slice.call(document.querySelectorAll('#osc-form .nv-p1 input')).filter(function(x){ return !x.value.trim(); })[0]; if(v) v.focus(); },60);
+  else setTimeout(function(){ var v=[].slice.call(document.querySelectorAll('#osc-form .ocx-bloco input')).filter(function(x){ return !x.value.trim(); })[0]; if(v) v.focus(); },60);
 }
 function osSalvarCadastro(){
   var cli=nvDados('nc-',NV_CLI), resp=nvDados('nr-',NV_RESP), vei=nvDados('nv-',NV_VEI), ids=OS.nova.ids;
