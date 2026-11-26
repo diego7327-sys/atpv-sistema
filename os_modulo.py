@@ -183,6 +183,36 @@ ALTER TABLE os_recebimentos ADD COLUMN IF NOT EXISTS baixa_em TIMESTAMPTZ;
 ALTER TABLE os_recebimentos ADD COLUMN IF NOT EXISTS recusa_motivo TEXT DEFAULT '';
 CREATE INDEX IF NOT EXISTS os_receb_status_idx ON os_recebimentos (status);
 ALTER TABLE IF EXISTS usuarios  ADD COLUMN IF NOT EXISTS forma_padrao_id BIGINT;
+
+-- FISCAL: cada item é REPASSE (taxa/débito pago a terceiro, reembolso) ou HONORÁRIO (receita do escritório)
+ALTER TABLE os_itens ADD COLUMN IF NOT EXISTS natureza  TEXT DEFAULT '';
+ALTER TABLE os_itens ADD COLUMN IF NOT EXISTS categoria TEXT DEFAULT '';
+ALTER TABLE os_itens ADD COLUMN IF NOT EXISTS orgao     TEXT DEFAULT '';
+ALTER TABLE os_itens ADD COLUMN IF NOT EXISTS documento TEXT DEFAULT '';
+ALTER TABLE servicos ADD COLUMN IF NOT EXISTS natureza  TEXT DEFAULT '';
+ALTER TABLE servicos ADD COLUMN IF NOT EXISTS categoria TEXT DEFAULT '';
+-- recebimento no cartão: maquininha, parcelas e NSU/autorização
+ALTER TABLE os_recebimentos ADD COLUMN IF NOT EXISTS maquininha TEXT DEFAULT '';
+ALTER TABLE os_recebimentos ADD COLUMN IF NOT EXISTS parcelas   INT DEFAULT 1;
+ALTER TABLE os_recebimentos ADD COLUMN IF NOT EXISTS nsu        TEXT DEFAULT '';
+-- arquivos (comprovantes em PDF/foto) guardados no próprio banco
+CREATE TABLE IF NOT EXISTS arquivos (
+    id BIGSERIAL PRIMARY KEY, nome TEXT DEFAULT '', mime TEXT DEFAULT '', tamanho INT DEFAULT 0,
+    dados BYTEA, os_id BIGINT REFERENCES ordens_servico(id) ON DELETE SET NULL,
+    criado TIMESTAMPTZ DEFAULT NOW(), user_nome TEXT DEFAULT '');
+-- pagamento do repasse (saída do caixa com comprovante)
+CREATE TABLE IF NOT EXISTS os_repasse_pagtos (
+    id BIGSERIAL PRIMARY KEY,
+    os_id BIGINT REFERENCES ordens_servico(id) ON DELETE CASCADE,
+    item_id BIGINT REFERENCES os_itens(id) ON DELETE SET NULL,
+    data DATE NOT NULL,
+    conta_id BIGINT REFERENCES contas(id),
+    valor NUMERIC(12,2) NOT NULL,
+    orgao TEXT DEFAULT '', documento TEXT DEFAULT '',
+    arquivo_id BIGINT REFERENCES arquivos(id) ON DELETE SET NULL,
+    lancamento_id BIGINT REFERENCES lancamentos(id) ON DELETE SET NULL,
+    obs TEXT DEFAULT '', user_nome TEXT DEFAULT '', criado TIMESTAMPTZ DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS os_repasse_os_idx ON os_repasse_pagtos (os_id);
 """
 
 # Cadastros iniciais — tirados das telas do BitDesp (levantamento de 13/11/2026)
@@ -221,6 +251,34 @@ CFG_EMPRESA = ("empresa_nome", "empresa_fone", "empresa_endereco", "empresa_cida
 EMPRESA_PADRAO = {"empresa_nome": "Diego Despachante", "empresa_fone": "(62) 99110-1506 · (62) 99267-3252",
                   "empresa_endereco": "Av. Brasil, 464 - Vila Jussara", "empresa_cidade": "Anápolis-GO",
                   "empresa_email": "diego7327@hotmail.com"}
+
+# Fiscal: categorias de repasse, maquininhas e tipo da forma de pagamento
+CATEGORIAS_REPASSE = [("taxa_detran", "TAXA DETRAN"), ("ipva", "IPVA"), ("licenciamento", "LICENCIAMENTO"),
+                      ("multa", "MULTA"), ("vistoria", "VISTORIA"), ("placa", "PLACA"), ("outros", "OUTROS")]
+CAT_REPASSE = dict(CATEGORIAS_REPASSE)
+MAQUININHAS = ["STONE", "SICREDI"]
+ARQ_MIMES = ("application/pdf", "image/jpeg", "image/png", "image/webp")
+ARQ_MAX = 6 * 1024 * 1024
+
+def _cat_palpite(desc):
+    """Categoria do repasse pelo nome do item (o usuário pode trocar)."""
+    d = (desc or '').upper()
+    for chave, cat in (("IPVA", "ipva"), ("LICENC", "licenciamento"), ("MULTA", "multa"), ("INFRA", "multa"),
+                       ("VISTORIA", "vistoria"), ("PLACA", "placa"), ("LACRE", "placa")):
+        if chave in d:
+            return cat
+    for chave in ("TAXA", "DETRAN", "TRANSFER", "CRV", "CRLV", "DUA", "2ª VIA", "2 VIA", "ATPV", "CATEGORIA", "ALTERA"):
+        if chave in d:
+            return "taxa_detran"
+    return "outros"
+
+def _forma_tipo(nome):
+    n = (nome or '').upper()
+    if 'PIX' in n: return 'pix'
+    if 'DINHEIRO' in n or 'ESPÉCIE' in n or 'ESPECIE' in n: return 'dinheiro'
+    if 'DÉBITO' in n or 'DEBITO' in n: return 'debito'
+    if 'CRÉDITO' in n or 'CREDITO' in n or 'PARCEL' in n or 'CARTÃO' in n or 'CARTAO' in n: return 'credito'
+    return 'outro'
 
 STATUS_OS = {
     'orcamento':  'Orçamento',
@@ -368,6 +426,38 @@ def registrar(app, db, login_required):
                 cur.execute("UPDATE pendencia_tipos SET ativo = FALSE WHERE upper(nome) = ANY(%s)",
                             (["PONTUAÇÃO", "SUSPENSÃO", "SUSPENSÃO CNH", "PROCESSO JUDICIAL"],))
                 cur.execute("INSERT INTO migracoes (nome) VALUES ('os_pend_atalhos_v2')")
+            cur.execute("SELECT 1 FROM migracoes WHERE nome = 'os_fiscal_v1'")
+            if not cur.fetchone():
+                # itens antigos: com custo = repasse; sem custo = honorário
+                cur.execute("SELECT id, descricao, custo FROM os_itens WHERE COALESCE(natureza,'') = ''")
+                for r in cur.fetchall():
+                    nat = 'repasse' if (r['custo'] or 0) > 0 else 'honorario'
+                    cur.execute("UPDATE os_itens SET natureza=%s, categoria=%s WHERE id=%s",
+                                (nat, _cat_palpite(r['descricao']) if nat == 'repasse' else '', r['id']))
+                cur.execute("SELECT id, nome, custo_padrao FROM servicos WHERE COALESCE(natureza,'') = ''")
+                for r in cur.fetchall():
+                    nat = 'repasse' if (r['custo_padrao'] or 0) > 0 else 'honorario'
+                    cur.execute("UPDATE servicos SET natureza=%s, categoria=%s WHERE id=%s",
+                                (nat, _cat_palpite(r['nome']) if nat == 'repasse' else '', r['id']))
+                # formas: cartão de crédito (o antigo "PARCELADO")
+                cur.execute("SELECT id, nome FROM formas_pgto")
+                fs = cur.fetchall()
+                if not any(_forma_tipo(f['nome']) == 'credito' and 'CR' in f['nome'].upper() for f in fs):
+                    par = [f for f in fs if f['nome'].upper() == 'PARCELADO']
+                    if par:
+                        cur.execute("UPDATE formas_pgto SET nome='CRÉDITO' WHERE id=%s", (par[0]['id'],))
+                    else:
+                        cur.execute("INSERT INTO formas_pgto (nome) VALUES ('CRÉDITO')")
+                for nome in ("PIX", "DINHEIRO", "DÉBITO"):
+                    if not any(_forma_tipo(f['nome']) == _forma_tipo(nome) for f in fs):
+                        cur.execute("INSERT INTO formas_pgto (nome) VALUES (%s)", (nome,))
+                # contas onde o dinheiro cai / de onde sai: Sicredi, Caixa, Stone
+                cur.execute("SELECT nome FROM contas")
+                cs = [c['nome'].upper() for c in cur.fetchall()]
+                for chave, nome in (("SICRED", "SICREDI"), ("CAIXA", "CAIXA"), ("STONE", "STONE")):
+                    if not any(chave in c for c in cs):
+                        cur.execute("INSERT INTO contas (nome) VALUES (%s)", (nome,))
+                cur.execute("INSERT INTO migracoes (nome) VALUES ('os_fiscal_v1')")
             _sincronizar_clientes(cur)
 
     def _sincronizar_clientes(cur, filtro_sql="", filtro_params=None):
@@ -436,7 +526,8 @@ def registrar(app, db, login_required):
         return (" AND ({a}.user_id = %s OR (COALESCE({a}.user_id,'') = '' AND {a}.user_nome = %s))".format(a=alias),
                 (str(session.get('user_id') or ''), _eu()))
 
-    CAMPOS_LUCRO = ('custo', 'lucro', 'lucro_terceiros', 'taxas', 'honorarios')
+    CAMPOS_LUCRO = ('custo', 'lucro', 'lucro_terceiros', 'taxas', 'honorarios', 'repasse_total', 'repasse_pago',
+                    'repasse_a_pagar', 'receita')
 
     def _sem_lucro_os(o):
         for k in CAMPOS_LUCRO:
@@ -474,6 +565,8 @@ def registrar(app, db, login_required):
     SQL_TOTAIS = """
         COALESCE((SELECT SUM(i.valor*i.qtd) FROM os_itens i WHERE i.os_id = o.id),0) AS itens_valor,
         COALESCE((SELECT SUM(i.custo*i.qtd) FROM os_itens i WHERE i.os_id = o.id),0) AS itens_custo,
+        COALESCE((SELECT SUM(i.custo*i.qtd) FROM os_itens i WHERE i.os_id = o.id AND i.natureza = 'repasse'),0) AS repasse_total,
+        COALESCE((SELECT SUM(p.valor) FROM os_repasse_pagtos p WHERE p.os_id = o.id),0) AS repasse_pago,
         COALESCE((SELECT SUM(r.valor) FROM os_recebimentos r WHERE r.os_id = o.id AND r.status = 'confirmado'),0) AS pago,
         COALESCE((SELECT SUM(r.valor) FROM os_recebimentos r WHERE r.os_id = o.id AND r.status = 'pendente'),0) AS aguardando,
         COALESCE((SELECT COUNT(*) FROM os_pendencias p WHERE p.os_id = o.id AND NOT p.resolvida),0) AS pend_abertas
@@ -488,6 +581,8 @@ def registrar(app, db, login_required):
         aguardando = _f(d.pop('aguardando', 0))
         desc = _f(d.get('desconto'))
         total = round(itens_valor + honor - desc, 2)
+        rep_total = _f(d.pop('repasse_total', 0))
+        rep_pago = _f(d.pop('repasse_pago', 0))
         # orçamento e OS cancelada não geram saldo a receber
         cobravel = d.get('status') not in ('orcamento', 'cancelada')
         d.update({
@@ -500,6 +595,10 @@ def registrar(app, db, login_required):
             'desconto': desc,
             'aguardando_baixa': round(aguardando, 2),
             'taxas': round(itens_custo, 2),
+            # fiscal: repasse = reembolso de taxas/débitos; receita = total − repasse (honorário + diferença cobrada − desconto)
+            'repasse_total': round(rep_total, 2), 'repasse_pago': round(rep_pago, 2),
+            'repasse_a_pagar': round(max(rep_total - rep_pago, 0), 2),
+            'receita': round(total - rep_total, 2),
             'honorarios': round(honor + itens_valor - itens_custo, 2),
             'status_label': STATUS_OS.get(d.get('status'), d.get('status')),
             'data_abertura': _dt(d.get('data_abertura')),
@@ -707,15 +806,21 @@ def registrar(app, db, login_required):
         nome = (d.get("nome") or "").strip().upper()
         if not nome:
             return jsonify({"erro": "Informe o nome do serviço."}), 400
-        vals = (nome, _num(d.get("valor_padrao")), _num(d.get("custo_padrao")),
-                d.get("centro_id") or None, _sim(d.get("ativo"), True), d.get("processo_tipo_id") or None)
+        nat = _natureza(d) or ('repasse' if _num(d.get("custo_padrao")) > 0 else 'honorario')
+        cat = (d.get("categoria") or "").lower() if nat == 'repasse' else ''
+        if nat == 'repasse' and cat not in CAT_REPASSE:
+            cat = _cat_palpite(nome)
+        custo = _num(d.get("custo_padrao")) if nat == 'repasse' else Decimal('0')
+        vals = (nome, _num(d.get("valor_padrao")), custo,
+                d.get("centro_id") or None, _sim(d.get("ativo"), True), d.get("processo_tipo_id") or None, nat, cat)
         with db(commit=True) as cur:
             if d.get("id"):
                 cur.execute("""UPDATE servicos SET nome=%s, valor_padrao=%s, custo_padrao=%s,
-                               centro_id=%s, ativo=%s, processo_tipo_id=%s WHERE id=%s""", vals + (d["id"],))
+                               centro_id=%s, ativo=%s, processo_tipo_id=%s, natureza=%s, categoria=%s WHERE id=%s""", vals + (d["id"],))
             else:
-                cur.execute("""INSERT INTO servicos (nome, valor_padrao, custo_padrao, centro_id, ativo, processo_tipo_id)
-                               VALUES (%s,%s,%s,%s,%s,%s)""", vals)
+                cur.execute("""INSERT INTO servicos (nome, valor_padrao, custo_padrao, centro_id, ativo, processo_tipo_id,
+                                                     natureza, categoria)
+                               VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""", vals)
         return jsonify({"ok": True})
 
     # ── CADASTROS DO FINANCEIRO + TIPOS DE PENDÊNCIA ───────────
@@ -744,6 +849,8 @@ def registrar(app, db, login_required):
             cur.execute("SELECT valor FROM config WHERE chave = 'os_numero_inicial'")
             row = cur.fetchone()
             out['os_numero_inicial'] = row['valor'] if row else ''
+            out['categorias_repasse'] = [{"id": k, "nome": v} for k, v in CATEGORIAS_REPASSE]
+            out['maquininhas'] = MAQUININHAS
             cur.execute("SELECT chave, valor FROM config WHERE chave = ANY(%s)", (list(CFG_EMPRESA),))
             emp = {k: '' for k in CFG_EMPRESA}
             emp.update(EMPRESA_PADRAO)  # vale enquanto não for alterado em Financeiro > Cadastros
@@ -1010,6 +1117,24 @@ def registrar(app, db, login_required):
             x['quando'] = _dt(x['quando'])
             x['baixa_em'] = _dt(x.get('baixa_em'))
             receb.append(x)
+        cur.execute("""SELECT p.*, c.nome AS conta, a.nome AS arquivo_nome, i.descricao AS item_desc
+                       FROM os_repasse_pagtos p
+                       LEFT JOIN contas c ON c.id = p.conta_id
+                       LEFT JOIN arquivos a ON a.id = p.arquivo_id
+                       LEFT JOIN os_itens i ON i.id = p.item_id
+                       WHERE p.os_id = %s ORDER BY p.data, p.id""", (oid,))
+        reps = []
+        pago_item = {}
+        for x in cur.fetchall():
+            x = dict(x)
+            x['valor'] = _f(x['valor']); x['data'] = _d(x['data']); x['criado'] = _dt(x['criado'])
+            if x['item_id']:
+                pago_item[x['item_id']] = pago_item.get(x['item_id'], 0) + x['valor']
+            reps.append(x)
+        for it in itens:
+            if it.get('natureza') == 'repasse':
+                it['repasse_pago'] = round(pago_item.get(it['id'], 0), 2)
+                it['repasse_quitado'] = it['repasse_pago'] + 0.004 >= it['custo'] * it['qtd']
         cur.execute("SELECT * FROM os_ocorrencias WHERE os_id = %s ORDER BY id DESC", (oid,))
         ocor = [dict(x, quando=_dt(x['quando'])) for x in cur.fetchall()]
         pf_sql, pf_args = _pend_filtro(cur)
@@ -1034,7 +1159,7 @@ def registrar(app, db, login_required):
                            WHERE os_id = %s ORDER BY id""", (oid,))
             procs = [dict(x, prazo_final=_d(x['prazo_final'])) for x in cur.fetchall()]
         return {"os": o, "cliente": cli, "responsavel": resp, "veiculo": vei, "itens": itens,
-                "recebimentos": receb, "ocorrencias": ocor, "pendencias": pend,
+                "recebimentos": receb, "ocorrencias": ocor, "pendencias": pend, "repasses": reps,
                 "documentos": docs, "processos": procs}
 
     @app.route("/api/os/<int:numero>", methods=["GET"])
@@ -1049,6 +1174,10 @@ def registrar(app, db, login_required):
             _sem_lucro_os(d['os'])
             for it in d['itens']:
                 it.pop('custo', None)
+                if not pm['dar_baixa']:
+                    it.pop('repasse_pago', None)
+            if not pm['dar_baixa']:
+                d['repasses'] = []
         d['perm'] = pm
         return jsonify(d)
 
@@ -1193,40 +1322,197 @@ def registrar(app, db, login_required):
         return jsonify({"ok": True})
 
     # ── itens ──────────────────────────────────────────────────
+    def _natureza(it):
+        nat = (it.get("natureza") or "").strip().lower()
+        if nat in ('repasse', 'honorario'):
+            return nat
+        tp = it.get("tipo_item") or it.get("tipo")
+        return 'honorario' if tp == 'hon' else ('repasse' if tp == 'taxa' else '')
+
     def _add_item(cur, oid, it):
+        """Item da OS. REPASSE: custo = valor que vai para o órgão (DUA/boleto); o que for cobrado acima
+        disso é receita. HONORÁRIO: custo 0, tudo é receita."""
         sid = it.get("servico_id") or None
-        if not _perms(cur)['ver_lucro'] and it.get("tipo_item") in ('taxa', 'hon'):
-            # funcionário escolhe só se o item é taxa (repasse) ou honorário; o custo é calculado aqui
-            it = dict(it)
-            if sid:
-                it.pop("custo", None)
-                if it.get("tipo_item") == 'hon':
-                    it["custo"] = "0"
-            else:
-                it["custo"] = it.get("valor") if it.get("tipo_item") == 'taxa' else "0"
+        vl = _perms(cur)['ver_lucro']
         desc = (it.get("descricao") or "").strip().upper()
-        valor, custo = it.get("valor"), it.get("custo")
+        valor, custo = it.get("valor"), (it.get("custo") if vl else None)
+        nat, cat = _natureza(it), (it.get("categoria") or "").strip().lower()
+        s_ = None
         if sid:
             cur.execute("SELECT * FROM servicos WHERE id = %s", (sid,))
-            s = cur.fetchone()
-            if s:
-                desc = desc or s['nome']
+            s_ = cur.fetchone()
+            if s_:
+                desc = desc or s_['nome']
                 if valor in (None, ''):
-                    valor = s['valor_padrao']
-                if custo in (None, ''):
-                    custo = s['custo_padrao']
+                    valor = s_['valor_padrao']
+                nat = nat or s_.get('natureza') or ('repasse' if (s_['custo_padrao'] or 0) > 0 else 'honorario')
+                cat = cat or (s_.get('categoria') or '')
         if not desc:
             raise ValueError("Informe a descrição do item.")
+        nat = nat or 'repasse'
+        valor = _num(valor)
+        if nat == 'honorario':
+            custo, cat = Decimal('0'), ''
+        else:
+            if custo in (None, ''):
+                custo = min(_num(s_['custo_padrao']), valor) if (s_ and (s_['custo_padrao'] or 0) > 0) else valor
+            custo = _num(custo)
+            if cat not in CAT_REPASSE:
+                cat = _cat_palpite(desc)
         qtd = _num(it.get("qtd"), Decimal('1')) or Decimal('1')
-        cur.execute("""INSERT INTO os_itens (os_id, servico_id, descricao, qtd, valor, custo, user_nome)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
-                    (oid, sid, desc, qtd, _num(valor), _num(custo), _eu()))
+        cur.execute("""INSERT INTO os_itens (os_id, servico_id, descricao, qtd, valor, custo, user_nome,
+                           natureza, categoria, orgao, documento)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                    (oid, sid, desc, qtd, valor, custo, _eu(), nat, cat,
+                     (it.get("orgao") or "").strip().upper() if nat == 'repasse' else '',
+                     (it.get("documento") or "").strip().upper() if nat == 'repasse' else ''))
         iid = cur.fetchone()['id']
         if sid:  # OS ainda sem tipo de processo herda o do serviço lançado
             cur.execute("""UPDATE ordens_servico SET processo_tipo_id =
                              (SELECT processo_tipo_id FROM servicos WHERE id = %s)
                            WHERE id = %s AND processo_tipo_id IS NULL""", (sid, oid))
         return iid
+
+    # ── arquivos (comprovantes) ────────────────────────────────
+    def _salvar_arquivo(cur, oid, arq):
+        """arq = {nome, mime, dados(base64)} → id em arquivos."""
+        if not arq or not arq.get("dados"):
+            return None
+        import base64
+        mime = (arq.get("mime") or "").lower()
+        if mime not in ARQ_MIMES:
+            raise ValueError("Comprovante tem que ser PDF ou foto (JPG/PNG).")
+        b64 = arq["dados"].split(",", 1)[-1]
+        try:
+            dados = base64.b64decode(b64, validate=False)
+        except Exception:
+            raise ValueError("Arquivo do comprovante inválido.")
+        if len(dados) > ARQ_MAX:
+            raise ValueError("Comprovante muito grande (máx. 6 MB).")
+        cur.execute("""INSERT INTO arquivos (nome, mime, tamanho, dados, os_id, user_nome)
+                       VALUES (%s,%s,%s,%s,%s,%s) RETURNING id""",
+                    ((arq.get("nome") or "comprovante")[:120], mime, len(dados), dados, oid, _eu()))
+        return cur.fetchone()['id']
+
+    @app.route("/api/arquivos/<int:aid>", methods=["GET"])
+    @equipe
+    def arquivo_ver(aid):
+        from flask import Response
+        with db() as cur:
+            pm = _perms(cur)
+            if not (pm['ver_lucro'] or pm['dar_baixa']):
+                return jsonify({"erro": "Sem permissão para ver comprovantes."}), 403
+            cur.execute("SELECT nome, mime, dados FROM arquivos WHERE id = %s", (aid,))
+            a = cur.fetchone()
+        if not a:
+            return jsonify({"erro": "Arquivo não encontrado"}), 404
+        nome = re.sub(r'[^A-Za-z0-9._ -]', '_', a['nome'] or 'comprovante')
+        return Response(bytes(a['dados']), mimetype=a['mime'],
+                        headers={"Content-Disposition": 'inline; filename="%s"' % nome})
+
+    # ── pagamento do repasse (sai do caixa, com comprovante) ───
+    def _registrar_repasse(cur, o, d):
+        if not _perms(cur)['dar_baixa']:
+            raise PermissionError("Só quem dá baixa registra pagamento de repasse (saída do caixa).")
+        valor = _num(d.get("valor"))
+        if valor <= 0:
+            raise ValueError("Informe o valor pago.")
+        if not d.get("conta_id"):
+            raise ValueError("Escolha de qual conta saiu o pagamento.")
+        dia = _data(d.get("data")) or _hoje()
+        item = None
+        if d.get("item_id"):
+            cur.execute("SELECT * FROM os_itens WHERE id=%s AND os_id=%s", (d["item_id"], o['id']))
+            item = cur.fetchone()
+            if not item or item['natureza'] != 'repasse':
+                raise ValueError("Item de repasse não encontrado nesta OS.")
+        orgao = (d.get("orgao") or (item['orgao'] if item else '') or '').strip().upper()
+        docto = (d.get("documento") or (item['documento'] if item else '') or '').strip().upper()
+        if item and ((orgao and not item['orgao']) or (docto and not item['documento'])):
+            cur.execute("""UPDATE os_itens SET orgao = CASE WHEN orgao = '' THEN %s ELSE orgao END,
+                                               documento = CASE WHEN documento = '' THEN %s ELSE documento END
+                           WHERE id = %s""", (orgao, docto, item['id']))
+        aid = _salvar_arquivo(cur, o['id'], d.get("arquivo"))
+        desc_it = item['descricao'] if item else 'REPASSE'
+        quando = datetime.combine(dia, _agora().timetz())
+        cur.execute("""INSERT INTO lancamentos (natureza, vencimento, pago_em, descricao, favorecido, documento,
+                           valor, valor_pago, conta_id, os_id, obs, user_nome, empresa_id)
+                       VALUES ('pagar', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                    (dia, quando, "REPASSE: %s — O.S. Nº %s" % (desc_it, o['numero']), orgao, docto,
+                     valor, valor, d["conta_id"], o['id'], (d.get("obs") or "").strip(), _eu(), session.get('empresa_id')))
+        lid = cur.fetchone()['id']
+        cur.execute("""INSERT INTO os_repasse_pagtos (os_id, item_id, data, conta_id, valor, orgao, documento,
+                           arquivo_id, lancamento_id, obs, user_nome)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                    (o['id'], item['id'] if item else None, dia, d["conta_id"], valor, orgao, docto, aid, lid,
+                     (d.get("obs") or "").strip(), _eu()))
+        pid = cur.fetchone()['id']
+        cur.execute("SELECT nome FROM contas WHERE id=%s", (d["conta_id"],))
+        cn = (cur.fetchone() or {}).get('nome', '')
+        _ocorrencia(cur, o['id'], 'outras', 'Repasse pago: %s — R$ %s (saiu da %s em %s)%s%s'
+                    % (desc_it, _br(valor), cn, dia.strftime('%d/%m/%Y'), (' · DUA/boleto ' + docto) if docto else '',
+                       ' · comprovante anexado' if aid else ' · SEM COMPROVANTE'))
+        return pid
+
+    @app.route("/api/os/<int:numero>/repasses", methods=["POST"])
+    @equipe
+    def os_repasse_add(numero):
+        d = request.get_json() or {}
+        with db(commit=True) as cur:
+            o = _os_por_numero(cur, numero)
+            if not o:
+                return jsonify({"erro": "OS não encontrada"}), 404
+            try:
+                pid = _registrar_repasse(cur, o, d)
+            except PermissionError as e:
+                return jsonify({"erro": str(e)}), 403
+            except ValueError as e:
+                return jsonify({"erro": str(e)}), 400
+            _toca(cur, o['id'])
+        return jsonify({"ok": True, "id": pid})
+
+    @app.route("/api/os-repasses/<int:pid>/comprovante", methods=["POST"])
+    @equipe
+    def os_repasse_comprovante(pid):
+        d = request.get_json() or {}
+        with db(commit=True) as cur:
+            if not _perms(cur)['dar_baixa']:
+                return jsonify({"erro": "Sem permissão."}), 403
+            cur.execute("SELECT * FROM os_repasse_pagtos WHERE id=%s", (pid,))
+            p_ = cur.fetchone()
+            if not p_:
+                return jsonify({"erro": "Pagamento não encontrado"}), 404
+            try:
+                aid = _salvar_arquivo(cur, p_['os_id'], d.get("arquivo"))
+            except ValueError as e:
+                return jsonify({"erro": str(e)}), 400
+            if not aid:
+                return jsonify({"erro": "Escolha o arquivo do comprovante."}), 400
+            cur.execute("UPDATE os_repasse_pagtos SET arquivo_id=%s WHERE id=%s", (aid, pid))
+            _ocorrencia(cur, p_['os_id'], 'outras', 'Comprovante anexado ao repasse de R$ %s' % _br(p_['valor']))
+            _toca(cur, p_['os_id'])
+        return jsonify({"ok": True})
+
+    @app.route("/api/os/<int:numero>/repasses/<int:pid>", methods=["DELETE"])
+    @equipe
+    def os_repasse_del(numero, pid):
+        if not _admin():
+            return jsonify({"erro": "Só o administrador exclui pagamento de repasse."}), 403
+        with db(commit=True) as cur:
+            o = _os_por_numero(cur, numero)
+            if not o:
+                return jsonify({"erro": "OS não encontrada"}), 404
+            cur.execute("DELETE FROM os_repasse_pagtos WHERE id=%s AND os_id=%s RETURNING valor, lancamento_id, arquivo_id",
+                        (pid, o['id']))
+            r = cur.fetchone()
+            if r:
+                if r['lancamento_id']:
+                    cur.execute("DELETE FROM lancamentos WHERE id=%s", (r['lancamento_id'],))
+                if r['arquivo_id']:
+                    cur.execute("DELETE FROM arquivos WHERE id=%s", (r['arquivo_id'],))
+                _ocorrencia(cur, o['id'], 'outras', 'Pagamento de repasse excluído: R$ %s' % _br(r['valor']))
+            _toca(cur, o['id'])
+        return jsonify({"ok": True})
 
     @app.route("/api/os/<int:numero>/itens", methods=["POST"])
     @equipe
@@ -1245,18 +1531,18 @@ def registrar(app, db, login_required):
             _ocorrencia(cur, o['id'], 'outras', 'Item lançado: %s — R$ %s' % (it['descricao'], _br(it['valor'] * it['qtd'])))
             pg = d.get("pago_agora") or {}
             if pg.get("conta_id"):
-                if not _perms(cur)['dar_baixa']:
-                    return jsonify({"erro": "Só quem dá baixa pode lançar saída do caixa."}), 403
-                valor = (it['custo'] or it['valor']) * it['qtd']
-                agora = _agora()
-                cur.execute("""INSERT INTO lancamentos (natureza, vencimento, pago_em, descricao, favorecido, documento,
-                                   valor, valor_pago, conta_id, centro_id, forma_pgto_id, os_id, obs, user_nome, empresa_id)
-                               VALUES ('pagar', %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s, %s, %s, %s, %s)""",
-                            (agora.date(), agora, "PAGAMENTO: %s — O.S. Nº %s" % (it['descricao'], numero),
-                             (pg.get("favorecido") or "").strip(), str(numero), valor, valor, pg["conta_id"],
-                             pg.get("forma_id") or None, o['id'], '', _eu(), session.get('empresa_id')))
-                _ocorrencia(cur, o['id'], 'outras', 'Despesa paga pelo escritório: %s — R$ %s (saiu do caixa)'
-                            % (it['descricao'], _br(valor)))
+                cur.execute("SELECT natureza, custo, valor, qtd FROM os_itens WHERE id=%s", (iid,))
+                x = cur.fetchone()
+                if x['natureza'] != 'repasse':
+                    return jsonify({"erro": "Só item de repasse tem pagamento a terceiro."}), 400
+                pg = dict(pg, item_id=iid, valor=pg.get("valor") or str((x['custo'] or x['valor']) * x['qtd']),
+                          orgao=pg.get("orgao") or d.get("orgao"), documento=pg.get("documento") or d.get("documento"))
+                try:
+                    _registrar_repasse(cur, o, pg)
+                except PermissionError as e:
+                    return jsonify({"erro": str(e)}), 403
+                except ValueError as e:
+                    return jsonify({"erro": str(e)}), 400
             _toca(cur, o['id'])
         return jsonify({"ok": True})
 
@@ -1268,17 +1554,29 @@ def registrar(app, db, login_required):
             o = _os_por_numero(cur, numero)
             if not o:
                 return jsonify({"erro": "OS não encontrada"}), 404
-            if "custo" in d and _perms(cur)['ver_lucro']:
-                cur.execute("""UPDATE os_itens SET descricao=%s, qtd=%s, valor=%s, custo=%s
-                               WHERE id=%s AND os_id=%s""",
-                            ((d.get("descricao") or "").strip().upper(), _num(d.get("qtd"), Decimal('1')) or Decimal('1'),
-                             _num(d.get("valor")), _num(d.get("custo")), iid, o['id']))
-            else:  # sem ver lucro: mantém o custo; se o valor ficar menor que o custo, o custo acompanha
-                v = _num(d.get("valor"))
-                cur.execute("""UPDATE os_itens SET descricao=%s, qtd=%s, valor=%s, custo=LEAST(custo, %s)
-                               WHERE id=%s AND os_id=%s""",
-                            ((d.get("descricao") or "").strip().upper(), _num(d.get("qtd"), Decimal('1')) or Decimal('1'),
-                             v, v, iid, o['id']))
+            cur.execute("SELECT * FROM os_itens WHERE id=%s AND os_id=%s", (iid, o['id']))
+            it = cur.fetchone()
+            if not it:
+                return jsonify({"erro": "Item não encontrado"}), 404
+            nat = _natureza(d) or it['natureza'] or 'repasse'
+            valor = _num(d.get("valor")) if d.get("valor") not in (None, '') else it['valor']
+            qtd = _num(d.get("qtd"), Decimal('1')) or Decimal('1') if d.get("qtd") not in (None, '') else it['qtd']
+            if nat == 'honorario':
+                custo = Decimal('0')
+            elif "custo" in d and _perms(cur)['ver_lucro'] and d.get("custo") not in (None, ''):
+                custo = _num(d.get("custo"))
+            elif it['natureza'] != 'repasse' or not (it['custo'] or 0) > 0:
+                custo = valor                         # virou repasse agora: repasse = valor cobrado
+            else:
+                custo = min(it['custo'], valor)        # sem ver lucro: mantém o custo (nunca acima do valor)
+            cat = (d.get("categoria") or it['categoria'] or '').lower() if nat == 'repasse' else ''
+            if nat == 'repasse' and cat not in CAT_REPASSE:
+                cat = _cat_palpite(d.get("descricao") or it['descricao'])
+            cur.execute("""UPDATE os_itens SET descricao=%s, qtd=%s, valor=%s, custo=%s, natureza=%s, categoria=%s,
+                                              orgao=%s, documento=%s WHERE id=%s""",
+                        ((d.get("descricao") or it['descricao']).strip().upper(), qtd, valor, custo, nat, cat,
+                         (d.get("orgao", it['orgao']) or '').strip().upper() if nat == 'repasse' else '',
+                         (d.get("documento", it['documento']) or '').strip().upper() if nat == 'repasse' else '', iid))
             _toca(cur, o['id'])
         return jsonify({"ok": True})
 
@@ -1320,6 +1618,21 @@ def registrar(app, db, login_required):
         if not d.get("conta_id"):
             return jsonify({"erro": "Escolha a conta."}), 400
         with db(commit=True) as cur:
+            cur.execute("SELECT nome FROM formas_pgto WHERE id=%s", (d["forma_pgto_id"],))
+            ftipo = _forma_tipo((cur.fetchone() or {}).get('nome'))
+            maq, parc, nsu = '', 1, ''
+            if ftipo in ('debito', 'credito'):
+                maq = (d.get("maquininha") or "").strip().upper()
+                if maq not in MAQUININHAS:
+                    return jsonify({"erro": "Pagamento no cartão: escolha a maquininha (Stone ou Sicredi)."}), 400
+                nsu = re.sub(r'\s+', '', (d.get("nsu") or ""))[:30].upper()
+                if ftipo == 'credito':
+                    try:
+                        parc = int(d.get("parcelas") or 1)
+                    except (TypeError, ValueError):
+                        parc = 1
+                    if not 1 <= parc <= 24:
+                        return jsonify({"erro": "Parcelas: de 1 a 24."}), 400
             r = _os_completa(cur, numero)
             if not r:
                 return jsonify({"erro": "OS não encontrada"}), 404
@@ -1343,17 +1656,20 @@ def registrar(app, db, login_required):
             fav = (r['responsavel'] or r['cliente'] or {}).get('nome', '')
             obs = (d.get("obs") or "").strip()
             baixa = _perms(cur)['dar_baixa']
+            cartao = (' · %s%s%s' % (maq, (' %dx' % parc) if ftipo == 'credito' else '', (' · NSU ' + nsu) if nsu else '')) if maq else ''
             lid = None
             if baixa:
                 lid = _gerar_lancamento(cur, o['id'], numero, quando, valor, d["conta_id"], centro,
-                                        d["forma_pgto_id"], obs, fav, _eu())
+                                        d["forma_pgto_id"], (obs + cartao).strip(' ·'), fav, _eu())
             cur.execute("""INSERT INTO os_recebimentos (os_id, quando, valor, forma_pgto_id, conta_id,
-                               centro_id, obs, user_nome, lancamento_id, status, baixa_por, baixa_em)
-                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                               centro_id, obs, user_nome, lancamento_id, status, baixa_por, baixa_em,
+                               maquininha, parcelas, nsu)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                         (o['id'], quando, valor, d["forma_pgto_id"], d["conta_id"], centro, obs, _eu(), lid,
-                         'confirmado' if baixa else 'pendente', _eu() if baixa else '', _agora() if baixa else None))
+                         'confirmado' if baixa else 'pendente', _eu() if baixa else '', _agora() if baixa else None,
+                         maq, parc, nsu))
             cur.execute("SELECT nome FROM formas_pgto WHERE id=%s", (d["forma_pgto_id"],))
-            fn = (cur.fetchone() or {}).get('nome', '')
+            fn = ((cur.fetchone() or {}).get('nome', '') + cartao)
             if baixa:
                 _ocorrencia(cur, o['id'], 'outras', 'Recebido R$ %s (%s) — baixa por %s' % (_br(valor), fn, _eu()))
             else:
@@ -1397,8 +1713,10 @@ def registrar(app, db, login_required):
                 if float(r['valor']) > full['os']['devedor'] + 0.004:
                     return jsonify({"erro": "Valor maior que o saldo devedor atual (R$ %s)." % _br(full['os']['devedor'])}), 400
                 fav = (full['responsavel'] or full['cliente'] or {}).get('nome', '')
+                cartao = (' · %s%s%s' % (r['maquininha'], (' %dx' % r['parcelas']) if (r['parcelas'] or 1) > 1 else '',
+                                         (' · NSU ' + r['nsu']) if r['nsu'] else '')) if r.get('maquininha') else ''
                 lid = _gerar_lancamento(cur, r['oid'], r['numero'], r['quando'], r['valor'], r['conta_id'],
-                                        r['centro_id'], r['forma_pgto_id'], r['obs'], fav, r['user_nome'])
+                                        r['centro_id'], r['forma_pgto_id'], ((r['obs'] or '') + cartao).strip(' ·'), fav, r['user_nome'])
                 cur.execute("""UPDATE os_recebimentos SET status='confirmado', lancamento_id=%s, baixa_por=%s,
                                baixa_em=NOW() WHERE id=%s""", (lid, _eu(), rid))
                 _ocorrencia(cur, r['oid'], 'outras', 'Baixa confirmada por %s: R$ %s (informado por %s)'
