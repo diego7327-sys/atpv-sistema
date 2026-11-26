@@ -248,6 +248,20 @@ END $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS os_conclusao_trg ON ordens_servico;
 CREATE TRIGGER os_conclusao_trg BEFORE INSERT OR UPDATE OF status ON ordens_servico
   FOR EACH ROW EXECUTE FUNCTION os_marca_conclusao();
+-- extrato importado (OFX/CSV do banco ou relatório de vendas da maquininha) e conciliação
+CREATE TABLE IF NOT EXISTS extrato_linhas (
+    id BIGSERIAL PRIMARY KEY,
+    lote TEXT NOT NULL, arquivo_nome TEXT DEFAULT '',
+    conta_id BIGINT REFERENCES contas(id),
+    maquininha TEXT DEFAULT '',            -- preenchido quando é relatório de vendas da maquininha
+    data DATE NOT NULL, descricao TEXT DEFAULT '', documento TEXT DEFAULT '',
+    valor NUMERIC(12,2) NOT NULL,          -- + entrada / − saída
+    hash TEXT UNIQUE,
+    status TEXT DEFAULT 'aberto',          -- aberto | conciliado | ignorado
+    ref_tipo TEXT DEFAULT '', ref_id BIGINT, obs TEXT DEFAULT '',
+    user_nome TEXT DEFAULT '', importado TIMESTAMPTZ DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS extrato_data_idx ON extrato_linhas (conta_id, data);
+CREATE INDEX IF NOT EXISTS extrato_ref_idx ON extrato_linhas (ref_tipo, ref_id);
 """
 
 # Cadastros iniciais — tirados das telas do BitDesp (levantamento de 13/11/2026)
@@ -426,10 +440,12 @@ def xlsx_contador(r, m, ini, fim):
                       ("Motivo hon. zero", "hon_zero_motivo", 22, '')], r['os'])
     aba("Conferência DIMP", [("Maquininha", "maquininha", 16, ''), ("Pagamentos", "qtd", 11, ''), ("Bruto no cartão", "bruto", 15, 'm'),
                              ("Repasse documentado", "repasse_doc", 17, 'm'), ("Receita com NFS-e", "receita_nota", 16, 'm'),
-                             ("Sem explicação", "sem_explicacao", 15, 'm')], dm['maquininhas'])
+                             ("Sem explicação", "sem_explicacao", 15, 'm'), ("Relatório da maquininha", "relatorio", 17, 'm'),
+                             ("Venda fora do sistema", "fora_sistema", 17, 'm')], dm['maquininhas'])
     wd = wb["Conferência DIMP"]
-    for row in wd.iter_rows(min_row=2, min_col=6, max_col=6):
+    for row in wd.iter_rows(min_row=2, min_col=6, max_col=8):
         for c in row:
+            if c.column == 7: continue
             if isinstance(c.value, (int, float)) and c.value > 0.004 or (isinstance(c.value, str) and c.value.startswith('=')):
                 c.font = Font(bold=True, color="C00000")
     if dm.get('os'):
@@ -458,6 +474,131 @@ def xlsx_contador(r, m, ini, fim):
                            ("Total", "total", 12, 'm'), ("Motivo", "hon_zero_motivo", 26, '')], r['hon_zero'])
     bio = BytesIO(); wb.save(bio)
     return bio.getvalue()
+
+# ── EXTRATO: leitura de OFX e CSV ───────────────────────────
+def _extr_texto(b):
+    for enc in ("utf-8-sig", "cp1252", "latin-1"):
+        try:
+            return b.decode(enc)
+        except UnicodeDecodeError:
+            pass
+    return b.decode("latin-1", "replace")
+
+def _extr_valor(v):
+    """'1.234,56' '-1234.56' 'R$ 1.234,56 D' '(50,00)' → Decimal (ou None)."""
+    t = str(v or '').strip().upper().replace('R$', '').replace('\xa0', '').replace(' ', '')
+    if not t:
+        return None
+    neg = t.startswith('-') or t.endswith('-') or t.endswith('D') or (t.startswith('(') and t.endswith(')'))
+    t = re.sub(r'[^0-9,.]', '', t)
+    if not t:
+        return None
+    if ',' in t and '.' in t:
+        t = t.replace('.', '').replace(',', '.') if t.rfind(',') > t.rfind('.') else t.replace(',', '')
+    elif ',' in t:
+        t = t.replace('.', '').replace(',', '.')
+    elif t.count('.') > 1:
+        t = t.replace('.', '')
+    try:
+        d = Decimal(t).quantize(Decimal('0.01'))
+    except InvalidOperation:
+        return None
+    return -d if neg else d
+
+def _extr_data(v):
+    t = str(v or '').strip()
+    m = re.match(r'^(\d{4})-?(\d{2})-?(\d{2})', t)
+    if m:
+        try:
+            return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            return None
+    m = re.match(r'^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})', t)
+    if m:
+        a = int(m.group(3)); a = a + 2000 if a < 100 else a
+        try:
+            return date(a, int(m.group(2)), int(m.group(1)))
+        except ValueError:
+            return None
+    return None
+
+def ler_ofx(txt):
+    linhas = []
+    for bl in re.findall(r'<STMTTRN>(.*?)(?:</STMTTRN>|(?=<STMTTRN>)|(?=</BANKTRANLIST>))', txt, re.S | re.I):
+        def tag(n):
+            m = re.search(r'<' + n + r'>([^<\r\n]*)', bl, re.I)
+            return m.group(1).strip() if m else ''
+        d = _extr_data(tag('DTPOSTED')); v = _extr_valor(tag('TRNAMT'))
+        if d is None or v is None:
+            continue
+        desc = ' '.join(x for x in (tag('NAME'), tag('MEMO')) if x).strip()
+        linhas.append({"data": d, "descricao": desc[:200], "documento": (tag('FITID') or tag('CHECKNUM'))[:60], "valor": v})
+    return linhas
+
+EXTR_COLS = {
+    "data": ("data", "date", "dt", "dia", "data da venda", "data venda", "data lançamento", "data lancamento", "data movimento"),
+    "descricao": ("histórico", "historico", "descrição", "descricao", "lançamento", "lancamento", "memo", "detalhe", "bandeira", "produto"),
+    "valor": ("valor bruto", "bruto", "valor", "valor (r$)", "valor r$", "montante", "amount", "valor da venda", "valor venda"),
+    "credito": ("crédito", "credito", "entrada", "entradas"),
+    "debito": ("débito", "debito", "saída", "saida", "saídas", "saidas"),
+    "documento": ("nsu", "stone id", "id", "documento", "doc", "nº documento", "n° documento", "numero documento", "autorização",
+                  "autorizacao", "código de autorização", "codigo de autorizacao", "fitid", "identificador"),
+}
+
+def _extr_norm(h):
+    return re.sub(r'\s+', ' ', (h or '').strip().lower())
+
+def ler_csv(txt, mapa=None):
+    """→ (linhas, info). Sem mapa, adivinha as colunas pelo cabeçalho; se não der, info['precisa_mapa']=True."""
+    import csv, io
+    amostra = txt[:5000]
+    sep = max((';', ',', '\t', '|'), key=lambda c: amostra.count(c))
+    rows = [r for r in csv.reader(io.StringIO(txt), delimiter=sep) if any((c or '').strip() for c in r)]
+    if not rows:
+        return [], {"erro": "Arquivo vazio."}
+    # cabeçalho: primeira linha (das 15 primeiras) que tem 'data' e algum valor
+    hi = 0
+    for i, r in enumerate(rows[:15]):
+        ns = [_extr_norm(c) for c in r]
+        if any(n in EXTR_COLS['data'] or n.startswith('data') for n in ns) and \
+           any(any(n == k or n.startswith(k) for k in EXTR_COLS['valor'] + EXTR_COLS['credito'] + EXTR_COLS['debito']) for n in ns):
+            hi = i; break
+    cab = [c.strip() for c in rows[hi]]
+    ns = [_extr_norm(c) for c in cab]
+    if mapa:
+        idx = {k: (int(v) if str(v).lstrip('-').isdigit() and int(v) >= 0 else None) for k, v in mapa.items()}
+    else:
+        idx = {}
+        for k, nomes in EXTR_COLS.items():
+            for nome in nomes:          # ordem de preferência
+                hit = [j for j, n in enumerate(ns) if n == nome] or [j for j, n in enumerate(ns) if n.startswith(nome)]
+                if hit:
+                    idx[k] = hit[0]; break
+    info = {"colunas": cab, "separador": sep, "linha_cabecalho": hi, "mapa": idx,
+            "amostra": rows[hi + 1:hi + 6]}
+    tem_valor = idx.get('valor') is not None or idx.get('credito') is not None or idx.get('debito') is not None
+    if idx.get('data') is None or not tem_valor:
+        info["precisa_mapa"] = True
+        return [], info
+    out = []
+    pega = lambda r, k: r[idx[k]] if idx.get(k) is not None and idx[k] < len(r) else ''
+    dcols = [] if mapa else [j for j, n in enumerate(ns) if any(n == k or n.startswith(k) for k in EXTR_COLS['descricao'])]
+    for r in rows[hi + 1:]:
+        d = _extr_data(pega(r, 'data'))
+        if d is None:
+            continue
+        if idx.get('valor') is not None:
+            v = _extr_valor(pega(r, 'valor'))
+        else:
+            c = _extr_valor(pega(r, 'credito')) or Decimal('0'); db_ = _extr_valor(pega(r, 'debito')) or Decimal('0')
+            v = abs(c) - abs(db_)
+        if v is None or v == 0:
+            continue
+        desc = ' · '.join(r[j].strip() for j in dcols if j < len(r) and r[j].strip()) if len(dcols) > 1 else pega(r, 'descricao')
+        if not desc:
+            desc = ' '.join(x.strip() for j, x in enumerate(r) if j not in idx.values() and x.strip() and not _extr_valor(x))[:120]
+        out.append({"data": d, "descricao": desc.strip()[:200], "documento": pega(r, 'documento').strip()[:60], "valor": v})
+    return out, info
 
 def _forma_tipo(nome):
     n = (nome or '').upper()
@@ -2502,6 +2643,282 @@ def registrar(app, db, login_required):
                 out.append(x)
         return jsonify({"itens": out, "total_nota": round(soma, 2) if vl else None})
 
+    # ── EXTRATO: importação OFX/CSV e conciliação ──────────────
+    EXTR_JANELA = 3   # dias de tolerância entre o extrato e o lançamento do sistema
+
+    def _extr_livre(tipo):
+        return "NOT EXISTS (SELECT 1 FROM extrato_linhas e2 WHERE e2.ref_tipo = '%s' AND e2.ref_id = {a}.id AND e2.status = 'conciliado')" % tipo
+
+    def _extr_candidatos(cur, ln, limite=None):
+        """Lançamentos do sistema que podem ser esta linha do extrato (mais provável primeiro)."""
+        v = abs(_num(ln['valor'])); dia = ln['data']; jan = limite or EXTR_JANELA
+        doc = (ln.get('documento') or '').lstrip('0')
+        cands = []
+        dq = "(r.quando AT TIME ZONE 'America/Sao_Paulo')::date"
+        if _num(ln['valor']) > 0:
+            cond = ["r.status = 'confirmado'", _extr_livre('recebimento').format(a='r')]
+            args = []
+            if ln.get('maquininha'):
+                cond.append("upper(COALESCE(r.maquininha,'')) = %s"); args.append(ln['maquininha'])
+            else:
+                cond.append("r.conta_id = %s"); args.append(ln['conta_id'])
+            cur.execute("""SELECT r.id, r.valor, r.nsu, """ + dq + """ AS dia, o.numero, f.nome AS forma, cl.nome AS cliente
+                           FROM os_recebimentos r JOIN ordens_servico o ON o.id = r.os_id AND o.excluida_em IS NULL
+                           LEFT JOIN formas_pgto f ON f.id = r.forma_pgto_id LEFT JOIN clientes cl ON cl.id = o.cliente_id
+                           WHERE """ + " AND ".join(cond) + " AND " + dq + """ BETWEEN %s AND %s""",
+                        args + [dia - timedelta(days=jan), dia + timedelta(days=jan)])
+            for r in cur.fetchall():
+                nsu_ok = bool(doc) and (r['nsu'] or '').lstrip('0') == doc
+                if not nsu_ok and abs(_num(r['valor']) - v) > Decimal('0.004'):
+                    continue
+                cands.append({"tipo": "recebimento", "id": r['id'], "data": _d(r['dia']), "valor": _f(r['valor']), "nsu": nsu_ok,
+                              "txt": "OS %s · recebimento %s%s · %s" % (r['numero'], r['forma'] or '', (" NSU " + r['nsu']) if r['nsu'] else '', r['cliente'] or ''),
+                              "os": r['numero'], "dist": abs((r['dia'] - dia).days)})
+        else:
+            cur.execute("""SELECT p.id, p.valor, p.data, p.documento, o.numero, i.descricao FROM os_repasse_pagtos p
+                           JOIN ordens_servico o ON o.id = p.os_id AND o.excluida_em IS NULL LEFT JOIN os_itens i ON i.id = p.item_id
+                           WHERE p.conta_id = %s AND """ + _extr_livre('repasse').format(a='p') + """ AND p.data BETWEEN %s AND %s""",
+                        (ln['conta_id'], dia - timedelta(days=jan), dia + timedelta(days=jan)))
+            for r in cur.fetchall():
+                if abs(_num(r['valor']) - v) > Decimal('0.004'):
+                    continue
+                cands.append({"tipo": "repasse", "id": r['id'], "data": _d(r['data']), "valor": -_f(r['valor']), "nsu": False,
+                              "txt": "OS %s · repasse %s%s" % (r['numero'], r['descricao'] or '', (" · " + r['documento']) if r['documento'] else ''),
+                              "os": r['numero'], "dist": abs((r['data'] - dia).days)})
+        if not ln.get('maquininha'):
+            nat = 'receber' if _num(ln['valor']) > 0 else 'pagar'
+            cur.execute("""SELECT l.id, l.valor_pago, l.valor, l.descricao, (l.pago_em AT TIME ZONE 'America/Sao_Paulo')::date AS dia
+                           FROM lancamentos l WHERE l.natureza = %s AND l.conta_id = %s AND l.pago_em IS NOT NULL
+                             AND NOT EXISTS (SELECT 1 FROM os_recebimentos r WHERE r.lancamento_id = l.id)
+                             AND NOT EXISTS (SELECT 1 FROM os_repasse_pagtos p WHERE p.lancamento_id = l.id)
+                             AND """ + _extr_livre('lancamento').format(a='l') + """
+                             AND (l.pago_em AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN %s AND %s""",
+                        (nat, ln['conta_id'], dia - timedelta(days=jan), dia + timedelta(days=jan)))
+            for r in cur.fetchall():
+                vv = _num(r['valor_pago'] or r['valor'])
+                if abs(vv - v) > Decimal('0.004'):
+                    continue
+                cands.append({"tipo": "lancamento", "id": r['id'], "data": _d(r['dia']), "valor": _f(vv) * (1 if nat == 'receber' else -1),
+                              "nsu": False, "txt": "Lançamento: " + (r['descricao'] or ''), "os": None, "dist": abs((r['dia'] - dia).days)})
+        cands.sort(key=lambda c: (not c['nsu'], c['dist']))
+        return cands
+
+    def _extr_auto(cur, ids):
+        n = 0
+        for i in ids:
+            cur.execute("SELECT * FROM extrato_linhas WHERE id = %s AND status = 'aberto'", (i,))
+            ln = cur.fetchone()
+            if not ln:
+                continue
+            c = _extr_candidatos(cur, ln)
+            if c:
+                cur.execute("UPDATE extrato_linhas SET status='conciliado', ref_tipo=%s, ref_id=%s, obs='automático' WHERE id=%s",
+                            (c[0]['tipo'], c[0]['id'], i))
+                n += 1
+        return n
+
+    @app.route("/api/extrato/importar", methods=["POST"])
+    @equipe
+    def extrato_importar():
+        import base64, hashlib, uuid
+        d = request.get_json() or {}
+        with db(commit=True) as cur:
+            if not _pode_nf(cur):
+                return jsonify({"erro": "Sem permissão para importar extrato."}), 403
+            conta = d.get("conta_id")
+            maq = (d.get("maquininha") or "").strip().upper()
+            if maq and maq not in MAQUININHAS:
+                return jsonify({"erro": "Maquininha inválida."}), 400
+            if maq and not conta:
+                cur.execute("SELECT id FROM contas WHERE upper(nome) LIKE %s ORDER BY id LIMIT 1", ('%' + MAQ_CONTA.get(maq, maq) + '%',))
+                c_ = cur.fetchone(); conta = c_['id'] if c_ else None
+            if not conta:
+                return jsonify({"erro": "Escolha a conta do extrato."}), 400
+            arq = d.get("arquivo") or {}
+            try:
+                bruto = base64.b64decode((arq.get("dados") or "").split(",", 1)[-1])
+            except Exception:
+                return jsonify({"erro": "Arquivo inválido."}), 400
+            if not bruto:
+                return jsonify({"erro": "Escolha o arquivo do extrato (OFX ou CSV)."}), 400
+            if len(bruto) > 5 * 1024 * 1024:
+                return jsonify({"erro": "Arquivo muito grande (máx. 5 MB)."}), 400
+            nome = (arq.get("nome") or "extrato")[:120]
+            txt = _extr_texto(bruto)
+            if '<STMTTRN>' in txt.upper() or nome.lower().endswith('.ofx'):
+                linhas, info = ler_ofx(txt), {"formato": "OFX"}
+            else:
+                linhas, info = ler_csv(txt, d.get("mapa"))
+                info["formato"] = "CSV"
+                if info.get("precisa_mapa") or info.get("erro"):
+                    return jsonify({"precisa_mapa": bool(info.get("precisa_mapa")), "erro": info.get("erro"),
+                                    "colunas": info.get("colunas"), "amostra": info.get("amostra")}), (200 if info.get("precisa_mapa") else 400)
+            if not linhas:
+                return jsonify({"erro": "Não achei lançamentos no arquivo. Confira se é o extrato em OFX ou CSV."}), 400
+            lote = uuid.uuid4().hex[:12]
+            novas, dup, rep_ = [], 0, {}
+            for l in linhas:
+                base = "|".join([str(conta), maq, l['data'].isoformat(), str(l['valor']), l['documento'] or '', l['descricao'] or ''])
+                # mesma linha repetida no próprio arquivo (ex.: duas tarifas iguais no dia) não é duplicata
+                rep_[base] = rep_.get(base, 0) + 1
+                h = hashlib.sha1((base + "|" + str(rep_[base])).encode()).hexdigest()
+                cur.execute("""INSERT INTO extrato_linhas (lote, arquivo_nome, conta_id, maquininha, data, descricao, documento, valor, hash, user_nome)
+                               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (hash) DO NOTHING RETURNING id""",
+                            (lote, nome, conta, maq, l['data'], l['descricao'], l['documento'], l['valor'], h, _eu()))
+                r = cur.fetchone()
+                if r:
+                    novas.append(r['id'])
+                else:
+                    dup += 1
+            conc = _extr_auto(cur, novas)
+            de = min(l['data'] for l in linhas); ate = max(l['data'] for l in linhas)
+        return jsonify({"ok": True, "lote": lote, "formato": info.get("formato"), "lidas": len(linhas), "novas": len(novas),
+                        "duplicadas": dup, "conciliadas": conc, "de": _d(de), "ate": _d(ate)})
+
+    def _extr_ref_txt(cur, tipo, rid):
+        if tipo == 'recebimento':
+            cur.execute("""SELECT o.numero, f.nome AS forma, r.nsu FROM os_recebimentos r JOIN ordens_servico o ON o.id = r.os_id
+                           LEFT JOIN formas_pgto f ON f.id = r.forma_pgto_id WHERE r.id = %s""", (rid,))
+            x = cur.fetchone()
+            return (("OS %s · recebimento %s" % (x['numero'], x['forma'] or '')) + ((" NSU " + x['nsu']) if x['nsu'] else ''), x['numero']) if x else ('(recebimento apagado)', None)
+        if tipo == 'repasse':
+            cur.execute("""SELECT o.numero, i.descricao FROM os_repasse_pagtos p JOIN ordens_servico o ON o.id = p.os_id
+                           LEFT JOIN os_itens i ON i.id = p.item_id WHERE p.id = %s""", (rid,))
+            x = cur.fetchone()
+            return ("OS %s · repasse %s" % (x['numero'], x['descricao'] or ''), x['numero']) if x else ('(repasse apagado)', None)
+        if tipo == 'lancamento':
+            cur.execute("SELECT descricao FROM lancamentos WHERE id = %s", (rid,))
+            x = cur.fetchone()
+            return ("Lançamento: " + (x['descricao'] or ''), None) if x else ('(lançamento apagado)', None)
+        return ('', None)
+
+    @app.route("/api/extrato", methods=["GET"])
+    @equipe
+    def extrato_lista():
+        """fonte = conta:<id> (extrato do banco) | maq:<NOME> (relatório de vendas da maquininha)."""
+        fonte = request.args.get("fonte") or ""
+        sit = request.args.get("situacao") or "aberto"
+        de, ate = _data(request.args.get("de")), _data(request.args.get("ate"))
+        with db() as cur:
+            if not _pode_nf(cur):
+                return jsonify({"erro": "Sem permissão."}), 403
+            cond, args = ["1=1"], []
+            if fonte.startswith("maq:"):
+                cond.append("e.maquininha = %s"); args.append(fonte[4:].upper())
+            elif fonte.startswith("conta:"):
+                cond.append("e.conta_id = %s AND COALESCE(e.maquininha,'') = ''"); args.append(int(fonte[6:]))
+            if de:
+                cond.append("e.data >= %s"); args.append(de)
+            if ate:
+                cond.append("e.data <= %s"); args.append(ate)
+            cur.execute("""SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN valor>0 THEN valor END),0) AS ent,
+                                  COALESCE(SUM(CASE WHEN valor<0 THEN valor END),0) AS sai,
+                                  COUNT(*) FILTER (WHERE status='conciliado') AS nc, COUNT(*) FILTER (WHERE status='ignorado') AS ni,
+                                  COUNT(*) FILTER (WHERE status='aberto') AS na,
+                                  COALESCE(SUM(CASE WHEN status='aberto' THEN valor END),0) AS va,
+                                  MIN(data) AS dmin, MAX(data) AS dmax
+                           FROM extrato_linhas e WHERE """ + " AND ".join(cond), args)
+            rs = cur.fetchone()
+            c2 = list(cond); a2 = list(args)
+            if sit in ('aberto', 'conciliado', 'ignorado'):
+                c2.append("e.status = %s"); a2.append(sit)
+            cur.execute("""SELECT e.*, c.nome AS conta FROM extrato_linhas e LEFT JOIN contas c ON c.id = e.conta_id
+                           WHERE """ + " AND ".join(c2) + " ORDER BY e.data, e.id LIMIT 2000", a2)
+            linhas = []
+            for x in cur.fetchall():
+                y = {k: x[k] for k in ('id', 'lote', 'arquivo_nome', 'maquininha', 'descricao', 'documento', 'status', 'ref_tipo', 'ref_id', 'obs', 'conta')}
+                y['data'] = _d(x['data']); y['valor'] = _f(x['valor'])
+                if x['status'] == 'conciliado':
+                    y['ref_txt'], y['ref_os'] = _extr_ref_txt(cur, x['ref_tipo'], x['ref_id'])
+                linhas.append(y)
+            # lançado no sistema e não apareceu no extrato (no período que o extrato cobre)
+            sem_par = []
+            if fonte and rs['dmin']:
+                j0, j1 = max(rs['dmin'], de or rs['dmin']), min(rs['dmax'], ate or rs['dmax'])
+                dq = "(r.quando AT TIME ZONE 'America/Sao_Paulo')::date"
+                if fonte.startswith("maq:"):
+                    cur.execute("""SELECT r.id, r.valor, r.nsu, """ + dq + """ AS dia, o.numero, cl.nome AS cliente FROM os_recebimentos r
+                                   JOIN ordens_servico o ON o.id = r.os_id AND o.excluida_em IS NULL LEFT JOIN clientes cl ON cl.id = o.cliente_id
+                                   WHERE r.status = 'confirmado' AND upper(COALESCE(r.maquininha,'')) = %s AND """ + _extr_livre('recebimento').format(a='r') +
+                                " AND " + dq + " BETWEEN %s AND %s ORDER BY 4", (fonte[4:].upper(), j0, j1))
+                    sem_par = [{"tipo": "recebimento", "data": _d(r['dia']), "valor": _f(r['valor']), "os": r['numero'],
+                                "txt": "OS %s · %s%s" % (r['numero'], r['cliente'] or '', (" · NSU " + r['nsu']) if r['nsu'] else '')} for r in cur.fetchall()]
+                else:
+                    cid = int(fonte[6:])
+                    cur.execute("""SELECT r.id, r.valor, """ + dq + """ AS dia, o.numero, f.nome AS forma, cl.nome AS cliente FROM os_recebimentos r
+                                   JOIN ordens_servico o ON o.id = r.os_id AND o.excluida_em IS NULL LEFT JOIN formas_pgto f ON f.id = r.forma_pgto_id
+                                   LEFT JOIN clientes cl ON cl.id = o.cliente_id
+                                   WHERE r.status = 'confirmado' AND r.conta_id = %s AND COALESCE(r.maquininha,'') = '' AND """ +
+                                _extr_livre('recebimento').format(a='r') + " AND " + dq + " BETWEEN %s AND %s ORDER BY 3", (cid, j0, j1))
+                    sem_par = [{"tipo": "recebimento", "data": _d(r['dia']), "valor": _f(r['valor']), "os": r['numero'],
+                                "txt": "OS %s · recebimento %s · %s" % (r['numero'], r['forma'] or '', r['cliente'] or '')} for r in cur.fetchall()]
+                    cur.execute("""SELECT p.id, p.valor, p.data, o.numero, i.descricao FROM os_repasse_pagtos p
+                                   JOIN ordens_servico o ON o.id = p.os_id AND o.excluida_em IS NULL LEFT JOIN os_itens i ON i.id = p.item_id
+                                   WHERE p.conta_id = %s AND """ + _extr_livre('repasse').format(a='p') + " AND p.data BETWEEN %s AND %s ORDER BY p.data", (cid, j0, j1))
+                    sem_par += [{"tipo": "repasse", "data": _d(r['data']), "valor": -_f(r['valor']), "os": r['numero'],
+                                 "txt": "OS %s · repasse %s" % (r['numero'], r['descricao'] or '')} for r in cur.fetchall()]
+                    sem_par.sort(key=lambda x: x['data'])
+            cur.execute("""SELECT e.lote, e.arquivo_nome, c.nome AS conta, e.maquininha, COUNT(*) AS n, MIN(e.data) AS de, MAX(e.data) AS ate,
+                                  MAX(e.importado) AS quando, MAX(e.user_nome) AS por
+                           FROM extrato_linhas e LEFT JOIN contas c ON c.id = e.conta_id GROUP BY 1,2,3,4 ORDER BY MAX(e.importado) DESC LIMIT 30""")
+            lotes = [{"lote": x['lote'], "arquivo": x['arquivo_nome'], "conta": x['conta'], "maquininha": x['maquininha'], "linhas": x['n'],
+                      "de": _d(x['de']), "ate": _d(x['ate']), "quando": _dt(x['quando']), "por": x['por']} for x in cur.fetchall()]
+        return jsonify({"linhas": linhas, "sem_par": sem_par, "lotes": lotes,
+                        "resumo": {"linhas": rs['n'], "entradas": _f(rs['ent']), "saidas": _f(rs['sai']), "conciliadas": rs['nc'],
+                                   "ignoradas": rs['ni'], "abertas": rs['na'], "valor_aberto": _f(rs['va']),
+                                   "de": _d(rs['dmin']), "ate": _d(rs['dmax'])}})
+
+    @app.route("/api/extrato/<int:lid>/candidatos", methods=["GET"])
+    @equipe
+    def extrato_candidatos(lid):
+        with db() as cur:
+            if not _pode_nf(cur):
+                return jsonify({"erro": "Sem permissão."}), 403
+            cur.execute("SELECT * FROM extrato_linhas WHERE id = %s", (lid,))
+            ln = cur.fetchone()
+            if not ln:
+                return jsonify({"erro": "Linha não encontrada."}), 404
+            return jsonify({"candidatos": _extr_candidatos(cur, ln, limite=15)[:30]})
+
+    @app.route("/api/extrato/<int:lid>/<acao>", methods=["POST"])
+    @equipe
+    def extrato_acao(lid, acao):
+        d = request.get_json() or {}
+        with db(commit=True) as cur:
+            if not _pode_nf(cur):
+                return jsonify({"erro": "Sem permissão."}), 403
+            cur.execute("SELECT * FROM extrato_linhas WHERE id = %s", (lid,))
+            ln = cur.fetchone()
+            if not ln:
+                return jsonify({"erro": "Linha não encontrada."}), 404
+            if acao == 'conciliar':
+                t, rid = d.get("ref_tipo"), d.get("ref_id")
+                ok = [c for c in _extr_candidatos(cur, ln, limite=15) if c['tipo'] == t and str(c['id']) == str(rid)]
+                if not ok:
+                    return jsonify({"erro": "Esse lançamento não serve para esta linha (valor, conta ou data não batem, ou já está conciliado)."}), 400
+                cur.execute("UPDATE extrato_linhas SET status='conciliado', ref_tipo=%s, ref_id=%s, obs=%s WHERE id=%s",
+                            (t, int(rid), "manual — " + _eu(), lid))
+            elif acao == 'ignorar':
+                obs = (d.get("obs") or "").strip()
+                if not obs:
+                    return jsonify({"erro": "Diga o motivo (ex.: tarifa do banco, repasse da maquininha, transferência entre contas)."}), 400
+                cur.execute("UPDATE extrato_linhas SET status='ignorado', ref_tipo='', ref_id=NULL, obs=%s WHERE id=%s", (obs[:200], lid))
+            elif acao == 'desfazer':
+                cur.execute("UPDATE extrato_linhas SET status='aberto', ref_tipo='', ref_id=NULL, obs='' WHERE id=%s", (lid,))
+            else:
+                return jsonify({"erro": "Ação inválida."}), 400
+        return jsonify({"ok": True})
+
+    @app.route("/api/extrato/lote/<lote>", methods=["DELETE"])
+    @equipe
+    def extrato_lote_del(lote):
+        if not _admin():
+            return jsonify({"erro": "Só o administrador apaga uma importação."}), 403
+        with db(commit=True) as cur:
+            cur.execute("DELETE FROM extrato_linhas WHERE lote = %s", (lote,))
+            n = cur.rowcount
+        return jsonify({"ok": True, "apagadas": n})
+
     # ── RELATÓRIO MENSAL DO CONTADOR ───────────────────────────
     def _mes_args():
         m = (request.args.get("mes") or _hoje().strftime("%Y-%m")).strip()
@@ -2599,7 +3016,7 @@ def registrar(app, db, login_required):
                 "valor": _f(x['nf_valor']) if x['nf_valor'] is not None else 0.0} for x in cur.fetchall()]
         sem_nota = [x for x in oss if x['nota_sugerida'] > 0.004 and x['nf_status'] == 'PENDENTE']
         hon_zero = [x for x in oss if x['nota_sugerida'] <= 0.004 and x['receita_total'] <= 0.004]
-        dimp = _dimp(cur, cartoes)
+        dimp = _dimp(cur, cartoes, ini, fim)
         sm = lambda l, k: round(sum((x[k] or 0) for x in l), 2)
         resumo = {
             "regime": regime, "regime_nome": REGIMES[regime],
@@ -2615,7 +3032,7 @@ def registrar(app, db, login_required):
         return {"resumo": resumo, "os": oss, "recebimentos": receb, "repasses": reps, "notas": nfs,
                 "sem_nota": sem_nota, "hon_zero": hon_zero, "dimp": dimp}
 
-    def _dimp(cur, cartoes):
+    def _dimp(cur, cartoes, ini=None, fim=None):
         """Conferência DIMP: cartão bruto do mês por maquininha, explicado por repasse documentado (DUA/comprovante)
         e por receita com NFS-e emitida; o resto fica sem explicação. Cada pagamento no cartão explica a parte
         proporcional dele no total da OS (não supõe que o cartão pagou primeiro as taxas)."""
@@ -2658,11 +3075,23 @@ def registrar(app, db, login_required):
                                       "repasse_doc": 0.0, "receita_nota": 0.0, "sem_explicacao": 0.0,
                                       "motivo": "; ".join(i['motivos']) or "—"})
             e['cartao'] += v; e['repasse_doc'] += rp; e['receita_nota'] += nt; e['sem_explicacao'] += se
+        # relatório de vendas importado da maquininha (o que a operadora informa à prefeitura)
+        if ini:
+            cur.execute("""SELECT maquininha, COALESCE(SUM(valor),0) AS v, COALESCE(SUM(CASE WHEN status='aberto' THEN valor END),0) AS fora,
+                                  COUNT(*) AS n FROM extrato_linhas WHERE COALESCE(maquininha,'') <> '' AND valor > 0
+                                  AND data BETWEEN %s AND %s GROUP BY maquininha""", (ini, fim))
+            for x in cur.fetchall():
+                g = maqs.setdefault(x['maquininha'], {"maquininha": x['maquininha'], "bruto": 0.0, "repasse_doc": 0.0,
+                                                       "receita_nota": 0.0, "sem_explicacao": 0.0, "qtd": 0})
+                g['relatorio'] = _f(x['v']); g['fora_sistema'] = _f(x['fora']); g['relatorio_qtd'] = x['n']
         arred = lambda d: {k: (round(v, 2) if isinstance(v, float) else v) for k, v in d.items()}
         linhas = [arred(g) for g in maqs.values()]
         tot = {"maquininha": "TOTAL", "qtd": sum(g['qtd'] for g in linhas)}
         for k in ("bruto", "repasse_doc", "receita_nota", "sem_explicacao"):
             tot[k] = round(sum(g[k] for g in linhas), 2)
+        if any('relatorio' in g for g in linhas):
+            tot['relatorio'] = round(sum(g.get('relatorio', 0) for g in linhas), 2)
+            tot['fora_sistema'] = round(sum(g.get('fora_sistema', 0) for g in linhas), 2)
         os_l = sorted([arred(e) for e in por_os.values() if e['sem_explicacao'] > 0.004], key=lambda e: -e['sem_explicacao'])
         return {"maquininhas": linhas, "total": tot, "os": os_l}
 

@@ -349,6 +349,7 @@ input[type=date].os-dt,.fg input[type=date]{color-scheme:dark}
       <button id="osf-b-extrato" class="on" onclick="osFinAba('extrato')">Extrato de lançamentos</button>
       <button id="osf-b-nf" class="os-nfp" style="display:none" onclick="osFinAba('nf')">🧾 Notas fiscais</button>
       <button id="osf-b-cont" class="os-vlp" style="display:none" onclick="osFinAba('cont')">📊 Relatório do contador</button>
+      <button id="osf-b-extr" style="display:none" onclick="osFinAba('extr')">🏦 Extrato e conciliação</button>
       <button id="osf-b-cad" onclick="osFinAba('cad')">Cadastros (tipos de processo, contas, formas, centros)</button>
     </div>
     <div id="osf-nf" style="display:none">
@@ -359,6 +360,27 @@ input[type=date].os-dt,.fg input[type=date]{color-scheme:dark}
         <div class="fg" style="justify-content:flex-end"><button class="os-b pri" onclick="osNfLista()">Filtrar</button></div>
       </div>
       <div id="osf-nf-res"></div>
+    </div>
+    <div id="osf-extr" style="display:none">
+      <div class="os-box"><h4>Importar extrato (OFX ou CSV)</h4>
+        <div class="os-g4">
+          <div class="fg"><label>O que é o arquivo</label><select id="osx-orig" onchange="osExtrOrig()"><option value="banco">Extrato do banco</option><option value="maq">Relatório de vendas da maquininha</option></select></div>
+          <div class="fg" id="osx-conta-w"><label>Conta</label><select id="osx-conta"></select></div>
+          <div class="fg" id="osx-maq-w" style="display:none"><label>Maquininha</label><select id="osx-maq"></select></div>
+          <div class="fg"><label>Arquivo</label><input type="file" id="osx-arq" accept=".ofx,.csv,.txt,text/csv"></div>
+        </div>
+        <div id="osx-mapa"></div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="os-b pri" id="osx-bt" onclick="osExtrImportar()">⬆ Importar</button>
+          <span class="os-small">Pode importar de novo o mesmo arquivo: o que já entrou não duplica. O sistema já liga sozinho cada linha ao recebimento ou repasse de mesmo valor (até 3 dias de diferença, ou pelo NSU).</span></div>
+      </div>
+      <div class="os-g4">
+        <div class="fg"><label>Ver</label><select id="osx-fonte" onchange="osExtrLista()"></select></div>
+        <div class="fg"><label>De</label><input type="date" id="osx-de"></div>
+        <div class="fg"><label>Até</label><input type="date" id="osx-ate"></div>
+        <div class="fg"><label>Situação</label><select id="osx-sit" onchange="osExtrLista()"><option value="aberto">Sem par (a resolver)</option><option value="conciliado">Conciliadas</option><option value="ignorado">Ignoradas</option><option value="todas">Todas</option></select></div>
+      </div>
+      <div style="margin:-4px 0 10px"><button class="os-b pri" onclick="osExtrLista()">Filtrar</button></div>
+      <div id="osx-res"></div>
     </div>
     <div id="osf-cont" style="display:none">
       <div class="os-box"><h4>Relatório mensal para o contador</h4>
@@ -2027,6 +2049,8 @@ function osContPdf(){
       rqTabela(S,[{t:'Maquininha',w:30},{t:'Pagtos',w:16,r:1},{t:'Bruto no cartão',w:31,r:1},{t:'Repasse documentado',w:33,r:1},{t:'Receita com nota',w:30,r:1},{t:'Sem explicação',w:30,r:1}],
         dm.maquininhas.concat([dm.total]).map(function(g){ var t=g.maquininha==='TOTAL', b=function(x){ return t?'**'+x+'**':x; };
           return [b(g.maquininha),b(String(g.qtd||0)),b(osN(g.bruto)),b(osN(g.repasse_doc)),b(osN(g.receita_nota)),(g.sem_explicacao>0.004?'!!':'')+b(osN(g.sem_explicacao))]; }));
+      if(dm.total.relatorio!=null){ rqTabela(S,[{t:'Maquininha',w:50},{t:'Relatório da maquininha (importado)',w:60,r:1},{t:'Venda fora do sistema',w:60,r:1}],
+        dm.maquininhas.concat([dm.total]).map(function(g){ return [g.maquininha,g.relatorio!=null?osN(g.relatorio):'não importado',(g.fora_sistema>0.004?'!!':'')+(g.relatorio!=null?osN(g.fora_sistema||0):'—')]; })); }
       S.y-=1.5; rqPar(S,'Cada pagamento no cartão é explicado pelo repasse com DUA/comprovante e pela receita com NFS-e emitida, na proporção do total da OS. Em vermelho, o que ficou sem explicação.',{sz:7.8,i:true,cor:[110,110,110]});
       if(dm.os.length) rqTabela(S,[{t:'OS',w:14},{t:'Cliente',w:46},{t:'Maq.',w:20},{t:'Cartão',w:22,r:1},{t:'Sem explic.',w:22,r:1},{t:'O que falta',w:46}],
         dm.os.map(function(e){ return [String(e.os),e.cliente,e.maquininha,osN(e.cartao),'!!'+osN(e.sem_explicacao),e.motivo]; }),{sz:7.6}); }
@@ -2055,17 +2079,119 @@ function osContPdf(){
     S.doc.save('contador_'+m.replace('-','_')+'.pdf'); osMsg('✓ PDF do contador gerado.');
   }).catch(osErr);
 }
+// ── EXTRATO (OFX/CSV) E CONCILIAÇÃO ──
+function osExtrPrep(){
+  var c=OS.cad, contas=(c.contas||[]).filter(function(x){ return x.ativo; }), maqs=c.maquininhas||['STONE','SICREDI','LISTO'];
+  if(!osE('osx-conta').options.length){
+    osE('osx-conta').innerHTML=contas.map(function(x){ return '<option value="'+x.id+'">'+osEsc(x.nome==='SICRED'?'SICREDI':x.nome)+'</option>'; }).join('');
+    osE('osx-maq').innerHTML=maqs.map(function(m){ return '<option>'+m+'</option>'; }).join('');
+    osE('osx-fonte').innerHTML='<optgroup label="Extrato do banco">'+contas.map(function(x){ return '<option value="conta:'+x.id+'">'+osEsc(x.nome==='SICRED'?'SICREDI':x.nome)+'</option>'; }).join('')+'</optgroup>'+
+      '<optgroup label="Vendas da maquininha">'+maqs.map(function(m){ return '<option value="maq:'+m+'">Maquininha '+m+'</option>'; }).join('')+'</optgroup>';
+    var h=osHoje(); osE('osx-de').value=h.slice(0,8)+'01'; osE('osx-ate').value=h;
+  }
+  osExtrLista();
+}
+function osExtrOrig(){ var m=osE('osx-orig').value==='maq'; osE('osx-conta-w').style.display=m?'none':''; osE('osx-maq-w').style.display=m?'':'none'; osE('osx-mapa').innerHTML=''; }
+function osExtrImportar(mapa){
+  var f=osE('osx-arq').files[0]; if(!f){ osMsg('Escolha o arquivo do extrato (OFX ou CSV).','err'); return; }
+  var maq=osE('osx-orig').value==='maq'?osE('osx-maq').value:'';
+  var rd=new FileReader();
+  rd.onload=function(){
+    var c={arquivo:{nome:f.name,dados:rd.result}}; if(maq) c.maquininha=maq; else c.conta_id=osE('osx-conta').value; if(mapa) c.mapa=mapa;
+    osE('osx-bt').disabled=true;
+    osApi('/api/extrato/importar','POST',c).then(function(r){
+      osE('osx-bt').disabled=false;
+      if(r.precisa_mapa){ osExtrMapa(r); return; }
+      osE('osx-mapa').innerHTML=''; osE('osx-arq').value='';
+      osMsg('✓ '+r.formato+': '+r.lidas+' linhas ('+osBr(r.de)+' a '+osBr(r.ate)+') — '+r.novas+' novas, '+r.duplicadas+' já importadas, '+r.conciliadas+' conciliadas na hora.');
+      osE('osx-fonte').value=maq?'maq:'+maq:'conta:'+c.conta_id; osE('osx-de').value=r.de; osE('osx-ate').value=r.ate; osE('osx-sit').value='todas'; osExtrLista();
+    }).catch(function(e){ osE('osx-bt').disabled=false; osErr(e); });
+  };
+  rd.readAsDataURL(f);
+}
+function osExtrMapa(r){
+  var op=function(id,obr){ return '<select id="osxm-'+id+'"><option value="">'+(obr?'— escolha —':'(não tem)')+'</option>'+r.colunas.map(function(c,i){ return '<option value="'+i+'">'+osEsc(c||('coluna '+(i+1)))+'</option>'; }).join('')+'</select>'; };
+  osE('osx-mapa').innerHTML='<div class="alert" style="display:block;margin:4px 0 10px;background:rgba(255,165,2,.08);border:1px solid rgba(255,165,2,.35);color:var(--txt)">'+
+    '<b style="color:var(--warn)">Não reconheci as colunas deste CSV.</b> Diga qual coluna é cada coisa (só precisa fazer uma vez por arquivo):'+
+    '<div class="os-g5" style="margin-top:8px"><div class="fg"><label>Data *</label>'+op('data',1)+'</div><div class="fg"><label>Valor (+/−)</label>'+op('valor')+'</div>'+
+    '<div class="fg"><label>ou Crédito</label>'+op('credito')+'</div><div class="fg"><label>e Débito</label>'+op('debito')+'</div><div class="fg"><label>Descrição</label>'+op('descricao')+'</div></div>'+
+    '<div class="fg" style="max-width:260px"><label>Documento / NSU</label>'+op('documento')+'</div>'+
+    '<div class="table-wrap"><table><thead><tr>'+r.colunas.map(function(c){ return '<th>'+osEsc(c)+'</th>'; }).join('')+'</tr></thead><tbody>'+
+    (r.amostra||[]).map(function(l){ return '<tr>'+l.map(function(v){ return '<td class="os-small">'+osEsc(v)+'</td>'; }).join('')+'</tr>'; }).join('')+'</tbody></table></div>'+
+    '<button class="os-b pri" style="margin-top:8px" onclick="osExtrMapaOk()">Importar com estas colunas</button></div>';
+}
+function osExtrMapaOk(){
+  var m={}; ['data','valor','credito','debito','descricao','documento'].forEach(function(k){ var v=osE('osxm-'+k).value; if(v!=='') m[k]=Number(v); });
+  if(m.data==null){ osMsg('Diga qual coluna é a data.','err'); return; }
+  if(m.valor==null && m.credito==null && m.debito==null){ osMsg('Diga qual coluna tem o valor (ou crédito/débito).','err'); return; }
+  osExtrImportar(m);
+}
+function osExtrLista(){
+  var q='fonte='+encodeURIComponent(osE('osx-fonte').value)+'&situacao='+osE('osx-sit').value+(osE('osx-de').value?'&de='+osE('osx-de').value:'')+(osE('osx-ate').value?'&ate='+osE('osx-ate').value:'');
+  osApi('/api/extrato?'+q).then(function(r){
+    OS.extr=r; var s=r.resumo, maq=osE('osx-fonte').value.indexOf('maq:')===0;
+    var h='';
+    if(!s.linhas){ h='<div class="os-box os-vazio">Nada importado para esta '+(maq?'maquininha':'conta')+' no período.</div>'; }
+    else {
+      h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px">'+
+        osExtrCard('Linhas no extrato',s.linhas,osBr(s.de)+' a '+osBr(s.ate),'var(--acc2)')+
+        osExtrCard('Entradas',osR(s.entradas),'','var(--acc)')+(maq?'':osExtrCard('Saídas',osR(s.saidas),'','var(--warn)'))+
+        osExtrCard('Conciliadas',s.conciliadas,s.ignoradas?s.ignoradas+' ignorada(s)':'','var(--acc)')+
+        osExtrCard('Sem par',s.abertas,s.abertas?osR(s.valor_aberto):'tudo conferido ✓',s.abertas?'var(--red)':'var(--acc)')+'</div>';
+      h+='<div class="table-wrap"><table><thead><tr><th>Data</th><th>Descrição</th><th>Doc / NSU</th><th style="text-align:right">Valor</th><th>Situação</th><th></th></tr></thead><tbody>';
+      r.linhas.forEach(function(l){
+        var st=l.status==='conciliado'?'<span class="os-st st-entregue">✓ CONCILIADO</span><div class="os-small">'+(l.ref_os?'<a href="#" onclick="osAbrir('+l.ref_os+',\'recebimentos\');return false" style="color:var(--acc2)">'+osEsc(l.ref_txt)+'</a>':osEsc(l.ref_txt||''))+(l.obs==='automático'?' · auto':'')+'</div>':
+               l.status==='ignorado'?'<span class="os-st st-cancelada">IGNORADO</span><div class="os-small">'+osEsc(l.obs)+'</div>':
+               '<span class="os-st" style="color:var(--red);border-color:rgba(255,71,87,.4);background:rgba(255,71,87,.1)">SEM PAR</span>'+(maq?'<div class="os-small" style="color:var(--red)">venda que não está em nenhuma OS</div>':'');
+        var ac=l.status==='aberto'?'<button class="os-b pri" onclick="osExtrConc('+l.id+')">Conciliar…</button>':'<button class="os-b" onclick="osExtrAcao('+l.id+',\'desfazer\')">Desfazer</button>';
+        h+='<tr><td>'+osBr(l.data)+'</td><td>'+osEsc(l.descricao)+'</td><td class="os-small">'+osEsc(l.documento||'')+'</td><td class="os-money" style="color:'+(l.valor<0?'var(--warn)':'var(--acc)')+'">'+osN(l.valor)+'</td><td>'+st+'</td><td style="white-space:nowrap">'+ac+'</td></tr>';
+      });
+      if(!r.linhas.length) h+='<tr><td colspan="6" class="os-vazio">Nenhuma linha nesta situação.</td></tr>';
+      h+='</tbody></table></div>';
+    }
+    if(r.sem_par.length){
+      h+='<div class="os-box" style="margin-top:12px;border-left:4px solid var(--warn)"><h4>Lançado no sistema e não apareceu '+(maq?'no relatório da maquininha':'no extrato')+' ('+r.sem_par.length+')</h4>'+
+        '<div class="os-small" style="margin-bottom:6px">No período que o arquivo cobre. Confira se o valor, a conta ou a data estão certos na OS.</div><table><tbody>'+
+        r.sem_par.map(function(x){ return '<tr><td>'+osBr(x.data)+'</td><td><a href="#" onclick="osAbrir('+x.os+',\''+(x.tipo==='repasse'?'repasses':'recebimentos')+'\');return false" style="color:var(--acc2)">'+osEsc(x.txt)+'</a></td><td class="os-money">'+osN(x.valor)+'</td></tr>'; }).join('')+'</tbody></table></div>';
+    }
+    if(r.lotes.length) h+='<details style="margin-top:12px"><summary class="os-small" style="cursor:pointer;color:var(--acc2)">Importações feitas ('+r.lotes.length+')</summary><table><tbody>'+
+      r.lotes.map(function(l){ return '<tr><td class="os-small">'+osEsc(l.quando)+'</td><td>'+osEsc(l.arquivo)+'</td><td>'+osEsc(l.maquininha?'Maquininha '+l.maquininha:(l.conta||''))+'</td><td class="os-small">'+l.linhas+' linhas · '+osBr(l.de)+' a '+osBr(l.ate)+' · '+osEsc(l.por||'')+'</td><td>'+
+        (osAdm()?'<button class="os-b del" onclick="osExtrLoteDel(\''+l.lote+'\')">Apagar importação</button>':'')+'</td></tr>'; }).join('')+'</tbody></table></details>';
+    osE('osx-res').innerHTML=h;
+  }).catch(osErr);
+}
+function osExtrCard(t,v,sub,cor){ return '<div class="os-box" style="margin:0;border-left:4px solid '+cor+'"><div class="os-small">'+t+'</div><div style="font-size:18px;font-weight:700;margin-top:2px">'+v+'</div>'+(sub?'<div class="os-small">'+sub+'</div>':'')+'</div>'; }
+function osExtrConc(id){
+  var l=(OS.extr.linhas||[]).filter(function(x){ return x.id===id; })[0];
+  osApi('/api/extrato/'+id+'/candidatos').then(function(r){
+    var c=r.candidatos, mot=['TARIFA DO BANCO','REPASSE DA MAQUININHA','TRANSFERÊNCIA ENTRE CONTAS','NÃO É DO ESCRITÓRIO'];
+    osModal('Conciliar — '+osBr(l.data)+' · '+osR(l.valor),
+      '<div class="os-small" style="margin-bottom:8px">'+osEsc(l.descricao)+(l.documento?' · '+osEsc(l.documento):'')+'</div>'+
+      (c.length?'<div class="fg"><label>Lançamentos do sistema com o mesmo valor (até 15 dias)</label>'+c.map(function(x,i){ return '<label class="os-chk" style="margin:0 0 6px"><input type="radio" name="osx-cand" value="'+i+'"'+(i===0?' checked':'')+'> '+osBr(x.data)+' · '+osEsc(x.txt)+(x.nsu?' <b style="color:var(--acc)">NSU confere</b>':'')+'</label>'; }).join('')+'</div>'+
+        '<div style="text-align:right;margin-bottom:12px"><button class="btn-main" onclick="osExtrConcOk('+id+')">Conciliar</button></div>':
+        '<div class="alert" style="display:block;margin:0 0 12px;background:rgba(255,71,87,.08);border:1px solid rgba(255,71,87,.35);color:var(--txt)">Nenhum recebimento ou repasse do sistema com esse valor'+(l.maquininha?' nessa maquininha':' nessa conta')+'. '+(l.valor>0?'Se for de cliente, lance o recebimento na OS e volte aqui.':'Se for taxa de cliente, lance o pagamento do repasse na OS.')+'</div>')+
+      '<div class="fg"><label>Ou ignorar esta linha — motivo</label><div class="os-cchips" style="margin-bottom:6px">'+mot.map(function(m){ return '<button type="button" onclick="osE(\'osx-mot\').value=\''+m+'\'">'+m+'</button>'; }).join('')+'</div><input id="osx-mot"></div>'+
+      '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn-sec" onclick="osFechar()">Fechar</button><button class="btn-sec" onclick="osExtrAcao('+id+',\'ignorar\',osE(\'osx-mot\').value)">Ignorar</button></div>');
+    OS.extrCand=c;
+  }).catch(osErr);
+}
+function osExtrConcOk(id){ var r=document.querySelector('input[name=osx-cand]:checked'); if(!r) return; var c=OS.extrCand[Number(r.value)];
+  osApi('/api/extrato/'+id+'/conciliar','POST',{ref_tipo:c.tipo,ref_id:c.id}).then(function(){ osFechar(); osMsg('✓ Conciliado.'); osExtrLista(); }).catch(osErr); }
+function osExtrAcao(id,acao,obs){ osApi('/api/extrato/'+id+'/'+acao,'POST',{obs:obs||''}).then(function(){ osFechar(); osExtrLista(); }).catch(osErr); }
+function osExtrLoteDel(l){ if(!confirm('Apagar todas as linhas desta importação?')) return; osApi('/api/extrato/lote/'+l,'DELETE').then(function(r){ osMsg('✓ '+r.apagadas+' linhas apagadas.'); osExtrLista(); }).catch(osErr); }
+
 // quadro Conferência DIMP (tela)
 function osDimpHtml(dm){
   if(!dm) return '';
-  var red='color:var(--red);font-weight:700', lin=dm.maquininhas.concat([dm.total]);
+  var red='color:var(--red);font-weight:700', lin=dm.maquininhas.concat([dm.total]), imp=dm.total.relatorio!=null;
   var h='<div class="os-box" style="margin-top:12px;border-left:4px solid '+(dm.total.sem_explicacao>0.004?'var(--red)':'var(--acc)')+'"><h4>🔎 Conferência DIMP — o que a prefeitura cruza</h4>'+
     '<div class="os-small" style="margin-bottom:8px">Tudo que passou no cartão no mês, por maquininha. A parte de cada pagamento é explicada pelo repasse com DUA/comprovante e pela receita com NFS-e emitida, na proporção do total da OS. O que sobra, em vermelho, é o que a prefeitura pode cobrar como serviço sem nota.</div>'+
-    '<div class="table-wrap"><table><thead><tr><th>Maquininha</th><th style="text-align:right">Pagamentos</th><th style="text-align:right">Bruto no cartão</th><th style="text-align:right">Repasse documentado</th><th style="text-align:right">Receita com nota</th><th style="text-align:right">Sem explicação</th></tr></thead><tbody>';
+    '<div class="table-wrap"><table><thead><tr><th>Maquininha</th><th style="text-align:right">Pagamentos</th><th style="text-align:right">Bruto no cartão</th><th style="text-align:right">Repasse documentado</th><th style="text-align:right">Receita com nota</th><th style="text-align:right">Sem explicação</th>'+(imp?'<th style="text-align:right">Relatório da maquininha</th><th style="text-align:right">Venda fora do sistema</th>':'')+'</tr></thead><tbody>';
   lin.forEach(function(g){ var t=g.maquininha==='TOTAL';
     h+='<tr'+(t?' class="os-soma"':'')+'><td>'+osEsc(g.maquininha)+'</td><td class="os-money">'+(g.qtd||0)+'</td><td class="os-money">'+osN(g.bruto)+'</td><td class="os-money">'+osN(g.repasse_doc)+'</td><td class="os-money">'+osN(g.receita_nota)+'</td>'+
-       '<td class="os-money" style="'+(g.sem_explicacao>0.004?red:'')+'">'+osN(g.sem_explicacao)+'</td></tr>'; });
-  h+='</tbody></table></div>';
+       '<td class="os-money" style="'+(g.sem_explicacao>0.004?red:'')+'">'+osN(g.sem_explicacao)+'</td>'+
+       (imp?'<td class="os-money">'+(g.relatorio!=null?osN(g.relatorio):'<span class="os-small">não importado</span>')+'</td><td class="os-money" style="'+(g.fora_sistema>0.004?red:'')+'">'+(g.relatorio!=null?osN(g.fora_sistema||0):'—')+'</td>':'')+'</tr>'; });
+  h+='</tbody></table></div>'+(imp?'':'<div class="os-small" style="margin-top:6px">Importe o relatório de vendas de cada maquininha em <b>Extrato e conciliação</b> para comparar com o que a operadora informa à prefeitura.</div>');
   if(dm.os.length){
     h+='<details style="margin-top:8px"><summary class="os-small" style="cursor:pointer;color:var(--acc2)">Ver as '+dm.os.length+' OS com valor sem explicação</summary><div class="table-wrap"><table><thead><tr><th>OS</th><th>Cliente</th><th>Maquininha</th><th style="text-align:right">Cartão</th><th style="text-align:right">Sem explicação</th><th>O que falta</th></tr></thead><tbody>'+
       dm.os.map(function(e){ return '<tr><td class="os-num" style="cursor:pointer" onclick="osAbrir('+e.os+',\'recebimentos\')">'+e.os+'</td><td>'+osEsc(e.cliente)+'</td><td>'+osEsc(e.maquininha)+'</td><td class="os-money">'+osN(e.cartao)+'</td><td class="os-money" style="'+red+'">'+osN(e.sem_explicacao)+'</td><td class="os-small">'+osEsc(e.motivo)+'</td></tr>'; }).join('')+'</tbody></table></div></details>';
@@ -2684,10 +2810,11 @@ function osSvEditSalvar(id){
 // ── FINANCEIRO ──
 function osFinAba(a){
   OS.finAba=a;
-  osE('osf-b-nf').style.display=(osVL()||osBX())?'':'none'; osE('osf-b-cont').style.display=osVL()?'':'none';
-  ['extrato','nf','cont','cad'].forEach(function(k){ osE('osf-b-'+k).classList.toggle('on',a===k); osE('osf-'+k).style.display=a===k?'':'none'; });
+  osE('osf-b-nf').style.display=(osVL()||osBX())?'':'none'; osE('osf-b-cont').style.display=osVL()?'':'none'; osE('osf-b-extr').style.display=(osVL()||osBX())?'':'none';
+  ['extrato','nf','cont','extr','cad'].forEach(function(k){ osE('osf-b-'+k).classList.toggle('on',a===k); osE('osf-'+k).style.display=a===k?'':'none'; });
   var c=OS.cad;
   if(a==='nf'){ osNfLista(); return; }
+  if(a==='extr'){ osExtrPrep(); return; }
   if(a==='cont'){ if(!osE('osf-ct-mes').value) osE('osf-ct-mes').value=osHoje().slice(0,7); osContResumo(); return; }
   if(a==='extrato'){
     if(!osE('osf-de').value){ var h=osHoje(); osE('osf-de').value=h.slice(0,8)+'01'; osE('osf-ate').value=h; }
