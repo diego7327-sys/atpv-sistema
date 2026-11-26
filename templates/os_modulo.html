@@ -1153,7 +1153,8 @@ function osNovaSalvar(acao){
 // ── abrir uma OS ──
 function osAbrir(numero, aba){
   // guarda de onde veio (lista, cliente, veículos, financeiro…) para o botão Voltar
-  if(OS.vista && OS.vista!=='os') OS.volta={v:OS.vista, y:window.scrollY, cli:OS.vista==='clientes'?OS.cliFichaId:null, cliNome:OS.cliFichaNome, fin:OS.finAba};
+  if(OS.voltaProx){ OS.volta=OS.voltaProx; OS.voltaProx=null; }
+  else if(OS.vista && OS.vista!=='os') OS.volta={v:OS.vista, y:window.scrollY, cli:OS.vista==='clientes'?OS.cliFichaId:null, cliNome:OS.cliFichaNome, fin:OS.finAba};
   if(aba) OS.aba=aba;
   else if(!OS.atual || OS.atual.os.numero!==Number(numero)) OS.aba='doc';   // abrir uma OS mostra o documento completo
   osApi('/api/os/'+numero).then(function(d){
@@ -1168,7 +1169,7 @@ function osAbrir(numero, aba){
 function osRecarregar(aba){ if(OS.atual) osAbrir(OS.atual.os.numero, aba); }
 function osRender(){
   var d=OS.atual, o=d.os, exc=!!o.excluida_em;
-  var vt=OS.volta||{v:'lista'}, vtx={lista:'Voltar para a lista',clientes:vt.cli?'Voltar para '+(vt.cliNome||'o cliente'):'Voltar para Clientes',veiculos:'Voltar para Veículos',servicos:'Voltar para a Tabela de Serviços',fin:'Voltar para o Financeiro',nova:'Voltar'}[vt.v]||'Voltar';
+  var vt=OS.volta||{v:'lista'}, vtx={lista:'Voltar para a lista',clientes:vt.cli?'Voltar para '+(vt.cliNome||'o cliente'):'Voltar para Clientes',veiculos:'Voltar para Veículos',servicos:'Voltar para a Tabela de Serviços',fin:'Voltar para o Financeiro',nova:'Voltar',atpv:'Voltar para o ATPV-e'}[vt.v]||'Voltar';
   var h='<div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="os-b pri" onclick="osVoltar()">← '+osEsc(vtx)+'</button>'+(vt.v!=='lista'?'<button class="os-b" onclick="OS.volta=null;osVer(\'lista\')">Lista de OS</button>':'')+'</div>';
   if(exc) h+='<div class="alert err" style="display:block;margin:0 0 12px">🗑 Esta OS está na lixeira (excluída em '+osEsc(o.excluida_em)+' por '+osEsc(o.excluida_por)+').'+
     (osAdm()?' <button class="os-b" onclick="osRestaurar()">Restaurar</button>':'')+'</div>';
@@ -2864,6 +2865,7 @@ function osCliLista(){
 }
 function osVoltar(){
   var v=OS.volta||{v:'lista'}; OS.volta=null;
+  if(v.v==='atpv' && typeof modulo==='function'){ modulo('atpv'); if(typeof carregarHist==='function') carregarHist(); return; }
   if(v.v==='fin' && v.fin) OS.finAba=v.fin;
   osVer(v.v==='nova'?'lista':v.v);
   if(v.v==='clientes' && v.cli){ osCliFicha(v.cli); return; }
@@ -2876,7 +2878,7 @@ function osCliFicha(id){
       '<div class="os-box" style="margin:10px 0 0;background:rgba(0,0,0,.15)"><div class="os-small" style="margin-bottom:6px"><b style="color:var(--txt)">📄 Relatório para o cliente / garagem / concessionária</b> — OS com placa, marca/modelo e chassi (inclui as OS em que ele é o responsável/revenda). Não mostra custo nem lucro.</div>'+
       '<div class="os-g4"><div class="fg"><label>De</label><input type="date" id="ocr-de"></div><div class="fg"><label>Até</label><input type="date" id="ocr-ate"></div>'+
       '<div class="fg"><label>Quais OS</label><select id="ocr-sit"><option value="todas">Todas</option><option value="aberto">Só com saldo a pagar</option><option value="pagas">Só quitadas</option></select></div>'+
-      '<div class="fg" style="justify-content:flex-end;flex-direction:row;gap:6px;align-items:flex-end"><button class="os-b pri" onclick="osCliRelPdf('+id+')">📄 PDF</button><button class="os-b" onclick="osCliRelXls('+id+')">⬇ Excel</button></div></div></div>';
+      '<div class="fg" style="justify-content:flex-end;flex-direction:row;gap:6px;align-items:flex-end"><button class="os-b" onclick="osCliRelEscolher('+id+')">☑ Escolher OS</button><button class="os-b pri" onclick="osCliRelPdf('+id+')">📄 PDF</button><button class="os-b" onclick="osCliRelXls('+id+')">⬇ Excel</button></div></div><div id="ocr-esc"></div></div>';
     if(r.veiculos.length) h+='<div class="os-small" style="margin-top:8px">Veículos: '+r.veiculos.map(function(v){return osEsc(v.placa+' '+(v.modelo||''));}).join(' · ')+'</div>';
     h+='<div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>Nº</th><th>Data</th><th>Situação</th><th style="text-align:right">Total</th><th style="text-align:right">Devedor</th></tr></thead><tbody>';
     r.os.forEach(function(o){ h+='<tr style="cursor:pointer" onclick="osAbrir('+o.numero+')"><td class="os-num">'+o.numero+'</td><td>'+osEsc(o.data_abertura.slice(0,10))+'</td><td>'+osSt(o.status)+'</td><td class="os-money">'+osN(o.total)+'</td><td class="os-money '+(o.devedor>0.004?'os-dev':'')+'">'+osN(o.devedor)+'</td></tr>'; });
@@ -2885,7 +2887,17 @@ function osCliFicha(id){
     osE('os-cli-ficha').scrollIntoView({behavior:'smooth'});
   }).catch(osErr);
 }
-function osCliRelQ(){ var q=[]; if(osE('ocr-de').value) q.push('de='+osE('ocr-de').value); if(osE('ocr-ate').value) q.push('ate='+osE('ocr-ate').value); q.push('situacao='+osE('ocr-sit').value); return '?'+q.join('&'); }
+function osCliRelQ(){ var q=[]; if(osE('ocr-de').value) q.push('de='+osE('ocr-de').value); if(osE('ocr-ate').value) q.push('ate='+osE('ocr-ate').value); q.push('situacao='+osE('ocr-sit').value);
+  var fora=[].slice.call(document.querySelectorAll('.ocr-ck')).filter(function(c){ return !c.checked; }).map(function(c){ return c.value; });
+  if(fora.length) q.push('excluir='+fora.join(',')); return '?'+q.join('&'); }
+// escolher quais OS entram no relatório (ex.: ATPV refeito porque o cliente desistiu)
+function osCliRelEscolher(id){
+  var q=[]; if(osE('ocr-de').value) q.push('de='+osE('ocr-de').value); if(osE('ocr-ate').value) q.push('ate='+osE('ocr-ate').value); q.push('situacao='+osE('ocr-sit').value);
+  osApi('/api/clientes/'+id+'/relatorio?'+q.join('&')).then(function(r){
+    osE('ocr-esc').innerHTML=r.itens.length?'<div class="os-small" style="margin:8px 0 4px">Desmarque as OS que não devem sair no relatório:</div><div class="table-wrap" style="margin:0"><table><tbody>'+
+      r.itens.map(function(x){ return '<tr><td style="width:30px"><input type="checkbox" class="ocr-ck" value="'+x.os+'" checked></td><td class="os-num">'+x.os+'</td><td>'+osBr(x.data)+'</td><td><b>'+osEsc(x.placa)+'</b> '+osEsc(x.modelo)+'</td><td class="os-small">'+osEsc(x.chassi)+'</td><td class="os-small">'+osEsc(x.servicos)+'</td><td class="os-money">'+osN(x.total)+'</td></tr>'; }).join('')+'</tbody></table></div>':'<div class="os-small" style="margin-top:8px">Nenhuma OS nesse filtro.</div>';
+  }).catch(osErr);
+}
 function osCliRelXls(id){ osBaixar('/api/clientes/'+id+'/relatorio.xlsx'+osCliRelQ(),'relatorio_cliente.xlsx').then(function(){ osMsg('✓ Excel baixado.'); }).catch(osErr); }
 function osCliRelPdf(id){
   if(!window.jspdf){ osMsg('Gerador de PDF ainda carregando, tente de novo em instantes.','err'); return; }

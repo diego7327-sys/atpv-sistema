@@ -335,6 +335,9 @@ EMPRESA_PADRAO = {"empresa_nome": "Diego Despachante", "empresa_fone": "(62) 991
 CATEGORIAS_REPASSE = [("taxa_detran", "TAXA DETRAN"), ("ipva", "IPVA"), ("licenciamento", "LICENCIAMENTO"),
                       ("multa", "MULTA"), ("vistoria", "VISTORIA"), ("placa", "PLACA"), ("outros", "OUTROS")]
 CAT_REPASSE = dict(CATEGORIAS_REPASSE)
+NUM_OS_INICIAL = 40000          # numeração própria (não mistura com as OS do BitDesp)
+ATPV_VALOR_PADRAO = Decimal('70.00')
+TIPO_ATPV = "ATPV"
 MAQUININHAS = ["STONE", "SICREDI", "LISTO"]
 # conta onde cai cada maquininha (busca pelo nome da conta)
 MAQ_CONTA = {"STONE": "STONE", "SICREDI": "SICRED", "LISTO": "BRADESCO"}
@@ -850,6 +853,18 @@ def registrar(app, db, login_required):
                     if not cur.fetchone():
                         cur.execute("INSERT INTO processo_tipos (nome) VALUES (%s)", (n,))
                 cur.execute("INSERT INTO migracoes (nome) VALUES ('os_fiscal_v2')")
+            cur.execute("SELECT 1 FROM migracoes WHERE nome = 'os_num_40000'")
+            if not cur.fetchone():
+                cur.execute("SELECT valor FROM config WHERE chave = 'os_numero_inicial'")
+                rv = cur.fetchone()
+                try:
+                    atual = int((rv or {}).get('valor') or 0)
+                except ValueError:
+                    atual = 0
+                if atual < NUM_OS_INICIAL:
+                    cur.execute("""INSERT INTO config (chave, valor) VALUES ('os_numero_inicial', %s)
+                                   ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor, atualizado = NOW()""", (str(NUM_OS_INICIAL),))
+                cur.execute("INSERT INTO migracoes (nome) VALUES ('os_num_40000')")
             cur.execute("SELECT 1 FROM migracoes WHERE nome = 'os_func_v1'")
             if not cur.fetchone():
                 cur.execute("""UPDATE ordens_servico o SET
@@ -960,6 +975,19 @@ def registrar(app, db, login_required):
 
     def _toca(cur, os_id):
         cur.execute("UPDATE ordens_servico SET atualizado = NOW() WHERE id = %s", (os_id,))
+        _sync_atpv(cur, os_id)
+
+    def _sync_atpv(cur, os_id):
+        """OS que veio de um ATPV: o histórico do ATPV mostra o valor e se está pago a partir da OS."""
+        cur.execute("SELECT o.*, " + SQL_TOTAIS + " FROM ordens_servico o WHERE o.id = %s AND o.atendimento_id IS NOT NULL", (os_id,))
+        r = cur.fetchone()
+        if not r:
+            return
+        o = _os_saida(r)
+        st = 'cancelado' if r['status'] == 'cancelada' or r['excluida_em'] else \
+             ('pago' if o['total'] > 0.004 and o['devedor'] <= 0.004 else 'pendente')
+        cur.execute("UPDATE atendimentos SET status_pgto=%s, valor_cobrado=%s WHERE id=%s",
+                    (st, _brl(o['total']), r['atendimento_id']))
 
     def _cliente_saida(r):
         if not r:
@@ -1039,9 +1067,9 @@ def registrar(app, db, login_required):
         cur.execute("SELECT valor FROM config WHERE chave = 'os_numero_inicial'")
         row = cur.fetchone()
         try:
-            inicial = int(row['valor']) if row and row['valor'] else 1
+            inicial = int(row['valor']) if row and row['valor'] else NUM_OS_INICIAL
         except ValueError:
-            inicial = 1
+            inicial = NUM_OS_INICIAL
         return max(maior + 1, inicial)
 
     # ── CLIENTES ──────────────────────────────────────────────
@@ -1086,6 +1114,7 @@ def registrar(app, db, login_required):
         """OS do cliente ou da revenda (quando é o responsável), com placa, marca/modelo e chassi."""
         de, ate = _data(request.args.get("de")), _data(request.args.get("ate"))
         sit = request.args.get("situacao") or "todas"
+        fora = {int(x) for x in re.findall(r'\d+', request.args.get("excluir") or '')}
         cur.execute("SELECT * FROM clientes WHERE id = %s", (cid,))
         c = cur.fetchone()
         if not c:
@@ -1107,6 +1136,8 @@ def registrar(app, db, login_required):
             if sit == 'aberto' and o['devedor'] <= 0.004:
                 continue
             if sit == 'pagas' and o['devedor'] > 0.004:
+                continue
+            if o['numero'] in fora:
                 continue
             out.append({"os": o['numero'], "data": (_d(r['data_abertura']) or '')[:10], "placa": r['placa'] or '',
                         "modelo": r['modelo'] or '', "chassi": r['chassi'] or '', "renavam": r['renavam'] or '',
@@ -1881,6 +1912,7 @@ def registrar(app, db, login_required):
                     cur.execute("DELETE FROM os_ajustes WHERE os_id=%s AND tipo='receita' AND NOT reduz_repasse", (o['id'],))
                 cur.execute("UPDATE ordens_servico SET status=%s, tipo='os', atualizado=NOW() WHERE id=%s",
                             (st, o['id']))
+                _sync_atpv(cur, o['id'])
                 tipo_oc = {'detran': 'detran', 'disponivel': 'disponivel', 'entregue': 'entregue'}.get(st, 'outras')
                 desc = STATUS_OS.get(o['status'], o['status']) + ' → ' + STATUS_OS[st]
                 _ocorrencia(cur, o['id'], tipo_oc, desc, (d.get("obs") or "").strip())
@@ -3064,6 +3096,113 @@ def registrar(app, db, login_required):
         except ValueError as e:
             return jsonify({"erro": str(e)}), 400
         return jsonify({"ok": True})
+
+    # ── ATPV-e → OS: cada placa que sai no ATPV vira uma OS (tipo ATPV) ──
+    def _cli_achar_criar(cur, nome, doc, cel='', tipo=None, extra=None):
+        nome = (nome or '').strip().upper(); dig = _so_dig(doc)
+        if not nome and not dig:
+            return None
+        if dig:
+            cur.execute("SELECT id FROM clientes WHERE regexp_replace(cpf_cnpj,'\\D','','g') = %s ORDER BY id LIMIT 1", (dig,))
+        else:
+            cur.execute("SELECT id FROM clientes WHERE upper(nome) = %s ORDER BY id LIMIT 1", (nome,))
+        c = cur.fetchone()
+        if c:
+            if tipo == 'revenda':
+                cur.execute("UPDATE clientes SET tipo='revenda' WHERE id=%s AND tipo <> 'revenda'", (c['id'],))
+            return c['id']
+        ex = extra or {}
+        cur.execute("""INSERT INTO clientes (cpf_cnpj, nome, cel, tipo, email, endereco, bairro, cidade, cep)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                    (_fmt_doc(dig) if dig else '', nome or '(SEM NOME)', (cel or '').strip(),
+                     tipo or ('pj' if len(dig) == 14 else 'pf'), (ex.get('email') or '').strip().lower(),
+                     (ex.get('end') or '').strip().upper(), (ex.get('bairro') or '').strip().upper(),
+                     (ex.get('cidade') or '').strip().upper(), (ex.get('cep') or '').strip()))
+        return cur.fetchone()['id']
+
+    def os_de_atpv(cur, aid, data, snap):
+        """Chamado pelo app quando um atendimento do ATPV é salvo. Cria a OS (ou não faz nada se já existe)."""
+        cur.execute("SELECT id, numero FROM ordens_servico WHERE atendimento_id = %s AND excluida_em IS NULL LIMIT 1", (aid,))
+        ja = cur.fetchone()
+        if ja:
+            return ja['numero']
+        g = lambda k: (snap.get(k) or '').strip()
+        prop = _cli_achar_criar(cur, g('v_nome'), g('v_cpf'), g('v_cel'),
+                                extra={"email": g('v_email'), "end": g('v_end'), "bairro": g('v_bairro'), "cidade": g('v_cidade'), "cep": g('v_cep')})
+        ct_tipo = (data.get('contratante_tipo') or g('ct_tipo') or '').strip()
+        ct_nome, ct_doc = (data.get('contratante_nome') or g('ct_nome')), (data.get('contratante_cpf') or g('ct_cpf'))
+        resp = None
+        if (ct_nome or '').strip():
+            revenda = ct_tipo in ('empresa', 'concessionaria', 'despachante')
+            resp = _cli_achar_criar(cur, ct_nome, ct_doc, g('ct_tel'), 'revenda' if revenda else None)
+            if resp == prop:
+                resp = None
+        if not prop:
+            prop, resp = resp, None
+        if not prop:
+            prop = _cli_achar_criar(cur, g('c_nome'), g('c_cpf'), g('c_cel'))
+        if not prop:
+            return None
+        vid = None
+        placa = re.sub(r'[^A-Z0-9]', '', (data.get('placa') or g('ve_placa')).upper())
+        if placa and placa != '':
+            cur.execute("SELECT id, chassi, modelo FROM veiculos WHERE upper(regexp_replace(placa,'[^A-Za-z0-9]','','g')) = %s LIMIT 1", (placa,))
+            v = cur.fetchone()
+            if v:
+                vid = v['id']
+                cur.execute("""UPDATE veiculos SET chassi = CASE WHEN COALESCE(chassi,'') = '' THEN %s ELSE chassi END,
+                                                   modelo = CASE WHEN COALESCE(modelo,'') = '' THEN %s ELSE modelo END WHERE id = %s""",
+                            (g('ve_chassi').upper(), g('ve_modelo').upper(), vid))
+            else:
+                cur.execute("INSERT INTO veiculos (placa, chassi, modelo, proprietario_id) VALUES (%s,%s,%s,%s) RETURNING id",
+                            (placa, g('ve_chassi').upper(), g('ve_modelo').upper(), prop))
+                vid = cur.fetchone()['id']
+        valor = _num(data.get('valor_cobrado') or g('ct_valor_servico'))
+        if valor <= 0:
+            valor = ATPV_VALOR_PADRAO
+        numero = _proximo_numero(cur)
+        cur.execute("""INSERT INTO ordens_servico (numero, tipo, cliente_id, responsavel_id, veiculo_id, user_id, user_nome, status,
+                           honorario, obs, empresa_id, atendimento_id, processo_tipo_id)
+                       VALUES (%s,'os',%s,%s,%s,%s,%s,'concluida',0,%s,%s,%s,
+                               (SELECT id FROM processo_tipos WHERE upper(nome) = upper(%s) LIMIT 1)) RETURNING id""",
+                    (numero, prop, resp, vid, str(session.get('user_id') or ''), _eu(), (data.get('obs') or g('ct_obs') or '').strip(),
+                     session.get('empresa_id'), aid, TIPO_ATPV))
+        oid = cur.fetchone()['id']
+        _add_item(cur, oid, {"descricao": "ATPV-E — PROCURAÇÃO / AUTORIZAÇÃO DE TRANSFERÊNCIA", "valor": str(valor), "natureza": "honorario"})
+        _ocorrencia(cur, oid, 'outras', 'OS criada pelo ATPV-e (atendimento nº %s)' % aid)
+        _sync_atpv(cur, oid)
+        return numero
+
+    def os_atpv_valor(cur, aid, valor_txt):
+        """Valor mudou no histórico do ATPV: ajusta a OS se ainda não recebeu nada."""
+        cur.execute("SELECT o.id FROM ordens_servico o WHERE o.atendimento_id = %s AND o.excluida_em IS NULL LIMIT 1", (aid,))
+        o = cur.fetchone()
+        v = _num(valor_txt)
+        if not o or v <= 0:
+            return
+        cur.execute("SELECT 1 FROM os_recebimentos WHERE os_id = %s AND status <> 'recusado' LIMIT 1", (o['id'],))
+        if cur.fetchone():
+            return
+        cur.execute("""UPDATE os_itens SET valor=%s, qtd=1 WHERE id = (SELECT id FROM os_itens WHERE os_id=%s AND natureza='honorario'
+                       ORDER BY id LIMIT 1)""", (v, o['id']))
+        _ocorrencia(cur, o['id'], 'outras', 'Valor do ATPV alterado no histórico: R$ %s' % _brl(v))
+        _sync_atpv(cur, o['id'])
+
+    def os_atpv_apagado(cur, aid):
+        """Atendimento do ATPV removido: a OS vai para a lixeira se não teve recebimento; se teve, fica (só perde o vínculo)."""
+        cur.execute("SELECT id FROM ordens_servico WHERE atendimento_id = %s AND excluida_em IS NULL", (aid,))
+        for o in cur.fetchall():
+            cur.execute("SELECT 1 FROM os_recebimentos WHERE os_id = %s AND status <> 'recusado' LIMIT 1", (o['id'],))
+            if cur.fetchone():
+                cur.execute("UPDATE ordens_servico SET atendimento_id = NULL WHERE id = %s", (o['id'],))
+                _ocorrencia(cur, o['id'], 'outras', 'Atendimento do ATPV removido do histórico (a OS fica porque tem recebimento)')
+            else:
+                cur.execute("UPDATE ordens_servico SET excluida_em = NOW(), excluida_por = %s, atendimento_id = NULL WHERE id = %s", (_eu(), o['id']))
+                _ocorrencia(cur, o['id'], 'outras', 'OS para a lixeira: atendimento do ATPV removido do histórico')
+
+    app.config['OS_DE_ATPV'] = os_de_atpv
+    app.config['OS_ATPV_VALOR'] = os_atpv_valor
+    app.config['OS_ATPV_APAGADO'] = os_atpv_apagado
 
     # ── NOTA FISCAL (NFS-e) DO HONORÁRIO ──────────────────────
     def _nota_de(cur, r):

@@ -632,7 +632,9 @@ def api_extrair():
 
 # ── HISTÓRICO / ATENDIMENTOS ──────────────────────────────────
 CAMPOS_LISTA = ("id, data, nome, placa, modelo, valor_cobrado, status_pgto, obs_fin, "
-                "user_nome, empresa_id, assinatura_url, assinatura_token")
+                "user_nome, empresa_id, assinatura_url, assinatura_token, "
+                "(SELECT o.numero FROM ordens_servico o WHERE o.atendimento_id = atendimentos.id "
+                "AND o.excluida_em IS NULL ORDER BY o.id DESC LIMIT 1) AS os_numero")
 
 def _escopo_empresa():
     """Empresa só enxerga os próprios atendimentos."""
@@ -687,7 +689,16 @@ def api_hist_post():
              str(session.get('user_id') or ""), session.get('user_nome') or "",
              session.get('perfil') or "", session.get('empresa_id'), Json(snap)))
         novo = cur.fetchone()['id']
-    return jsonify({"ok": True, "id": novo})
+        os_num = None
+        gancho = app.config.get('OS_DE_ATPV')
+        if gancho:
+            cur.execute("SAVEPOINT os_atpv")
+            try:
+                os_num = gancho(cur, novo, data, snap)
+            except Exception as e:
+                cur.execute("ROLLBACK TO SAVEPOINT os_atpv")
+                print("ATPV→OS falhou:", e)
+    return jsonify({"ok": True, "id": novo, "os_numero": os_num})
 
 @app.route("/api/historico/<int:aid>", methods=["DELETE"])
 @login_required
@@ -696,6 +707,14 @@ def api_hist_del(aid):
     with db(commit=True) as cur:
         cur.execute("DELETE FROM atendimentos WHERE id = %s" + cond, [aid] + params)
         apagou = cur.rowcount
+        gancho = app.config.get('OS_ATPV_APAGADO')
+        if apagou and gancho:
+            cur.execute("SAVEPOINT os_atpv")
+            try:
+                gancho(cur, aid)
+            except Exception as e:
+                cur.execute("ROLLBACK TO SAVEPOINT os_atpv")
+                print("ATPV→OS (apagar) falhou:", e)
     if not apagou:
         return jsonify({"erro": "Não encontrado"}), 404
     return jsonify({"ok": True})
@@ -725,6 +744,14 @@ def api_fin_put(aid):
                     [data.get('valor_cobrado'), data.get('status_pgto'),
                      data.get('obs_fin'), aid] + params)
         ok = cur.rowcount
+        gancho = app.config.get('OS_ATPV_VALOR')
+        if ok and gancho and data.get('valor_cobrado'):
+            cur.execute("SAVEPOINT os_atpv")
+            try:
+                gancho(cur, aid, data.get('valor_cobrado'))
+            except Exception as e:
+                cur.execute("ROLLBACK TO SAVEPOINT os_atpv")
+                print("ATPV→OS (valor) falhou:", e)
     if not ok:
         return jsonify({"erro": "Não encontrado"}), 404
     return jsonify({"ok": True})

@@ -488,11 +488,12 @@ tr:hover td{background:var(--surf2)}
       <div class="g2">
         <div class="fg">
           <label>Valor do serviço (R$) ★</label>
-          <input id="ct_valor_servico" oninput="atualizar()" placeholder="R$ 0,00" style="border-color:rgba(0,212,170,.4)">
+          <input id="ct_valor_servico" oninput="atualizar()" placeholder="R$ 70,00 (padrão se deixar vazio)" style="border-color:rgba(0,212,170,.4)">
         </div>
         <div class="fg">
-          <label>Status pagamento</label>
-          <select id="ct_status_pgto" onchange="atualizar()">
+          <label>Pagamento</label>
+          <div class="os-small" style="font-size:12px;color:var(--mut);line-height:1.4;padding:8px 0">Ao salvar, o ATPV vira uma <b style="color:var(--txt)">OS</b>. O recebimento (forma, conta, maquininha) é lançado nela pelo <b style="color:var(--acc)">💰 Receber</b> do histórico.</div>
+          <select id="ct_status_pgto" onchange="atualizar()" style="display:none">
             <option value="pendente">Pendente</option>
             <option value="pago">Pago</option>
             <option value="mensalidade">Na mensalidade</option>
@@ -1935,7 +1936,7 @@ function renderHist(lista){
     var idx=h.id;
     var status = h.status_pgto||'pendente';
     var tagCls = status==='pago'?'tag-pago':'tag-pendente';
-    var tagTxt = status==='pago'?'Pago':'Pendente';
+    var tagTxt = status==='pago'?'Pago':(status==='cancelado'?'Cancelado':'Pendente');
     return '<div class="hist-item">'+
       '<button class="hist-del" onclick="delHist('+idx+',event)">✕</button>'+
       '<div onclick="carregarItem('+idx+')">'+
@@ -1945,12 +1946,23 @@ function renderHist(lista){
       '<div style="margin-top:5px;display:flex;align-items:center;gap:6px">'+
       '<span class="'+tagCls+'">'+tagTxt+'</span>'+
       (h.valor_cobrado?'<span style="font-size:11px;color:var(--mut);font-family:var(--mono)">'+h.valor_cobrado+'</span>':'')+
-      '<button class="btn-fin" onclick="abrirFin('+idx+',event,'+JSON.stringify(h.valor_cobrado||'')+')">R$ Editar</button>'+
+      (h.os_numero?'<button class="btn-fin" title="Abrir a OS" onclick="atpvOS('+h.os_numero+',event,false)">OS '+h.os_numero+'</button>'+
+        (status!=='pago'&&status!=='cancelado'?'<button class="btn-fin" style="color:var(--acc);border-color:rgba(0,212,170,.4)" onclick="atpvOS('+h.os_numero+',event,true)">💰 Receber</button>':''):
+        '<button class="btn-fin" onclick="abrirFin('+idx+',event,'+JSON.stringify(h.valor_cobrado||'')+')">R$ Editar</button>')+
       '</div>'+
       '</div>';
   }).join('');
 }
 
+// ATPV → OS: abre a OS do atendimento (e já o recebimento, se pedir)
+function atpvOS(numero, e, receber){
+  if(e) e.stopPropagation();
+  if(typeof osAbrir!=='function'){ showAlert('Módulo de OS indisponível.','err'); return; }
+  OS.voltaProx={v:'atpv'};
+  modulo('os');
+  osAbrir(numero, 'recebimentos');
+  if(receber){ var t=setInterval(function(){ if(OS.atual && OS.atual.os.numero===Number(numero)){ clearInterval(t); osReceberModal(); } },150); setTimeout(function(){ clearInterval(t); },6000); }
+}
 // Modal financeiro inline
 function abrirFin(id, e, valorAtual){
   if(e) e.stopPropagation();
@@ -2262,7 +2274,7 @@ function salvar(){
   }).then(function(r){ return r.json(); })
   .then(function(d){
     if(d && d.id) ATEND_ATUAL=d.id;
-    carregarHist();showAlert('✓ Atendimento salvo!','ok');
+    carregarHist();showAlert(d && d.os_numero?'✓ Atendimento salvo — OS '+d.os_numero+' criada (registre o recebimento pelo 💰 Receber no histórico).':'✓ Atendimento salvo!','ok');
     salvarCadastros();
     if(g('ct_nome')) salvarContratanteAtual();
   });
