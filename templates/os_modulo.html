@@ -1169,7 +1169,7 @@ function osAbrir(numero, aba){
 function osRecarregar(aba){ if(OS.atual) osAbrir(OS.atual.os.numero, aba); }
 function osRender(){
   var d=OS.atual, o=d.os, exc=!!o.excluida_em;
-  var vt=OS.volta||{v:'lista'}, vtx={lista:'Voltar para a lista',clientes:vt.cli?'Voltar para '+(vt.cliNome||'o cliente'):'Voltar para Clientes',veiculos:'Voltar para Veículos',servicos:'Voltar para a Tabela de Serviços',fin:'Voltar para o Financeiro',nova:'Voltar',atpv:'Voltar para o ATPV-e'}[vt.v]||'Voltar';
+  var vt=OS.volta||{v:'lista'}, vtx={lista:'Voltar para a lista',clientes:vt.cli?'Voltar para '+(vt.cliNome||'o cliente'):'Voltar para Clientes',veiculos:'Voltar para Veículos',servicos:'Voltar para a Tabela de Serviços',fin:'Voltar para o Financeiro',nova:'Voltar',atpv:'Voltar para o ATPV-e',agenda:'Voltar para Recursos de Multa/CNH'}[vt.v]||'Voltar';
   var h='<div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="os-b pri" onclick="osVoltar()">← '+osEsc(vtx)+'</button>'+(vt.v!=='lista'?'<button class="os-b" onclick="OS.volta=null;osVer(\'lista\')">Lista de OS</button>':'')+'</div>';
   if(exc) h+='<div class="alert err" style="display:block;margin:0 0 12px">🗑 Esta OS está na lixeira (excluída em '+osEsc(o.excluida_em)+' por '+osEsc(o.excluida_por)+').'+
     (osAdm()?' <button class="os-b" onclick="osRestaurar()">Restaurar</button>':'')+'</div>';
@@ -2866,6 +2866,7 @@ function osCliLista(){
 function osVoltar(){
   var v=OS.volta||{v:'lista'}; OS.volta=null;
   if(v.v==='atpv' && typeof modulo==='function'){ modulo('atpv'); if(typeof carregarHist==='function') carregarHist(); return; }
+  if(v.v==='agenda' && typeof modulo==='function'){ modulo('agenda'); if(typeof agCarregar==='function') agCarregar(); return; }
   if(v.v==='fin' && v.fin) OS.finAba=v.fin;
   osVer(v.v==='nova'?'lista':v.v);
   if(v.v==='clientes' && v.cli){ osCliFicha(v.cli); return; }

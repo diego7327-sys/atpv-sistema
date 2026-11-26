@@ -255,6 +255,9 @@ CREATE INDEX IF NOT EXISTS agenda_data_idx  ON agenda (data);
 CREATE INDEX IF NOT EXISTS agenda_feito_idx ON agenda (feito, data);
 CREATE INDEX IF NOT EXISTS agenda_os_idx    ON agenda (os);
 ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS protocolo TEXT DEFAULT '';
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS os_id BIGINT;
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS placa TEXT DEFAULT '';
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS cliente_cpf TEXT DEFAULT '';
 """
 
 def _ler_blob(cur, chave):
@@ -2059,7 +2062,8 @@ def _bloqueio(d):
     return _feriados(d.year).get(d)
 
 CAMPOS_AG = """id, os, tipo, cliente_nome, cliente_tel, processo, protocolo, resp_nome, resp_tel,
-               quem, acao, data, obs, feito, feito_em, feito_por, user_nome, criado"""
+               quem, acao, data, obs, feito, feito_em, feito_por, user_nome, criado, os_id, placa, cliente_cpf,
+               (SELECT o.numero FROM ordens_servico o WHERE o.id = agenda.os_id AND o.excluida_em IS NULL) AS os_numero"""
 
 def _ag_saida(r):
     d = dict(r)
@@ -2081,7 +2085,8 @@ def _ag_dados(d):
     return {"os": t("os"), "tipo": t("tipo"), "cliente_nome": t("cliente_nome"),
             "cliente_tel": t("cliente_tel"), "processo": t("processo"), "protocolo": t("protocolo"),
             "resp_nome": t("resp_nome"), "resp_tel": t("resp_tel"), "quem": quem,
-            "acao": t("acao"), "data": data_ag, "obs": t("obs")}, None
+            "acao": t("acao"), "data": data_ag, "obs": t("obs"),
+            "placa": re.sub(r'[^A-Z0-9]', '', t("placa").upper()), "cliente_cpf": t("cliente_cpf")}, None
 
 @app.route("/api/agenda/painel", methods=["GET"])
 @login_required
@@ -2175,20 +2180,36 @@ def api_ag_criar():
         return jsonify({"erro": "Informe o cliente."}), 400
     if v["data"] < _hoje_br():
         return jsonify({"erro": "A data não pode estar no passado."}), 400
-    with db(commit=True) as cur:
-        cur.execute("""INSERT INTO agenda (os,tipo,cliente_nome,cliente_tel,processo,protocolo,resp_nome,resp_tel,
-                           quem,acao,data,obs,user_nome,empresa_id)
-                       VALUES (%(os)s,%(tipo)s,%(cliente_nome)s,%(cliente_tel)s,%(processo)s,%(protocolo)s,%(resp_nome)s,
-                           %(resp_tel)s,%(quem)s,%(acao)s,%(data)s,%(obs)s,%(user_nome)s,%(empresa_id)s)
-                       RETURNING id""",
-                    dict(v, user_nome=session.get('user_nome') or '', empresa_id=session.get('empresa_id')))
-        nid = cur.fetchone()['id']
-    return jsonify({"ok": True, "id": nid})
+    d = request.get_json() or {}
+    gancho = app.config.get('OS_DE_AGENDA')
+    if gancho and not v["os"] and not str(d.get("valor_servico") or "").strip() and not str(d.get("os_vincular") or "").strip():
+        return jsonify({"erro": "Informe o valor do serviço (ou 🎁 Cortesia). Só processo antigo, com Nº OS BitDesp, fica sem OS nova.",
+                        "codigo": "sem_valor"}), 400
+    try:
+        with db(commit=True) as cur:
+            cur.execute("""INSERT INTO agenda (os,tipo,cliente_nome,cliente_tel,processo,protocolo,resp_nome,resp_tel,
+                               quem,acao,data,obs,user_nome,empresa_id,placa,cliente_cpf)
+                           VALUES (%(os)s,%(tipo)s,%(cliente_nome)s,%(cliente_tel)s,%(processo)s,%(protocolo)s,%(resp_nome)s,
+                               %(resp_tel)s,%(quem)s,%(acao)s,%(data)s,%(obs)s,%(user_nome)s,%(empresa_id)s,%(placa)s,%(cliente_cpf)s)
+                           RETURNING id""",
+                        dict(v, user_nome=session.get('user_nome') or '', empresa_id=session.get('empresa_id')))
+            nid = cur.fetchone()['id']
+            os_num = gancho(cur, nid, d) if gancho else None
+    except ValueError as e:
+        return jsonify({"erro": str(e)}), 400
+    return jsonify({"ok": True, "id": nid, "os_numero": os_num})
 
 @app.route("/api/agenda/<int:aid>", methods=["PUT"])
 @login_required
 def api_ag_editar(aid):
-    """Edita ou reagenda. Se só vier 'data', é reagendamento."""
+    try:
+        return _ag_editar(aid)
+    except ValueError as e:
+        return jsonify({"erro": str(e)}), 400
+
+def _ag_editar(aid):
+    """Edita ou reagenda. Se só vier 'data', é reagendamento. Processo sem OS que recebe valor
+    (ou cortesia / nº de OS para vincular) passa a ter OS."""
     d = request.get_json() or {}
     cond, params = _escopo_proc()
     with db(commit=True) as cur:
@@ -2206,11 +2227,14 @@ def api_ag_editar(aid):
         cur.execute("""UPDATE agenda SET os=%(os)s, tipo=%(tipo)s, cliente_nome=%(cliente_nome)s,
                          cliente_tel=%(cliente_tel)s, processo=%(processo)s, protocolo=%(protocolo)s, resp_nome=%(resp_nome)s,
                          resp_tel=%(resp_tel)s, quem=%(quem)s, acao=%(acao)s, data=%(data)s, obs=%(obs)s,
+                         placa=%(placa)s, cliente_cpf=%(cliente_cpf)s,
                          feito = CASE WHEN %(mudou)s THEN FALSE ELSE feito END,
                          feito_em = CASE WHEN %(mudou)s THEN NULL ELSE feito_em END,
                          atualizado=NOW()
                        WHERE id=%(id)s""", dict(v, mudou=mudou_data, id=aid))
-    return jsonify({"ok": True})
+        gancho = app.config.get('OS_DE_AGENDA')
+        os_num = gancho(cur, aid, d) if gancho else None
+    return jsonify({"ok": True, "os_numero": os_num})
 
 @app.route("/api/agenda/<int:aid>/feito", methods=["POST"])
 @login_required

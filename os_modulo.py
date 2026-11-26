@@ -3208,6 +3208,82 @@ def registrar(app, db, login_required):
     app.config['OS_DE_ATPV'] = os_de_atpv
     app.config['OS_ATPV_VALOR'] = os_atpv_valor
     app.config['OS_ATPV_APAGADO'] = os_atpv_apagado
+    TIPOS_RECURSO = (("cassa", "CASSAÇÃO DE CNH"), ("multa", "RECURSO DE MULTA"), ("suspens", "SUSPENSÃO DE CNH"),
+                     ("diário", "SUSPENSÃO DE CNH"), ("diario", "SUSPENSÃO DE CNH"), ("transfer", "TRANSFERÊNCIA"))
+
+    def _tipo_recurso_id(cur, tipo):
+        t = (tipo or '').lower()
+        nome = next((n for k, n in TIPOS_RECURSO if k in t), "OUTROS")
+        cur.execute("SELECT id FROM processo_tipos WHERE upper(nome) = upper(%s) LIMIT 1", (nome,))
+        r = cur.fetchone()
+        if r:
+            return r['id']
+        cur.execute("INSERT INTO processo_tipos (nome) VALUES (%s) RETURNING id", (nome,))
+        return cur.fetchone()['id']
+
+    def os_de_agenda(cur, aid, d):
+        """Processo de Recurso de Multa / Suspensão de CNH (agenda) vira OS a partir do nº 40000.
+        - já tem OS: não faz nada; - 'os_vincular': liga a uma OS do sistema que já existe;
+        - com valor (ou cortesia): cria a OS; - sem valor: não cria (processo antigo do BitDesp).
+        Erro de preenchimento levanta ValueError (a gravação toda é desfeita)."""
+        cur.execute("SELECT * FROM agenda WHERE id = %s", (aid,))
+        a = cur.fetchone()
+        if not a:
+            return None
+        if a.get('os_id'):
+            cur.execute("SELECT numero FROM ordens_servico WHERE id = %s AND excluida_em IS NULL", (a['os_id'],))
+            r = cur.fetchone()
+            if r:
+                return r['numero']
+        vinc = _so_dig(str(d.get('os_vincular') or ''))
+        if vinc:
+            cur.execute("SELECT id, numero FROM ordens_servico WHERE numero = %s AND excluida_em IS NULL LIMIT 1", (int(vinc),))
+            o = cur.fetchone()
+            if not o:
+                raise ValueError("A OS %s não existe no sistema. Confira o número (para OS antiga do BitDesp use o campo Nº OS BitDesp)." % vinc)
+            cur.execute("UPDATE agenda SET os_id = %s WHERE id = %s", (o['id'], aid))
+            _ocorrencia(cur, o['id'], 'outras', 'Processo de recurso/CNH vinculado a esta OS (lembrete nº %s)' % aid)
+            return o['numero']
+        vtxt = str(d.get('valor_servico') or '').strip()
+        cortesia = 'CORTES' in vtxt.upper()
+        valor = 0.0 if cortesia else _num(vtxt)
+        if not cortesia and valor <= 0:
+            return None
+        prop = _cli_achar_criar(cur, a.get('cliente_nome'), a.get('cliente_cpf'), a.get('cliente_tel'))
+        if not prop:
+            raise ValueError("Informe o cliente.")
+        resp = None
+        if (a.get('resp_nome') or '').strip():
+            resp = _cli_achar_criar(cur, a['resp_nome'], '', a.get('resp_tel'), 'revenda')
+            if resp == prop:
+                resp = None
+        vid = None
+        placa = re.sub(r'[^A-Z0-9]', '', (a.get('placa') or '').upper())
+        if placa:
+            cur.execute("SELECT id FROM veiculos WHERE upper(regexp_replace(placa,'[^A-Za-z0-9]','','g')) = %s LIMIT 1", (placa,))
+            v = cur.fetchone()
+            if v:
+                vid = v['id']
+            else:
+                cur.execute("INSERT INTO veiculos (placa, proprietario_id) VALUES (%s,%s) RETURNING id", (placa, prop))
+                vid = cur.fetchone()['id']
+        numero = _proximo_numero(cur)
+        obs = ' · '.join(x for x in ((('Processo ' + a['processo']) if a.get('processo') else ''),
+                                     (('OS BitDesp ' + a['os']) if a.get('os') else ''), (a.get('obs') or '').strip()) if x)
+        cur.execute("""INSERT INTO ordens_servico (numero, tipo, cliente_id, responsavel_id, veiculo_id, user_id, user_nome, status,
+                           honorario, obs, empresa_id, processo_tipo_id, hon_zero_motivo)
+                       VALUES (%s,'os',%s,%s,%s,%s,%s,'andamento',0,%s,%s,%s,%s) RETURNING id""",
+                    (numero, prop, resp, vid, str(session.get('user_id') or ''), _eu(), obs[:500],
+                     session.get('empresa_id'), _tipo_recurso_id(cur, a.get('tipo')), 'CORTESIA' if cortesia else ''))
+        oid = cur.fetchone()['id']
+        _add_item(cur, oid, {"descricao": (a.get('tipo') or 'RECURSO').upper(), "valor": str(valor), "natureza": "honorario"})
+        _ocorrencia(cur, oid, 'outras', 'OS criada em Recursos de Multa e Suspensão de CNH (lembrete nº %s)%s'
+                    % (aid, ' — CORTESIA (sem cobrança)' if cortesia else ''))
+        cur.execute("UPDATE agenda SET os_id = %s WHERE id = %s", (oid, aid))
+        return numero
+
+    app.config['OS_DE_AGENDA'] = os_de_agenda
+
 
     # ── NOTA FISCAL (NFS-e) DO HONORÁRIO ──────────────────────
     def _nota_de(cur, r):

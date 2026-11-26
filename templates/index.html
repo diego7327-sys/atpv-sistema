@@ -248,10 +248,10 @@ tr:hover td{background:var(--surf2)}
   <button class="modbtn" data-mod="os" id="modbtn-os" onclick="modulo('os')">
     <span class="mod-ico">📋</span> Ordens de Serviço</button>
   <button class="modbtn" data-mod="recursos" onclick="modulo('recursos')">
-    <span class="mod-ico">⚖</span> Recursos de Multa e Suspensão de CNH
+    <span class="mod-ico">⚖</span> Recursos (antigo)
     <span id="badge-prazos" class="badge-alerta" style="display:none">0</span></button>
   <button class="modbtn" data-mod="agenda" onclick="modulo('agenda')">
-    <span class="mod-ico">📅</span> Agenda de Prazos
+    <span class="mod-ico">⚖️</span> Recursos de Multa e Suspensão de CNH
     <span id="badge-agenda" class="badge-alerta" style="display:none">0</span></button>
   <button class="modbtn" data-mod="relatorios" onclick="modulo('relatorios')">
     <span class="mod-ico">📊</span> Relatórios</button>
@@ -741,17 +741,17 @@ tr:hover td{background:var(--surf2)}
     </div>
   </div>
 
-  <!-- AGENDA DE PRAZOS -->
+  <!-- RECURSOS DE MULTA E SUSPENSÃO DE CNH (antiga Agenda de Prazos) -->
   <div id="fc-agenda" class="ftc fields">
     <div class="ag-wrap">
       <!-- formulário -->
       <div class="ag-card">
-        <div class="fb-title">📅 Novo lembrete</div>
+        <div class="fb-title" id="ag-titulo">⚖️ Novo processo (recurso de multa / suspensão de CNH)</div>
         <div class="ag-drop" id="ag-drop" onclick="document.getElementById('ag-arq').click()">📄 <b>Arraste aqui o PDF da OS do BitDesp</b><br>ou clique para escolher — preenche os campos sozinho</div>
         <input type="file" id="ag-arq" accept="application/pdf" style="display:none" onchange="agImportar(this.files[0]);this.value=''">
         <div id="ag-imp"></div>
         <div class="g2" style="margin-top:10px">
-          <div class="fg"><label>Nº OS (BitDesp)</label><input id="ag_os" placeholder="22440" onblur="agChecaOS(this.value)"></div>
+          <div class="fg"><label>Nº OS BitDesp <span style="font-weight:400;text-transform:none;color:var(--mut)">(só processo antigo)</span></label><input id="ag_os" placeholder="22440" onblur="agChecaOS(this.value)"></div>
           <div class="fg"><label>Tipo</label>
             <select id="ag_tipo">
               <option>Defesa prévia – suspensão CNH</option><option>Defesa suspensão CNH – JARI</option><option>Defesa suspensão CNH – CETRAN</option>
@@ -759,7 +759,11 @@ tr:hover td{background:var(--surf2)}
               <option>Cassação</option><option>Aguardando Diário Oficial</option><option>Transferência</option><option>Outro</option>
             </select></div>
         </div>
-        <div class="fg"><label>Cliente (proprietário)</label><input id="ag_cli" placeholder="Nome do cliente"></div>
+        <div class="fg"><label>Cliente (proprietário / condutor)</label><input id="ag_cli" placeholder="Digite nome ou CPF para buscar no cadastro..." autocomplete="off" oninput="agAcBuscar(this)"><div class="ac-drop" id="ac-ag_cli"></div></div>
+        <div class="g2">
+          <div class="fg"><label>CPF / CNPJ do cliente</label><input id="ag_cpf" placeholder="000.000.000-00" autocomplete="off" oninput="agAcBuscar(this)"><div class="ac-drop" id="ac-ag_cpf"></div></div>
+          <div class="fg"><label>Placa <span style="font-weight:400;text-transform:none;color:var(--mut)">(se for multa)</span></label><input id="ag_placa" placeholder="ABC1D23" oninput="this.value=this.value.toUpperCase()"></div>
+        </div>
         <div class="g2">
           <div class="fg"><label>WhatsApp do cliente</label><input id="ag_tel" placeholder="(62) 9xxxx-xxxx"></div>
           <div class="fg"><label>Nº do processo (instauração)</label><input id="ag_proc" placeholder="262500000206395"></div>
@@ -769,6 +773,19 @@ tr:hover td{background:var(--surf2)}
           <div class="g2">
             <div class="fg"><label>Nome</label><input id="ag_resp" placeholder="Ex.: Cida Despachante" oninput="agAutoQuem()"></div>
             <div class="fg"><label>WhatsApp</label><input id="ag_fresp" placeholder="(62) 9xxxx-xxxx"></div>
+          </div>
+        </fieldset>
+        <fieldset class="ag-fs" id="ag-osbox" style="border-color:rgba(0,212,170,.45)"><legend>💰 Ordem de Serviço (nº a partir de 40000)</legend>
+          <div id="ag-os-ja" style="display:none"></div>
+          <div id="ag-os-campos">
+              <div class="fg"><label>Valor do serviço (R$) ★</label>
+                <div style="display:flex;gap:8px;align-items:stretch">
+                  <input id="ag_valor" placeholder="R$ 0,00" style="flex:1" autocomplete="off">
+                  <button type="button" onclick="agCortesia()" title="Sem cobrança: a OS fica com R$ 0,00 e motivo cortesia" style="white-space:nowrap;padding:0 12px;background:rgba(255,165,2,.08);border:1px solid rgba(255,165,2,.5);color:#ffa502;border-radius:8px;cursor:pointer;font-weight:600">🎁 Cortesia</button>
+                </div></div>
+              <div class="fg"><label>Entrada recebida agora (R$)</label><input id="ag_entrada" placeholder="0,00 — se o cliente pagou algo" autocomplete="off"></div>
+            <div class="fg"><label>Já existe OS no sistema para este processo? <span style="font-weight:400;text-transform:none;color:var(--mut)">(nº 40000+ — liga em vez de criar outra)</span></label><input id="ag_vinc" placeholder="Deixe vazio para criar uma OS nova" autocomplete="off"></div>
+            <p class="ag-note" style="margin:0">Ao salvar, cria a OS deste processo. Se tiver entrada, abre na hora a tela de recebimento (forma, conta, maquininha). Processo antigo com Nº OS BitDesp pode ficar sem valor.</p>
           </div>
         </fieldset>
         <div class="fg"><label>O que fazer nesse dia</label>
@@ -788,7 +805,7 @@ tr:hover td{background:var(--surf2)}
           <select id="ag_quem"><option value="cli">Cliente</option><option value="resp">Responsável (despachante parceiro)</option><option value="ambos">Os dois</option><option value="nin">Ninguém — só conferir</option></select></div>
         <input type="hidden" id="ag_id">
         <div style="margin-top:14px;display:flex;gap:8px">
-          <button class="btn-main" id="ag-salvar" onclick="agSalvar()">Salvar lembrete</button>
+          <button class="btn-main" id="ag-salvar" onclick="agSalvar()">Salvar processo</button>
           <button class="btn-sec" id="ag-cancelar" style="display:none" onclick="agLimparForm()">Cancelar edição</button>
         </div>
         <p class="ag-note">Sábado, domingo e feriado ficam bloqueados. Se cair num deles, o sistema mostra o dia útil anterior e o próximo, com quantos processos cada um já tem.</p>
@@ -3236,7 +3253,7 @@ function agBadgeSet(p){
   var na=p.n_atrasados||0, f=document.getElementById('ag-faixa');
   var na_el=document.getElementById('ag-n-atr'); if(na_el) na_el.textContent=na;
   if(f){ f.style.display = na>0 ? 'flex' : 'none';
-    document.getElementById('ag-faixa-txt').textContent = na+' lembrete(s) ATRASADO(S) na Agenda de Prazos — passou do dia de olhar e ninguém marcou como feito.'; }
+    document.getElementById('ag-faixa-txt').textContent = na+' lembrete(s) ATRASADO(S) em Recursos de Multa e Suspensão de CNH — passou do dia de olhar e ninguém marcou como feito.'; }
 }
 function agBadge(){ agApi('/api/agenda/painel').then(agBadgeSet).catch(function(){}); }
 
@@ -3299,27 +3316,78 @@ function agSugerir(){
 function agG(id){ return document.getElementById(id); }
 function agAutoQuem(){ agG('ag_quem').value = agG('ag_resp').value.trim() ? 'resp' : 'cli'; }
 function agLimparForm(){
-  ['ag_id','ag_os','ag_cli','ag_tel','ag_proc','ag_protoc','ag_resp','ag_fresp','ag_obs','ag_data'].forEach(function(i){ agG(i).value=''; });
+  ['ag_id','ag_os','ag_cli','ag_tel','ag_proc','ag_protoc','ag_resp','ag_fresp','ag_obs','ag_data','ag_cpf','ag_placa','ag_valor','ag_entrada','ag_vinc'].forEach(function(i){ agG(i).value=''; });
+  agOsBox(null);
   agG('ag_quem').value='cli'; agG('ag-imp').innerHTML=''; agG('ag-aviso').innerHTML='';
-  agG('ag-salvar').textContent='Salvar lembrete'; agG('ag-salvar').disabled=false; agG('ag-cancelar').style.display='none';
+  agG('ag-salvar').textContent='Salvar processo'; agG('ag-salvar').disabled=false; agG('ag-cancelar').style.display='none';
 }
 function agSalvar(){
   var id=agG('ag_id').value, data=agG('ag_data').value;
   if(!agG('ag_cli').value.trim()){ showAlert('Preencha o cliente.','err'); return; }
   if(!data){ showAlert('Escolha a data do lembrete.','err'); return; }
+  var semOS = agG('ag-os-campos').style.display!=='none';
+  if(semOS && !id && !agG('ag_os').value.trim() && !agG('ag_valor').value.trim() && !agG('ag_vinc').value.trim()){
+    var cv=agG('ag_valor'); cv.scrollIntoView({behavior:'smooth',block:'center'}); cv.focus(); cv.style.boxShadow='0 0 0 3px rgba(255,165,2,.7)'; setTimeout(function(){ cv.style.boxShadow=''; },4000);
+    showAlert('Falta o valor do serviço: digite em 💰 Ordem de Serviço (ou clique em 🎁 Cortesia) e salve de novo.','warn'); return;
+  }
+  var entrada = semOS ? osNumBr(agG('ag_entrada').value) : 0;
   var dados={os:agG('ag_os').value, tipo:agG('ag_tipo').value, cliente_nome:agG('ag_cli').value, cliente_tel:agG('ag_tel').value,
     processo:agG('ag_proc').value, protocolo:agG('ag_protoc').value, resp_nome:agG('ag_resp').value, resp_tel:agG('ag_fresp').value, quem:agG('ag_quem').value,
-    acao:agG('ag_acao').value, data:data, obs:agG('ag_obs').value};
-  agApi('/api/agenda'+(id?'/'+id:''), id?'PUT':'POST', dados).then(function(){
-    showAlert(id?'✓ Lembrete atualizado!':'✓ Lembrete salvo para '+agBr(data)+'!','ok');
-    AG.sel=data; agLimparForm(); AG.aba=2; return agCarregar();
+    acao:agG('ag_acao').value, data:data, obs:agG('ag_obs').value, cliente_cpf:agG('ag_cpf').value, placa:agG('ag_placa').value};
+  if(semOS){ dados.valor_servico=agG('ag_valor').value; dados.os_vincular=agG('ag_vinc').value; }
+  agApi('/api/agenda'+(id?'/'+id:''), id?'PUT':'POST', dados).then(function(r){
+    var n=r&&r.os_numero;
+    showAlert((id?'✓ Processo atualizado!':'✓ Processo salvo — lembrete para '+agBr(data)+'!')+(n?' OS '+n+'.':''),'ok');
+    AG.sel=data; agLimparForm(); AG.aba=2;
+    if(n && entrada>0){ agAbrirOS(n,true,entrada); return; }
+    return agCarregar();
   }).catch(function(e){ showAlert(e.message,'err'); });
 }
+function osNumBr(v){ v=String(v||'').replace(/[^0-9,.-]/g,''); if(v.indexOf(',')>=0) v=v.replace(/\./g,'').replace(',','.'); return parseFloat(v)||0; }
+function agCortesia(){ var v=agG('ag_valor'); v.value='CORTESIA'; v.style.boxShadow=''; agG('ag_entrada').value=''; showAlert('✓ Marcado como cortesia (sem cobrança). Agora é só salvar.','ok'); }
+function agOsBox(n){
+  var ja=agG('ag-os-ja'), cp=agG('ag-os-campos'); if(!ja) return;
+  if(n){ ja.style.display='block'; cp.style.display='none';
+    ja.innerHTML='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span>Este processo já está na <b style="color:var(--acc)">OS '+n+'</b>. Valor, entrada e pagamentos são feitos na OS.</span>'+
+      '<button class="ag-bt" onclick="agAbrirOS('+n+')">Abrir OS</button><button class="ag-bt" onclick="agAbrirOS('+n+',true)">💰 Receber</button></div>'; }
+  else { ja.style.display='none'; ja.innerHTML=''; cp.style.display='block'; }
+}
+function agAbrirOS(n, receber, valor){
+  if(typeof osAbrir!=='function'){ showAlert('Módulo de OS indisponível.','err'); return; }
+  OS.voltaProx={v:'agenda'}; modulo('os'); osAbrir(n,'recebimentos');
+  if(receber){ var t=setInterval(function(){ if(OS.atual && OS.atual.os.numero===Number(n)){ clearInterval(t); osReceberModal();
+      if(valor){ setTimeout(function(){ var c=document.getElementById('osr-valor'); if(c){ c.value=String(valor.toFixed(2)).replace('.',','); c.dispatchEvent(new Event('input')); } },120); } } },150);
+    setTimeout(function(){ clearInterval(t); },6000); }
+}
+// busca no cadastro único (ATPV + clientes das OS + recursos)
+var AG_AC={t:null,l:[]};
+function agAcBuscar(el){
+  var q=el.value.trim(), drop=agG('ac-'+el.id); if(el.id==='ag_cpf') q=q.replace(/\D/g,'');
+  ['ac-ag_cli','ac-ag_cpf'].forEach(function(i){ if(i!==drop.id) agG(i).classList.remove('open'); });
+  if(q.length<(el.id==='ag_cpf'?3:2)){ drop.classList.remove('open'); return; }
+  clearTimeout(AG_AC.t);
+  AG_AC.t=setTimeout(function(){
+    fetch('/api/pessoas?q='+encodeURIComponent(q)).then(function(r){ return r.json(); }).then(function(l){
+      AG_AC.l=Array.isArray(l)?l:[]; if(!AG_AC.l.length){ drop.classList.remove('open'); return; }
+      drop.innerHTML=AG_AC.l.map(function(p,i){ return '<div class="ac-item" data-agi="'+i+'"><div class="ac-nome">'+agEsc(p.nome)+'</div><div class="ac-meta">'+agEsc(p.cpf||'')+(p.cel?' · '+agEsc(p.cel):'')+({cliente:' · cadastro de clientes',recurso:' · recursos',atpv:' · ATPV'}[p.origem]||'')+'</div></div>'; }).join('');
+      Array.prototype.forEach.call(drop.querySelectorAll('[data-agi]'),function(it){
+        it.addEventListener('mousedown',function(e){ e.preventDefault(); e.stopPropagation();
+          var p=AG_AC.l[Number(it.getAttribute('data-agi'))]||{};
+          agG('ag_cli').value=p.nome||''; agG('ag_cpf').value=p.cpf||''; if(p.cel) agG('ag_tel').value=p.cel;
+          drop.classList.remove('open'); showAlert('✓ Cliente carregado: '+(p.nome||''),'ok'); });
+      });
+      drop.classList.add('open');
+    }).catch(function(){});
+  },220);
+}
+document.addEventListener('click',function(e){ if(!e.target.closest('#ac-ag_cli,#ac-ag_cpf,#ag_cli,#ag_cpf')){ ['ac-ag_cli','ac-ag_cpf'].forEach(function(i){ var d=document.getElementById(i); if(d) d.classList.remove('open'); }); } });
 function agEditar(id){
   var r=AG.itens[id]; if(!r) return;
   agG('ag_id').value=r.id; agG('ag_os').value=r.os; agG('ag_tipo').value=r.tipo; agG('ag_cli').value=r.cliente_nome;
   agG('ag_tel').value=r.cliente_tel; agG('ag_proc').value=r.processo; agG('ag_protoc').value=r.protocolo||''; agG('ag_resp').value=r.resp_nome; agG('ag_fresp').value=r.resp_tel;
   agG('ag_quem').value=r.quem; agG('ag_acao').value=r.acao; agG('ag_obs').value=r.obs; agG('ag_data').value=r.data;
+  agG('ag_cpf').value=r.cliente_cpf||''; agG('ag_placa').value=r.placa||''; agG('ag_valor').value=''; agG('ag_entrada').value=''; agG('ag_vinc').value='';
+  agOsBox(r.os_numero||null);
   agG('ag-salvar').textContent='Salvar alterações'; agG('ag-cancelar').style.display='inline-block';
   agValidar(r.data,true); window.scrollTo({top:0,behavior:'smooth'});
 }
@@ -3415,7 +3483,9 @@ function agLinhas(l, comData){
     l.map(function(r){
       var at = r.data<AG.hoje && !r.feito;
       return '<tr class="'+(r.feito?'feito ':'')+(at?'atras':'')+'">'+(comData?'<td>'+(comData==='full'?agBr(r.data):agBr(r.data).slice(0,5))+(at?'<br><span class="ag-atraso">'+Math.round((agHojeD()-agParse(r.data))/86400000)+' dia(s) de atraso</span>':'')+'</td>':'')+
-        '<td>'+agEsc(r.os||'—')+'</td>'+
+        '<td>'+(r.os_numero?'<button class="ag-bt" style="color:var(--acc);border-color:rgba(0,212,170,.45);font-weight:700" title="Abrir a OS" onclick="agAbrirOS('+r.os_numero+')">OS '+r.os_numero+'</button>'+
+            '<br><button class="ag-bt" title="Registrar pagamento" onclick="agAbrirOS('+r.os_numero+',true)">💰 Receber</button>':'')+
+          (r.os?'<br><span class="ag-small">BitDesp '+agEsc(r.os)+'</span>':(r.os_numero?'':'—'))+'</td>'+
         '<td>'+agEsc(r.cliente_nome)+(r.resp_nome?'<br><span class="ag-small">via '+agEsc(r.resp_nome)+'</span>':'')+'</td>'+
         '<td><span class="ag-tag">'+agEsc(r.tipo)+'</span><br><span class="ag-small">Proc.</span> <span style="font-family:var(--mono);font-size:12px">'+agEsc(r.processo||'—')+'</span>'+
           '<br><span class="ag-small">Prot.</span> '+(r.protocolo?'<span style="font-family:var(--mono);font-size:12px;color:var(--acc)">'+agEsc(r.protocolo)+'</span>':'<a href="#" style="color:var(--warn);font-size:11px" onclick="agProtocolo('+r.id+');return false">+ informar</a>')+'</td>'+
