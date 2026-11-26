@@ -336,7 +336,6 @@ CATEGORIAS_REPASSE = [("taxa_detran", "TAXA DETRAN"), ("ipva", "IPVA"), ("licenc
                       ("multa", "MULTA"), ("vistoria", "VISTORIA"), ("placa", "PLACA"), ("outros", "OUTROS")]
 CAT_REPASSE = dict(CATEGORIAS_REPASSE)
 NUM_OS_INICIAL = 40000          # numeração própria (não mistura com as OS do BitDesp)
-ATPV_VALOR_PADRAO = Decimal('70.00')
 TIPO_ATPV = "ATPV"
 MAQUININHAS = ["STONE", "SICREDI", "LISTO"]
 # conta onde cai cada maquininha (busca pelo nome da conta)
@@ -3158,14 +3157,14 @@ def registrar(app, db, login_required):
                             (placa, g('ve_chassi').upper(), g('ve_modelo').upper(), prop))
                 vid = cur.fetchone()['id']
         valor = _num(data.get('valor_cobrado') or g('ct_valor_servico'))
-        if valor <= 0:
-            valor = ATPV_VALOR_PADRAO
+        # o valor é decidido em cada ATPV; sem valor a OS fica em andamento (honorário zero pede motivo ao concluir)
+        st_os = 'concluida' if valor > 0 else 'andamento'
         numero = _proximo_numero(cur)
         cur.execute("""INSERT INTO ordens_servico (numero, tipo, cliente_id, responsavel_id, veiculo_id, user_id, user_nome, status,
                            honorario, obs, empresa_id, atendimento_id, processo_tipo_id)
-                       VALUES (%s,'os',%s,%s,%s,%s,%s,'concluida',0,%s,%s,%s,
+                       VALUES (%s,'os',%s,%s,%s,%s,%s,%s,0,%s,%s,%s,
                                (SELECT id FROM processo_tipos WHERE upper(nome) = upper(%s) LIMIT 1)) RETURNING id""",
-                    (numero, prop, resp, vid, str(session.get('user_id') or ''), _eu(), (data.get('obs') or g('ct_obs') or '').strip(),
+                    (numero, prop, resp, vid, str(session.get('user_id') or ''), _eu(), st_os, (data.get('obs') or g('ct_obs') or '').strip(),
                      session.get('empresa_id'), aid, TIPO_ATPV))
         oid = cur.fetchone()['id']
         _add_item(cur, oid, {"descricao": "ATPV-E — PROCURAÇÃO / AUTORIZAÇÃO DE TRANSFERÊNCIA", "valor": str(valor), "natureza": "honorario"})

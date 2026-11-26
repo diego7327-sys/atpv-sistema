@@ -488,7 +488,7 @@ tr:hover td{background:var(--surf2)}
       <div class="g2">
         <div class="fg">
           <label>Valor do serviço (R$) ★</label>
-          <input id="ct_valor_servico" oninput="atualizar()" placeholder="R$ 70,00 (padrão se deixar vazio)" style="border-color:rgba(0,212,170,.4)">
+          <input id="ct_valor_servico" oninput="atualizar()" placeholder="R$ 0,00 — valor deste ATPV" style="border-color:rgba(0,212,170,.4)">
         </div>
         <div class="fg">
           <label>Pagamento</label>
@@ -2260,6 +2260,13 @@ function delHist(i,e){
 function salvar(){
   var nome=g('v_nome'),placa=g('ve_placa');
   if(!nome&&!placa){showAlert('Preencha nome ou placa.','warn');return;}
+  // o valor é decidido em cada ATPV (vai para a OS)
+  if(!g('ct_valor_servico')){
+    var vv=prompt('Valor do serviço deste ATPV (R$) — vai para a OS.\nDeixe 0 se não for cobrar agora:','');
+    if(vv===null) return;
+    vv=(vv||'').trim(); if(!vv || isNaN(Number(vv.replace(/\./g,'').replace(',','.')))){ showAlert('Digite o valor do serviço (ex.: 70,00).','warn'); return; }
+    document.getElementById('ct_valor_servico').value=vv; atualizar();
+  }
   var igual=todosHist.slice(0,2).some(function(h){return h.nome===nome&&h.placa===placa;});
   if(igual){showAlert('Já está salvo no histórico.','warn');return;}
   var snap={};CAMPOS_TODOS.forEach(function(k){snap[k]=g(k);});
