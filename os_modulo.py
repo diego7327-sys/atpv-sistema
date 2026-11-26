@@ -264,7 +264,7 @@ CFG_EMPRESA = ("empresa_nome", "empresa_fone", "empresa_endereco", "empresa_cida
                "pix_chave", "pix_nome", "pix_cidade", "pix_banco")
 
 EMPRESA_PADRAO = {"empresa_nome": "Diego Despachante", "empresa_fone": "(62) 99110-1506 · (62) 99267-3252",
-                  "empresa_endereco": "Av. Brasil, 464 - Vila Jussara", "empresa_cidade": "Anápolis-GO",
+                  "empresa_endereco": "Av. Brasil, 464, Sala 01 - Centro - CEP 75020-000", "empresa_cidade": "Anápolis-GO",
                   "empresa_email": "diego7327@hotmail.com"}
 
 # Fiscal: categorias de repasse, maquininhas e tipo da forma de pagamento
@@ -1390,6 +1390,10 @@ def registrar(app, db, login_required):
             return None
         if _receita_os(cur, o['numero']) > 0.004 or (o.get('hon_zero_motivo') or '').strip():
             return None
+        cur.execute("SELECT retorno_valor FROM os_parcelamentos WHERE os_id=%s", (o['id'],))
+        pr = cur.fetchone()
+        if pr and (pr['retorno_valor'] or 0) > 0:     # parcelamento: o ganho é o retorno da maquininha
+            return None
         motivo = (motivo or '').strip().upper()
         base = motivo.split(':')[0].strip()
         if not motivo or base not in MOTIVOS_HON_ZERO or (base == 'OUTRO' and len(motivo) < 8):
@@ -1405,7 +1409,7 @@ def registrar(app, db, login_required):
         r = cur.fetchone()
         return r['valor'] if r and r['valor'] in NF_CRITERIOS else 'conservador'
 
-    def _parc_calc(cur, oid, p, hon_no_cartao=None):
+    def _parc_calc(cur, oid, p, hon_no_cartao=None, honorario=None):
         """Débitos (repasse), honorário, acréscimo do parcelamento e valor da nota pelos dois critérios."""
         cur.execute("""SELECT
               COALESCE(SUM(CASE WHEN natureza = 'repasse' THEN custo*qtd END),0) AS debitos,
@@ -1415,7 +1419,8 @@ def registrar(app, db, login_required):
         cur.execute("SELECT honorario, desconto FROM ordens_servico WHERE id=%s", (oid,))
         o = cur.fetchone()
         debitos = x['debitos']
-        hon = (x['itens_sem_acr'] + (o['honorario'] or 0) - (o['desconto'] or 0)) - debitos
+        hon_os = o['honorario'] or 0 if honorario is None else honorario
+        hon = (x['itens_sem_acr'] + hon_os - (o['desconto'] or 0)) - debitos
         no_cartao = p['hon_no_cartao'] if hon_no_cartao is None else hon_no_cartao
         cartao = _num(p['valor_cartao']) if p else Decimal('0')
         acr = max(Decimal('0'), cartao - debitos - (hon if no_cartao else 0))
@@ -1471,12 +1476,16 @@ def registrar(app, db, login_required):
                  "retorno_tipo": ((d.get("retorno_tipo") or "").strip().upper()[:10] if vl else (atual or {}).get('retorno_tipo', '')),
                  "retorno_valor": (_num(d.get("retorno_valor")) if vl else (atual or {}).get('retorno_valor') or 0),
                  "custo_maquininha": (_num(d.get("custo_maquininha")) if vl else (atual or {}).get('custo_maquininha') or 0)}
-            calc = _parc_calc(cur, o['id'], p)
+            hon_novo = _num(d.get("honorario")) if d.get("honorario") not in (None, '') else None
+            calc = _parc_calc(cur, o['id'], p, honorario=hon_novo)
             if _sim(d.get("simular"), False):      # só calcula (tela mostra ao vivo), não grava nada
                 if not vl:
                     calc = {k: calc[k] for k in ('debitos', 'acrescimo', 'valor_cartao')}
                 return jsonify({"ok": True, "calc": calc})
             acr = _num(calc['acrescimo'])
+            if hon_novo is not None and hon_novo != (o['honorario'] or 0):
+                cur.execute("UPDATE ordens_servico SET honorario=%s WHERE id=%s", (hon_novo, o['id']))
+                _ocorrencia(cur, o['id'], 'outras', 'Honorário do parcelamento: R$ %s' % _br(hon_novo))
             # acréscimo do parcelamento: item separado (receita), fora do repasse
             cur.execute("SELECT id FROM os_itens WHERE os_id=%s AND origem='acrescimo'", (o['id'],))
             ia = cur.fetchone()

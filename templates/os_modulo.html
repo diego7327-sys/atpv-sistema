@@ -1394,8 +1394,9 @@ function osAbaParc(){
     '<div class="fg"><label>Nº de parcelas</label><select id="osp-parc"'+inp+'>'+parc+'</select></div>'+
     '<div class="fg"><label>NSU / autorização</label><input id="osp-nsu" value="'+osEsc(pr.nsu||'')+'"></div>'+
     '<div class="fg"><label>Conta onde cai</label><select id="osp-conta">'+osOpts(c.contas,pr.conta_id||'','— pela maquininha —')+'</select></div></div>'+
-    '<label class="os-chk" style="margin:2px 0 10px"><input type="checkbox" id="osp-honc" '+(pr.hon_no_cartao===false?'':'checked')+' onchange="osParcSimular()"> O honorário foi cobrado junto no cartão</label>'+
-    (vl?'<div class="g3 osp-vl"><div class="fg"><label>Retorno da maquininha 🔒</label><select id="osp-rtipo"'+inp+'>'+['','R0','R3','R6','OUTRO'].map(function(r){ return '<option value="'+r+'"'+((pr.retorno_tipo||'')===r?' selected':'')+'>'+(r||'—')+'</option>'; }).join('')+'</select></div>'+
+    '<div class="g3"><div class="fg"><label>Honorário (R$) — normalmente zero</label><input id="osp-hon" value="'+osN(o.honorario||0)+'" oninput="osParcHonVis();osDeb(\'parc\',osParcSimular)"></div>'+
+      '<div class="fg" style="grid-column:span 2"><label>&nbsp;</label><label class="os-chk" id="osp-honc-w" style="margin:8px 0 0"><input type="checkbox" id="osp-honc" '+(pr.hon_no_cartao===false?'':'checked')+' onchange="osParcSimular()"> O honorário foi cobrado junto no cartão</label></div></div>'+
+    (vl?'<div class="g3 osp-vl"><div class="fg"><label>Retorno da maquininha 🔒</label><select id="osp-rtipo"'+inp+'>'+['R0','R3','R6','OUTRO'].map(function(r){ return '<option value="'+r+'"'+((pr.retorno_tipo||'R6')===r?' selected':'')+'>'+r+'</option>'; }).join('')+'</select></div>'+
       '<div class="fg"><label>Valor do retorno (R$) 🔒</label><input id="osp-rval" placeholder="0,00" value="'+(pr.retorno_valor?osN(pr.retorno_valor):'')+'"'+inp+'></div>'+
       '<div class="fg"><label>Custo da maquininha (R$) 🔒</label><input id="osp-custo" placeholder="0,00" value="'+(pr.custo_maquininha?osN(pr.custo_maquininha):'')+'"'+inp+'></div></div>':'')+
     (ro?'':'<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">'+(osAdm()&&pr.id?'<button class="os-b del" onclick="osParcDesfazer()">Desfazer parcelamento</button>':'')+
@@ -1403,9 +1404,11 @@ function osAbaParc(){
   h+='</div><div><div class="os-box osp-res" id="osp-res"><span class="os-small">Calculando…</span></div></div></div>';
   osE('os-aba-corpo').innerHTML=h;
   if(pr.parcelas) osE('osp-parc').value=pr.parcelas;
+  osParcHonVis();
   if(osE('ospd-cat')) osParcDescPadrao();
   osParcSimular();
 }
+function osParcHonVis(){ var w=osE('osp-honc-w'); if(w) w.style.visibility=nvNum(osE('osp-hon').value)>0?'visible':'hidden'; }
 function osParcDescPadrao(){ var cat=osE('ospd-cat').value, a=(new Date()).getFullYear();
   osE('ospd-desc').value={ipva:'IPVA '+a,licenciamento:'LICENCIAMENTO '+a,multa:'MULTA AIT ',taxa_detran:'TAXA DETRAN',vistoria:'VISTORIA',placa:'PLACA',outros:''}[cat]||''; }
 function osParcDebAdd(){
@@ -1417,7 +1420,8 @@ function osParcDebAdd(){
 function osParcMaq(){ var m=osE('osp-maq').value, k=m==='STONE'?'STONE':(m==='SICREDI'?'SICRED':''); if(k){ var id=osContaPor(k); if(id) osE('osp-conta').value=id; } }
 function osParcDados(){
   var c={data:osE('osp-data').value, valor_cartao:osE('osp-cartao').value, maquininha:osE('osp-maq').value, parcelas:osE('osp-parc').value,
-         nsu:osE('osp-nsu').value, conta_id:osE('osp-conta').value||null, hon_no_cartao:osE('osp-honc').checked};
+         nsu:osE('osp-nsu').value, conta_id:osE('osp-conta').value||null, honorario:osN(nvNum(osE('osp-hon').value)),
+         hon_no_cartao:nvNum(osE('osp-hon').value)>0?osE('osp-honc').checked:true};
   if(osE('osp-rtipo')){ c.retorno_tipo=osE('osp-rtipo').value; c.retorno_valor=osE('osp-rval').value; c.custo_maquininha=osE('osp-custo').value; }
   return c; }
 function osParcSimular(){
@@ -1427,7 +1431,7 @@ function osParcSimular(){
     var k=r.calc, vl=osVL(), pr=OS.atual.parcelamento||{}, np=Number(c.parcelas)||1, h='<h4>Resumo do parcelamento</h4><table style="width:100%;font-size:14px">';
     var L=function(a,b,st){ return '<tr><td style="padding:5px 0">'+a+'</td><td class="os-money" style="'+(st||'')+'">'+b+'</td></tr>'; };
     h+=L('Débitos pagos (repasse)',osR(k.debitos));
-    if(vl) h+=L('Honorário do despachante',osR(k.honorario));
+    if(vl||k.honorario>0) h+=L('Honorário do despachante',osR(k.honorario||0));
     h+=L('<b>Acréscimo cobrado do cliente</b><div class="os-small">pelo parcelamento — fica separado do repasse</div>','<b>'+osR(k.acrescimo)+'</b>','color:var(--acc)');
     h+=L('Total passado no cartão',osR(k.valor_cartao)+(k.valor_cartao>0?'<div class="os-small">'+np+'x de '+osR(k.valor_cartao/np)+'</div>':''));
     if(vl){
@@ -1462,7 +1466,7 @@ function osParcDesfazer(){
   osApi('/api/os/'+OS.atual.os.numero+'/parcelamento','DELETE').then(function(){ osRecarregar('parcelamento'); }).catch(osErr);
 }
 function osNovaParc(){ osNova('os'); var t=(OS.cad.tipos||[]).filter(function(x){ return x.nome===OS_TIPO_PARC; })[0]; if(t&&osE('osn-tipo')) osE('osn-tipo').value=t.id;
-  osMsg('Parcelamento no cartão: cadastre cliente e veículo e o honorário; depois de salvar, lance os débitos e o cartão na aba 💳 Parcelamento.'); }
+  osMsg('Parcelamento no cartão: cadastre cliente e veículo; depois de salvar, lance os débitos e o cartão na aba 💳 Parcelamento.'); }
 
 // ── honorário zero: motivo ao finalizar ──
 function osHonZeroModal(motivos, continuar){
@@ -1963,7 +1967,7 @@ function rqFim(S,D,nome,sub,atesto){ var d=S.doc, cbW=70, cbH=26, temCb=D.carimb
     while(fz>3.4 && d.getTextWidth(nm2)>60){ fz-=0.2; d.setFontSize(fz); } d.text(nm2,cx+35,cy+18.5,{align:'center'});
     d.setFont('helvetica','normal'); d.setFontSize(4.8); d.text('CÓD.: '+(cfg.cod||'2670'),cx+35,cy+20.4,{align:'center'}); }
   S.y=Math.max(y0+cbH,ly+9)+5; d.setTextColor(0,0,0); }
-function rqRodape(S){ var d=S.doc, n=d.getNumberOfPages(), t='DIEGO DESPACHANTE · Caetano Despachante Ltda · Código DETRAN 2670 · Av. Brasil, 464 - Vila Jussara · Anápolis/GO · (62) 99110-1506';
+function rqRodape(S){ var d=S.doc, n=d.getNumberOfPages(), t='DIEGO DESPACHANTE · Caetano Despachante Ltda · CNPJ 08.965.960/0001-06 · Cód. DETRAN 2670 · Av. Brasil, 464, Sala 01, Centro · CEP 75020-000 · Anápolis/GO · (62) 99110-1506';
   for(var i=1;i<=n;i++){ d.setPage(i); d.setDrawColor(190,190,190); d.setLineWidth(0.3); d.line(S.ML,287,S.ML+S.TW,287);
     d.setFont('times','italic'); d.setFontSize(7.4); d.setTextColor(140,140,140); d.text(t,S.W/2,291,{align:'center'}); } d.setPage(n); }
 // blocos de texto reaproveitados
@@ -2047,7 +2051,7 @@ var OS_REQ_PDF={
     rqCard(S,'OUTORGANTE',[rqB(D.nome,40)+', brasileiro(a), portador(a) do RG nº '+rqB(D.rg)+', inscrito(a) no CPF/CNPJ sob o nº '+rqB(D.doc)+'.',
       'Endereço: '+([D.end,D.num?'nº '+D.num:'',D.compl,D.bairro].filter(Boolean).join(', ')||Array(40).join('_'))+', '+(D.mun?D.mun+(D.uf?'/'+D.uf:''):'__________')+', CEP '+(D.cep||'__________')+'.']);
     rqCard(S,'OUTORGADO',['**DIEGO CAETANO SILVA**, brasileiro, despachante, inscrito no CPF sob o nº 014.255.091-42, estabelecido no escritório **CAETANO DESPACHANTE LTDA** (nome fantasia Diego Despachante), inscrito no CNPJ sob o nº 08.965.960/0001-06, **código do escritório nº 2670**.',
-      'Escritório: Avenida Brasil, nº 464, Vila Jussara, Anápolis/GO · Telefone: (62) 99110-1506 · E-mail: diego7327@hotmail.com.']);
+      'Escritório: Avenida Brasil, nº 464, Sala 01, Centro, Anápolis/GO, CEP 75020-000 · Telefone: (62) 99110-1506 · E-mail: diego7327@hotmail.com.']);
     rqTitulo(S,'OBJETO');
     rqPar(S,'Pelo presente instrumento, o(a) OUTORGANTE nomeia e constitui seu bastante procurador o OUTORGADO, para, como se presente fosse, representá-lo(a) perante o **DETRAN/GO**, a **JARI**, a **DEFRVA/GO**, o **DNIT**, a **GOINFRA**, a **DPRF**, a **SMT**, a **SEFAZ-GO** e as **CIRETRANs**, para solicitação dos serviços de **'+C.servicos+'**, do veículo:',{esp:2});
     rqCard(S,'VEÍCULO',[rqTxtVeiculo(D)]);
