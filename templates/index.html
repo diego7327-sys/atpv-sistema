@@ -2262,10 +2262,11 @@ function salvar(){
   if(!nome&&!placa){showAlert('Preencha nome ou placa.','warn');return;}
   // o valor é decidido em cada ATPV (vai para a OS)
   if(!g('ct_valor_servico')){
-    var vv=prompt('Valor do serviço deste ATPV (R$) — vai para a OS.\nDeixe 0 se não for cobrar agora:','');
-    if(vv===null) return;
-    vv=(vv||'').trim(); if(!vv || isNaN(Number(vv.replace(/\./g,'').replace(',','.')))){ showAlert('Digite o valor do serviço (ex.: 70,00).','warn'); return; }
-    document.getElementById('ct_valor_servico').value=vv; atualizar();
+    ftab('contratante');
+    var cv=document.getElementById('ct_valor_servico');
+    setTimeout(function(){ cv.scrollIntoView({behavior:'smooth',block:'center'}); cv.focus(); cv.style.boxShadow='0 0 0 3px rgba(255,165,2,.7)'; setTimeout(function(){ cv.style.boxShadow=''; },4000); },80);
+    showAlert('Falta o valor deste ATPV: digite em ★ Contratante → "Valor do serviço" (0 se não for cobrar agora) e clique em Salvar histórico de novo.','warn');
+    return;
   }
   var igual=todosHist.slice(0,2).some(function(h){return h.nome===nome&&h.placa===placa;});
   if(igual){showAlert('Já está salvo no histórico.','warn');return;}
