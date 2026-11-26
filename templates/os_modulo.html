@@ -1131,6 +1131,8 @@ function osNovaSalvar(acao){
 
 // ── abrir uma OS ──
 function osAbrir(numero, aba){
+  // guarda de onde veio (lista, cliente, veículos, financeiro…) para o botão Voltar
+  if(OS.vista && OS.vista!=='os') OS.volta={v:OS.vista, y:window.scrollY, cli:OS.vista==='clientes'?OS.cliFichaId:null, cliNome:OS.cliFichaNome, fin:OS.finAba};
   if(aba) OS.aba=aba;
   else if(!OS.atual || OS.atual.os.numero!==Number(numero)) OS.aba='doc';   // abrir uma OS mostra o documento completo
   osApi('/api/os/'+numero).then(function(d){
@@ -1145,7 +1147,8 @@ function osAbrir(numero, aba){
 function osRecarregar(aba){ if(OS.atual) osAbrir(OS.atual.os.numero, aba); }
 function osRender(){
   var d=OS.atual, o=d.os, exc=!!o.excluida_em;
-  var h='<div style="margin-bottom:10px"><button class="os-b" onclick="osVer(\'lista\')">← Voltar para a lista</button></div>';
+  var vt=OS.volta||{v:'lista'}, vtx={lista:'Voltar para a lista',clientes:vt.cli?'Voltar para '+(vt.cliNome||'o cliente'):'Voltar para Clientes',veiculos:'Voltar para Veículos',servicos:'Voltar para a Tabela de Serviços',fin:'Voltar para o Financeiro',nova:'Voltar'}[vt.v]||'Voltar';
+  var h='<div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="os-b pri" onclick="osVoltar()">← '+osEsc(vtx)+'</button>'+(vt.v!=='lista'?'<button class="os-b" onclick="OS.volta=null;osVer(\'lista\')">Lista de OS</button>':'')+'</div>';
   if(exc) h+='<div class="alert err" style="display:block;margin:0 0 12px">🗑 Esta OS está na lixeira (excluída em '+osEsc(o.excluida_em)+' por '+osEsc(o.excluida_por)+').'+
     (osAdm()?' <button class="os-b" onclick="osRestaurar()">Restaurar</button>':'')+'</div>';
   h+='<div class="os-head"><div><h2>'+(o.status==='orcamento'?'ORÇAMENTO':'OS')+' Nº '+o.numero+' '+osSt(o.status)+
@@ -2783,8 +2786,16 @@ function osCliLista(){
     osE('os-cli-tbody').innerHTML=h||'<tr><td colspan="6" class="os-vazio">Nenhum cliente.</td></tr>';
   }).catch(osErr);
 }
+function osVoltar(){
+  var v=OS.volta||{v:'lista'}; OS.volta=null;
+  if(v.v==='fin' && v.fin) OS.finAba=v.fin;
+  osVer(v.v==='nova'?'lista':v.v);
+  if(v.v==='clientes' && v.cli){ osCliFicha(v.cli); return; }
+  setTimeout(function(){ window.scrollTo({top:v.y||0}); },350);
+}
 function osCliFicha(id){
-  osApi('/api/clientes/'+id).then(function(r){
+  OS.cliFichaId=id;
+  osApi('/api/clientes/'+id).then(function(r){ OS.cliFichaNome=r.cliente.nome;
     var h='<div class="os-box"><h4>OS de '+osEsc(r.cliente.nome)+'</h4>'+osFichaCli(r.cliente)+
       '<div class="os-box" style="margin:10px 0 0;background:rgba(0,0,0,.15)"><div class="os-small" style="margin-bottom:6px"><b style="color:var(--txt)">📄 Relatório para o cliente / garagem / concessionária</b> — OS com placa, marca/modelo e chassi (inclui as OS em que ele é o responsável/revenda). Não mostra custo nem lucro.</div>'+
       '<div class="os-g4"><div class="fg"><label>De</label><input type="date" id="ocr-de"></div><div class="fg"><label>Até</label><input type="date" id="ocr-ate"></div>'+
