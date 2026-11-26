@@ -97,6 +97,7 @@
 .ocx-os{background:rgba(0,0,0,.18);border:1px solid var(--brd);border-radius:10px;padding:10px 14px;margin-bottom:12px}
 .ocx-os table{width:100%;border-collapse:collapse;font-size:14px}.ocx-os td{padding:6px 4px;border-bottom:1px solid rgba(255,255,255,.06)}
 .ocx-os td.r{text-align:right;font-family:var(--mono);white-space:nowrap}.ocx-os tr.t td{border:0;font-weight:800;font-size:15px}
+.osrl-in{width:100%;background:var(--surf2);border:1px solid var(--bord);color:var(--txt);border-radius:8px;padding:8px 10px;font-family:var(--mono);font-size:14px;outline:none}.osrl-in:focus{border-color:var(--acc)}
 .ocx-obs label{font-size:13px!important;color:#ffc61a!important}
 .ocx-obs textarea{min-height:150px!important;font-size:15px!important;border-color:rgba(255,198,26,.45)!important}
 .os-cartao{grid-template-columns:1fr 110px 1.4fr;gap:10px;background:rgba(0,153,255,.06);border:1px dashed rgba(0,153,255,.35);border-radius:10px;padding:10px 12px 0;margin:0 0 10px}
@@ -1357,11 +1358,12 @@ function osLerArquivo(inp){
   return new Promise(function(ok,erro){
     var f=inp&&inp.files&&inp.files[0]; if(!f){ ok(null); return; }
     var tipo=(f.type||'').toLowerCase();
-    if(tipo!=='application/pdf' && tipo.indexOf('image/')!==0){ erro(new Error('Comprovante tem que ser PDF ou foto.')); return; }
+    if(/\.xml$/i.test(f.name)||tipo==='text/xml'||tipo==='application/xml') tipo='application/xml';
+    if(tipo!=='application/pdf' && tipo!=='application/xml' && tipo.indexOf('image/')!==0){ erro(new Error('O arquivo tem que ser PDF, XML ou foto.')); return; }
     if(tipo==='application/pdf' && f.size>6*1024*1024){ erro(new Error('PDF muito grande (máx. 6 MB).')); return; }
     var rd=new FileReader();
     rd.onload=function(){
-      if(tipo==='application/pdf' || f.size<900*1024){ ok({nome:f.name, mime:tipo==='image/jpg'?'image/jpeg':tipo, dados:rd.result}); return; }
+      if(tipo==='application/pdf' || tipo==='application/xml' || f.size<900*1024){ ok({nome:f.name, mime:tipo==='image/jpg'?'image/jpeg':tipo, dados:rd.result}); return; }
       var img=new Image(); img.onload=function(){
         var k=Math.min(1,1800/Math.max(img.width,img.height)), cv=document.createElement('canvas');
         cv.width=Math.round(img.width*k); cv.height=Math.round(img.height*k); cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
@@ -1604,7 +1606,8 @@ function osAbaRepasses(){
         '<td>'+(osAdm()&&!ro?'<button class="os-b del" onclick="osRepasseDel('+p.id+')">✕</button>':'')+'</td></tr>';
     });
     if(!(d.repasses||[]).length) h+='<tr><td colspan="8" class="os-vazio">Nenhum pagamento de repasse registrado.</td></tr>';
-    h+='</tbody></table></div>'+(bx&&!ro&&its.length?'<div style="margin-top:10px"><button class="os-b pri" onclick="osRepasseModal()">+ Registrar pagamento de repasse</button></div>':'')+'</div>';
+    var pend=its.filter(function(i){ return !i.repasse_quitado; }).length;
+    h+='</tbody></table></div>'+(bx&&!ro&&its.length?'<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'+(pend>1?'<button class="os-b pri" onclick="osRepasseLoteModal()">✓ Pagar todas as taxas pendentes ('+pend+')</button>':'')+'<button class="os-b'+(pend>1?'':' pri')+'" onclick="osRepasseModal()">+ Registrar pagamento de repasse</button></div>':'')+'</div>';
   }
   h+='<p class="cfg-note">'+(bx?'Cada pagamento lança a saída no extrato da conta escolhida. Anexe o comprovante (PDF ou foto do celular): é a prova de que o valor foi repasse e não receita.':
      'Só quem dá baixa registra o pagamento do repasse. Você pode preencher o órgão e o nº do DUA/boleto no ✎ de cada item.')+'</p>';
@@ -1634,6 +1637,42 @@ function osRepassePreenche(){
   osE('osrp-valor').value=(i&&i.custo!=null)?osN(Math.max(i.custo*i.qtd-(i.repasse_pago||0),0)):'';
   setTimeout(function(){ osE('osrp-valor').focus(); osE('osrp-valor').select(); },40);
   osRepasseQuit();
+}
+// pagar várias taxas de uma vez (mesma data e conta; valor real e DUA de cada uma)
+function osRepasseLoteModal(){
+  var d=OS.atual, its=d.itens.filter(function(i){ return i.natureza==='repasse'&&!i.repasse_quitado; }), c=OS.cad;
+  OS.loteIts=its;
+  osModal('Pagar taxas — OS Nº '+d.os.numero,
+    '<div class="g3"><div class="fg"><label>Data do pagamento</label><input type="date" id="osrl-data" value="'+osHoje()+'"></div>'+
+      '<div class="fg"><label>Saiu da conta *</label><select id="osrl-conta">'+osOpts(c.contas,osContaPor('CAIXA'),'— conta —')+'</select>'+osContaChips('osrl-conta')+'</div>'+
+      '<div class="fg"><label>Comprovante único (se for um só para todas)</label><input type="file" id="osrl-arq" accept="application/pdf,image/*"></div></div>'+
+    '<div class="table-wrap" style="margin:0 0 8px"><table><thead><tr><th></th><th>Taxa</th><th style="text-align:right">A pagar</th><th style="width:120px">Valor pago (DUA)</th><th>Nº DUA / boleto</th><th>Comprovante desta</th></tr></thead><tbody>'+
+    its.map(function(i,k){ var r=Math.max(i.custo*i.qtd-(i.repasse_pago||0),0);
+      return '<tr><td><input type="checkbox" id="osrl-ok'+k+'" checked onchange="osRepasseLoteDif()"></td><td><b>'+osEsc(i.descricao)+'</b><div class="os-small">'+osEsc(i.orgao||osCatNome(i.categoria))+'</div><div class="os-small" id="osrl-dif'+k+'"></div></td>'+
+        '<td class="os-money">'+osN(r)+'</td><td><input class="osrl-in" id="osrl-v'+k+'" value="'+osN(r)+'" oninput="osRepasseLoteDif()" style="text-align:right"></td>'+
+        '<td><input class="osrl-in" id="osrl-doc'+k+'" value="'+osEsc(i.documento||'')+'" placeholder="nº do DUA"></td><td><input type="file" id="osrl-arq'+k+'" accept="application/pdf,image/*" style="max-width:190px"></td></tr>'; }).join('')+
+    '</tbody></table></div><div class="os-small" id="osrl-tot" style="margin-bottom:10px"></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn-sec" onclick="osFechar()">Cancelar</button><button class="btn-main" id="osrl-bt" onclick="osRepasseLoteSalvar()">Registrar pagamentos</button></div>', true);
+  osRepasseLoteDif();
+}
+function osRepasseLoteDif(){
+  var tot=0, dif=0;
+  OS.loteIts.forEach(function(i,k){ var r=Math.max(i.custo*i.qtd-(i.repasse_pago||0),0), v=nvNum(osE('osrl-v'+k).value), on=osE('osrl-ok'+k).checked, e=osE('osrl-dif'+k);
+    e.innerHTML=on&&v>0&&Math.abs(r-v)>=0.005?(r>v?'<span style="color:var(--acc)">DUA '+osR(r-v)+' menor → diferença vira honorário</span>':'<span style="color:var(--warn)">DUA '+osR(v-r)+' maior → honorário diminui</span>'):'';
+    if(on){ tot+=v; dif+=r-v; } });
+  osE('osrl-tot').innerHTML='Total pago agora: <b style="color:var(--txt)">'+osR(tot)+'</b>'+(Math.abs(dif)>=0.005?' · '+(dif>0?'sobra '+osR(dif)+' que vira honorário':'faltou '+osR(-dif)+' (honorário diminui)'):'');
+}
+function osRepasseLoteSalvar(){
+  var its=OS.loteIts, sel=[], bt=osE('osrl-bt');
+  its.forEach(function(i,k){ if(osE('osrl-ok'+k).checked && nvNum(osE('osrl-v'+k).value)>0) sel.push(k); });
+  if(!sel.length){ osMsg('Marque pelo menos uma taxa com valor.','err'); return; }
+  if(!osE('osrl-conta').value){ osMsg('Escolha de qual conta saiu.','err'); return; }
+  bt.disabled=true;
+  Promise.all([osLerArquivo(osE('osrl-arq'))].concat(sel.map(function(k){ return osLerArquivo(osE('osrl-arq'+k)); }))).then(function(arqs){
+    var c={data:osE('osrl-data').value, conta_id:osE('osrl-conta').value, arquivo:arqs[0], itens:sel.map(function(k,j){ var i=its[k];
+      return {item_id:i.id, valor:osE('osrl-v'+k).value, documento:osE('osrl-doc'+k).value, orgao:i.orgao||'', arquivo:arqs[j+1], quitar:true}; })};
+    return osApi('/api/os/'+OS.atual.os.numero+'/repasses/lote','POST',c);
+  }).then(function(r){ osFechar(); osMsg('✓ '+r.pagos+' taxa(s) paga(s).'); osRecarregar('repasses'); }).catch(function(e){ bt.disabled=false; osErr(e); });
 }
 // DUA saiu diferente do cobrado: quita a taxa pelo valor real e a diferença vira honorário (ou reduz)
 function osRepasseQuit(){
@@ -1854,7 +1893,7 @@ function osAdiantBox(d){
   return '<div class="os-box" style="border-left:4px solid '+(par?'var(--red)':'#e5b80b')+'"><h4>'+(par?'⚠ Adiantamento de taxa parado':'Adiantamento de taxa')+' — '+osR(a.valor)+'</h4>'+
     '<div class="os-small" style="margin-bottom:8px">O cliente pagou '+osR(a.valor)+' para taxas que ainda não foram pagas'+(a.desde?' (desde '+osBr(a.desde)+', '+a.dias+' dias)':'')+'. Esse dinheiro não é receita: '+
     (par?'<b style="color:var(--red)">passou de '+a.dias_alerta+' dias — resolva:</b> pague a taxa, devolva ao cliente ou reconheça como receita.':'quando pagar a taxa, registre aqui embaixo com o comprovante.')+'</div>'+
-    (bx?'<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="os-b pri" onclick="osRepasseModal()">💸 Pagar a taxa</button><button class="os-b" onclick="osDevolverModal()">↩ Devolver ao cliente</button><button class="os-b" onclick="osReconhecerModal()">Reconhecer como receita</button></div>':'')+'</div>';
+    (bx?'<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="os-b pri" onclick="'+(d.itens.filter(function(i){ return i.natureza==='repasse'&&!i.repasse_quitado; }).length>1?'osRepasseLoteModal()':'osRepasseModal()')+'">💸 Pagar a taxa</button><button class="os-b" onclick="osDevolverModal()">↩ Devolver ao cliente</button><button class="os-b" onclick="osReconhecerModal()">Reconhecer como receita</button></div>':'')+'</div>';
 }
 function osDevolverModal(){
   var a=OS.atual.adiantamento;
@@ -2066,6 +2105,7 @@ function osNfQuadro(o){
      '<div class="fg"><label>Data de emissão</label><input type="date" id="osnf-data" value="'+osEsc(o.nf_data||osHoje())+'"></div>'+
      '<div class="fg"><label>Valor da nota (R$)</label><input id="osnf-valor" value="'+(o.nf_valor!=null?osN(o.nf_valor):(sug!=null?osN(sug):''))+'"></div>'+
      '<div class="fg" style="justify-content:flex-end"><button class="os-b pri" onclick="osNfSalvar(\'emitida\')">✓ Salvar nota emitida</button></div></div>'+
+     '<div class="fg" style="max-width:520px"><label>PDF ou XML da NFS-e (baixado do portal da prefeitura)</label>'+(o.nf_arquivo_id?'<div class="os-small" style="margin-bottom:4px">📎 <a href="#" onclick="osArquivoAbrir('+o.nf_arquivo_id+');return false" style="color:var(--acc2)">'+osEsc(o.nf_arquivo_nome||'nota fiscal')+'</a> — escolha outro arquivo para trocar</div>':'')+'<input type="file" id="osnf-arq" accept="application/pdf,.xml,text/xml,application/xml,image/*"></div>'+
      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">'+
      (st!=='pendente'?'<button class="os-b" onclick="osNfSalvar(\'pendente\')">↺ Voltar para pendente</button>':'')+
      (st!=='dispensada'?'<button class="os-b" onclick="osNfDispensar()">Não vai ter nota…</button>':'')+'</div></div>';
@@ -2078,7 +2118,7 @@ function osNfSalvar(st, numero, obs){
     if(!c.nf_numero){ osMsg('Digite o número da NFS-e.','err'); osE('osnf-num').focus(); return; }
   }
   if(obs) c.nf_obs=obs;
-  osApi('/api/os/'+n+'/nota','POST',c).then(function(){
+  (st==='emitida'&&osE('osnf-arq')?osLerArquivo(osE('osnf-arq')):Promise.resolve(null)).then(function(arq){ if(arq) c.arquivo=arq; return osApi('/api/os/'+n+'/nota','POST',c); }).then(function(){
     osFechar(); osMsg(st==='emitida'?'✓ NFS-e registrada.':st==='dispensada'?'✓ Nota dispensada.':'✓ Nota marcada como pendente.');
     if(numero && OS.finAba==='nf' && osE('osv-fin').style.display!=='none') osNfLista(); else osRecarregar('recebimentos');
   }).catch(osErr);
@@ -2095,6 +2135,7 @@ function osNfModal(numero, sug){
     '<div class="g3"><div class="fg"><label>Nº da NFS-e *</label><input id="osnf-num"></div>'+
     '<div class="fg"><label>Data de emissão</label><input type="date" id="osnf-data" value="'+osHoje()+'"></div>'+
     '<div class="fg"><label>Valor (R$)</label><input id="osnf-valor" value="'+(sug!=null?osN(sug):'')+'"></div></div>'+
+    '<div class="fg"><label>PDF ou XML da NFS-e</label><input type="file" id="osnf-arq" accept="application/pdf,.xml,text/xml,application/xml,image/*"></div>'+
     '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn-sec" onclick="osFechar()">Cancelar</button><button class="btn-main" onclick="osNfSalvar(\'emitida\','+numero+')">Salvar</button></div>');
   setTimeout(function(){ osE('osnf-num').focus(); },40);
 }
@@ -2103,7 +2144,7 @@ function osNfLista(){
   osApi('/api/notas-fiscais?'+q).then(function(r){
     var vl=osVL(), h='<div class="table-wrap"><table><thead><tr><th>OS</th><th>Aberta</th><th>Cliente</th><th>Situação</th>'+(vl?'<th style="text-align:right">Valor da nota</th>':'')+'<th>NFS-e</th><th></th></tr></thead><tbody>';
     r.itens.forEach(function(x){
-      var nf=x.nf_status==='emitida'?'<span class="os-st st-entregue">Nº '+osEsc(x.nf_numero)+'</span><div class="os-small">'+osBr(x.nf_data)+(x.nf_valor!=null?' · '+osR(x.nf_valor):'')+'</div>':
+      var nf=x.nf_status==='emitida'?'<span class="os-st st-entregue">Nº '+osEsc(x.nf_numero)+'</span>'+(x.nf_arquivo_id?' <a href="#" onclick="osArquivoAbrir('+x.nf_arquivo_id+');return false" title="abrir a nota">📎</a>':'')+'<div class="os-small">'+osBr(x.nf_data)+(x.nf_valor!=null?' · '+osR(x.nf_valor):'')+'</div>':
              x.nf_status==='dispensada'?'<span class="os-st st-cancelada">DISPENSADA</span><div class="os-small">'+osEsc(x.nf_obs||'')+'</div>':'<span class="os-st st-andamento">SEM NOTA</span>';
       h+='<tr><td class="os-num" style="cursor:pointer" onclick="osAbrir('+x.numero+',\'recebimentos\')">'+x.numero+'</td><td>'+osBr(x.data)+'</td><td>'+osEsc(x.cliente_nome||'')+'<div class="os-small">'+osEsc(x.cliente_doc||'')+(x.placa?' · '+osEsc(x.placa):'')+'</div></td>'+
          '<td>'+osSt(x.status)+'</td>'+(vl?'<td class="os-money">'+osN(x.nota_valor)+'</td>':'')+'<td>'+nf+'</td><td style="white-space:nowrap">'+

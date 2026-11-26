@@ -234,6 +234,7 @@ ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS nf_numero TEXT DEFAULT '';
 ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS nf_data DATE;
 ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS nf_valor NUMERIC(12,2);
 ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS nf_obs TEXT DEFAULT '';
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS nf_arquivo_id BIGINT REFERENCES arquivos(id) ON DELETE SET NULL;
 -- data em que a OS foi entregue/concluída (competência do honorário quando não há nota)
 ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS concluida_em TIMESTAMPTZ;
 ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS cancelada_em TIMESTAMPTZ;
@@ -338,7 +339,7 @@ NF_CRITERIOS = {"conservador": "Conservador — honorário + tudo cobrado no car
                 "retorno": "Só retorno — honorário + retorno da maquininha"}
 NF_STATUS = {"pendente": "PENDENTE", "emitida": "EMITIDA", "dispensada": "DISPENSADA"}
 AVULSO_SERVICOS = ["CONSULTA", "AGENDAMENTO", "CONSULTA DE DÉBITOS", "IMPRESSÃO DE DOCUMENTO", "SERVIÇO DESPACHANTE"]
-ARQ_MIMES = ("application/pdf", "image/jpeg", "image/png", "image/webp")
+ARQ_MIMES = ("application/pdf", "image/jpeg", "image/png", "image/webp", "text/xml", "application/xml")
 ARQ_MAX = 6 * 1024 * 1024
 
 def _cat_palpite(desc):
@@ -1569,6 +1570,10 @@ def registrar(app, db, login_required):
         o['nota_valor'] = parc['calc']['nota'] if parc else o['receita']
         o['nf_data'] = _d(r.get('nf_data')); o['nf_valor'] = _f(r['nf_valor']) if r.get('nf_valor') is not None else None
         o['nf_status'] = o.get('nf_status') or 'pendente'
+        o['nf_arquivo_nome'] = None
+        if r.get('nf_arquivo_id'):
+            cur.execute("SELECT nome FROM arquivos WHERE id=%s", (r['nf_arquivo_id'],))
+            o['nf_arquivo_nome'] = (cur.fetchone() or {}).get('nome')
         cur.execute("SELECT * FROM os_ocorrencias WHERE os_id = %s ORDER BY id DESC", (oid,))
         ocor = [dict(x, quando=_dt(x['quando'])) for x in cur.fetchall()]
         pf_sql, pf_args = _pend_filtro(cur)
@@ -2154,7 +2159,7 @@ def registrar(app, db, login_required):
             cur.execute("""UPDATE os_itens SET orgao = CASE WHEN orgao = '' THEN %s ELSE orgao END,
                                                documento = CASE WHEN documento = '' THEN %s ELSE documento END
                            WHERE id = %s""", (orgao, docto, item['id']))
-        aid = _salvar_arquivo(cur, o['id'], d.get("arquivo"))
+        aid = d.get("arquivo_id") or _salvar_arquivo(cur, o['id'], d.get("arquivo"))
         desc_it = item['descricao'] if item else 'REPASSE'
         quando = datetime.combine(dia, _agora().timetz())
         cur.execute("""INSERT INTO lancamentos (natureza, vencimento, pago_em, descricao, favorecido, documento,
@@ -2204,6 +2209,40 @@ def registrar(app, db, login_required):
                 return jsonify({"erro": str(e)}), 400
             _toca(cur, o['id'])
         return jsonify({"ok": True, "id": pid})
+
+    @app.route("/api/os/<int:numero>/repasses/lote", methods=["POST"])
+    @equipe
+    def os_repasse_lote(numero):
+        """Paga várias taxas de uma vez: mesma data e conta; cada uma com valor real do DUA, nº e comprovante
+        (ou um comprovante só para todas)."""
+        d = request.get_json() or {}
+        its = [x for x in (d.get("itens") or []) if _num(x.get("valor")) > 0]
+        if not its:
+            return jsonify({"erro": "Marque pelo menos uma taxa com valor."}), 400
+        try:
+            with db(commit=True) as cur:
+                o = _os_por_numero(cur, numero)
+                if not o:
+                    return jsonify({"erro": "OS não encontrada"}), 404
+                comum = None
+                try:
+                    if d.get("arquivo"):
+                        if not _perms(cur)['dar_baixa']:
+                            raise PermissionError("Só quem dá baixa registra pagamento de repasse (saída do caixa).")
+                        comum = _salvar_arquivo(cur, o['id'], d.get("arquivo"))
+                    for x in its:
+                        _registrar_repasse(cur, o, {"item_id": x.get("item_id"), "valor": x.get("valor"), "data": d.get("data"),
+                                                    "conta_id": d.get("conta_id"), "orgao": x.get("orgao"), "documento": x.get("documento"),
+                                                    "arquivo": x.get("arquivo"), "arquivo_id": None if x.get("arquivo") else comum,
+                                                    "quitar": x.get("quitar"), "obs": d.get("obs")})
+                except PermissionError as e:
+                    return jsonify({"erro": str(e)}), 403
+                except ValueError as e:
+                    raise _Rollback(str(e))
+                _toca(cur, o['id'])
+        except _Rollback as e:
+            return jsonify({"erro": str(e)}), 400
+        return jsonify({"ok": True, "pagos": len(its)})
 
     @app.route("/api/os-repasses/<int:pid>/comprovante", methods=["POST"])
     @equipe
@@ -2952,9 +2991,14 @@ def registrar(app, db, login_required):
                 return jsonify({"erro": "Diga o motivo de não emitir a nota."}), 400
             dt = _data(d.get("nf_data")) if d.get("nf_data") else (_hoje() if st == 'emitida' else None)
             val = _num(d.get("nf_valor")) if d.get("nf_valor") not in (None, '') else None
-            cur.execute("""UPDATE ordens_servico SET nf_status=%s, nf_numero=%s, nf_data=%s, nf_valor=%s, nf_obs=%s
+            try:
+                arq = _salvar_arquivo(cur, o['id'], d.get("arquivo")) if d.get("arquivo") else None
+            except ValueError as e:
+                return jsonify({"erro": str(e).replace("Comprovante", "Arquivo da nota")}), 400
+            cur.execute("""UPDATE ordens_servico SET nf_status=%s, nf_numero=%s, nf_data=%s, nf_valor=%s, nf_obs=%s,
+                                  nf_arquivo_id = CASE WHEN %s = 'emitida' THEN COALESCE(%s, nf_arquivo_id) ELSE NULL END
                            WHERE id=%s""", (st, num if st == 'emitida' else '', dt if st == 'emitida' else None,
-                                            val if st == 'emitida' else None, obs, o['id']))
+                                            val if st == 'emitida' else None, obs, st, arq, o['id']))
             txt = {"emitida": "NFS-e nº %s emitida%s" % (num, (" — R$ " + _brl(val)) if val is not None else ""),
                    "pendente": "Nota fiscal marcada como pendente",
                    "dispensada": "Nota fiscal dispensada: " + obs}[st]
@@ -2988,7 +3032,7 @@ def registrar(app, db, login_required):
                 if o['nota_valor'] <= 0.004 and o['nf_status'] != 'emitida':
                     continue
                 x = {k: o.get(k) for k in ('numero', 'cliente_nome', 'cliente_doc', 'placa', 'status', 'total', 'pago',
-                                           'devedor', 'nf_status', 'nf_numero', 'nf_obs')}
+                                           'devedor', 'nf_status', 'nf_numero', 'nf_obs', 'nf_arquivo_id')}
                 x['data'] = (_d(r['data_abertura']) or '')[:10]
                 x['nf_data'] = _d(r['nf_data'])
                 x['nf_valor'] = _f(r['nf_valor']) if r['nf_valor'] is not None else None
