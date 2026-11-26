@@ -234,6 +234,20 @@ ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS nf_numero TEXT DEFAULT '';
 ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS nf_data DATE;
 ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS nf_valor NUMERIC(12,2);
 ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS nf_obs TEXT DEFAULT '';
+-- data em que a OS foi entregue/concluída (competência do honorário quando não há nota)
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS concluida_em TIMESTAMPTZ;
+CREATE OR REPLACE FUNCTION os_marca_conclusao() RETURNS trigger AS $$
+BEGIN
+  IF NEW.status IN ('entregue','concluida') THEN
+    IF NEW.concluida_em IS NULL THEN NEW.concluida_em := NOW(); END IF;
+  ELSE
+    NEW.concluida_em := NULL;
+  END IF;
+  RETURN NEW;
+END $$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS os_conclusao_trg ON ordens_servico;
+CREATE TRIGGER os_conclusao_trg BEFORE INSERT OR UPDATE OF status ON ordens_servico
+  FOR EACH ROW EXECUTE FUNCTION os_marca_conclusao();
 """
 
 # Cadastros iniciais — tirados das telas do BitDesp (levantamento de 13/11/2026)
@@ -277,7 +291,11 @@ EMPRESA_PADRAO = {"empresa_nome": "Diego Despachante", "empresa_fone": "(62) 991
 CATEGORIAS_REPASSE = [("taxa_detran", "TAXA DETRAN"), ("ipva", "IPVA"), ("licenciamento", "LICENCIAMENTO"),
                       ("multa", "MULTA"), ("vistoria", "VISTORIA"), ("placa", "PLACA"), ("outros", "OUTROS")]
 CAT_REPASSE = dict(CATEGORIAS_REPASSE)
-MAQUININHAS = ["STONE", "SICREDI"]
+MAQUININHAS = ["STONE", "SICREDI", "LISTO"]
+# conta onde cai cada maquininha (busca pelo nome da conta)
+MAQ_CONTA = {"STONE": "STONE", "SICREDI": "SICRED", "LISTO": "BRADESCO"}
+REGIMES = {"competencia": "Competência — honorário entra na data da nota (ou da conclusão da OS)",
+           "caixa": "Caixa — honorário entra na data em que o cliente pagou"}
 TIPO_PARCELAMENTO = "PAGAMENTO/PARCELAMENTO DE DÉBITOS"
 TIPO_AVULSO = "ATENDIMENTO AVULSO"
 MOTIVOS_HON_ZERO = ["CORTESIA", "RETORNO (SERVIÇO REFEITO)", "CLIENTE PARCEIRO", "ERRO DO ESCRITÓRIO", "OUTRO"]
@@ -320,7 +338,9 @@ def xlsx_contador(r, m, ini, fim):
     ws["A1"] = "CAETANO DESPACHANTE LTDA — CNPJ 08.965.960/0001-06"; ws["A1"].font = Font(bold=True, size=13, color=NAVY)
     ws["A2"] = "Relatório mensal para o contador — %s (%s a %s)" % (mes_txt, ini.strftime('%d/%m/%Y'), fim.strftime('%d/%m/%Y'))
     ws["A2"].font = Font(italic=True, color="555555")
-    linhas = [("RECEITA DO ESCRITÓRIO (OS abertas no mês)", None, True),
+    ws["A3"] = "Honorários pelo regime de " + ("CAIXA (data do recebimento)" if rs.get('regime') == 'caixa' else "COMPETÊNCIA (data da NFS-e ou da conclusão da OS)")
+    ws["A3"].font = Font(bold=True, color="B08A4E")
+    linhas = [("RECEITA DO ESCRITÓRIO — " + ("OS com recebimento no mês" if rs.get('regime') == 'caixa' else "OS com nota ou concluídas no mês"), None, True),
               ("Quantidade de OS", rs['os_qtd'], False), ("Total cobrado dos clientes", rs['os_total'], False),
               ("(−) Repasses / taxas e débitos de terceiros", rs['repasses_os'], False),
               ("(=) Honorários (receita)", rs['honorarios'], False),
@@ -336,6 +356,14 @@ def xlsx_contador(r, m, ini, fim):
               ("OS com honorário sem nota — valor", rs['sem_nota_valor'], False),
               ("OS com honorário zero", rs['hon_zero_qtd'], False),
               ("", None, False),
+              ("CONFERÊNCIA DIMP (cartão por maquininha)", None, True)]
+    dm = r.get('dimp') or {"maquininhas": [], "total": {}}
+    for g in dm['maquininhas'] + ([dm['total']] if dm.get('total') else []):
+        linhas.append(("   %s — bruto no cartão" % g['maquininha'], g['bruto'], False))
+        linhas.append(("      repasse documentado (DUA/comprovante)", g['repasse_doc'], False))
+        linhas.append(("      receita com NFS-e", g['receita_nota'], False))
+        linhas.append(("      SEM EXPLICAÇÃO", g['sem_explicacao'], False))
+    linhas += [("", None, False),
               ("RECEBIDO NO MÊS (por data do recebimento)", None, True)]
     linhas += [("   " + k, v, False) for k, v in rs['recebido_por_forma'].items()]
     linhas += [("Total recebido (confirmado)", rs['recebido'], False),
@@ -354,6 +382,8 @@ def xlsx_contador(r, m, ini, fim):
                 ws.cell(lin, col).fill = hfill; ws.cell(lin, col).font = hfont
         elif v is not None:
             c = ws.cell(lin, 2, v)
+            if rot.strip() == "SEM EXPLICAÇÃO" and (v or 0) > 0.004:
+                ws.cell(lin, 1).font = Font(bold=True, color="C00000"); c.font = Font(bold=True, color="C00000")
             c.number_format = '0' if rot in qtds else moeda
             if rot.startswith("(=)") or rot.startswith("Total"):
                 ws.cell(lin, 1).font = Font(bold=True); c.font = Font(bold=True)
@@ -370,7 +400,7 @@ def xlsx_contador(r, m, ini, fim):
                 v = x.get(k)
                 if isinstance(v, bool):
                     v = "SIM" if v else "NÃO"
-                if k in ('data', 'nf_data') and v:
+                if k in ('data', 'nf_data', 'conclusao', 'data_base') and v:
                     v = datetime.strptime(v[:10], "%Y-%m-%d").date()
                 c = w.cell(i, j, v)
                 if fmt == 'm': c.number_format = moeda
@@ -387,13 +417,32 @@ def xlsx_contador(r, m, ini, fim):
         w.freeze_panes = "A2"
         if dados:
             w.auto_filter.ref = "A1:%s%d" % (get_column_letter(len(cols)), len(dados) + 1)
-    aba("OS do mês", [("OS", "os", 8, ''), ("Data", "data", 11, 'd'), ("Cliente", "cliente", 30, ''), ("CPF/CNPJ", "cpf_cnpj", 17, ''),
+    aba("OS do mês", [("OS", "os", 8, ''), ("Abertura", "data", 11, 'd'), ("Conclusão", "conclusao", 11, 'd'), ("Data base", "data_base", 11, 'd'), ("Cliente", "cliente", 30, ''), ("CPF/CNPJ", "cpf_cnpj", 17, ''),
                       ("Placa", "placa", 9, ''), ("Tipo", "tipo", 24, ''), ("Situação", "status", 14, ''),
                       ("Total", "total", 12, 'm'), ("Repasse", "repasse", 12, 'm'), ("Honorário (receita)", "receita", 13, 'm'),
                       ("Acréscimo parc.", "acrescimo", 12, 'm'), ("Retorno maq.", "retorno", 11, 'm'),
                       ("Nota sugerida", "nota_sugerida", 12, 'm'), ("NFS-e", "nf_status", 11, ''), ("Nº NFS-e", "nf_numero", 10, ''),
-                      ("Valor NFS-e", "nf_valor", 12, 'm'), ("Recebido", "recebido", 12, 'm'), ("Em aberto", "devedor", 12, 'm'),
+                      ("Valor NFS-e", "nf_valor", 12, 'm'), ("Recebido no mês", "recebido_mes", 12, 'm'), ("Recebido (total)", "recebido", 12, 'm'), ("Em aberto", "devedor", 12, 'm'),
                       ("Motivo hon. zero", "hon_zero_motivo", 22, '')], r['os'])
+    aba("Conferência DIMP", [("Maquininha", "maquininha", 16, ''), ("Pagamentos", "qtd", 11, ''), ("Bruto no cartão", "bruto", 15, 'm'),
+                             ("Repasse documentado", "repasse_doc", 17, 'm'), ("Receita com NFS-e", "receita_nota", 16, 'm'),
+                             ("Sem explicação", "sem_explicacao", 15, 'm')], dm['maquininhas'])
+    wd = wb["Conferência DIMP"]
+    for row in wd.iter_rows(min_row=2, min_col=6, max_col=6):
+        for c in row:
+            if isinstance(c.value, (int, float)) and c.value > 0.004 or (isinstance(c.value, str) and c.value.startswith('=')):
+                c.font = Font(bold=True, color="C00000")
+    if dm.get('os'):
+        base = wd.max_row + 3
+        wd.cell(base - 1, 1, "OS com valor no cartão sem explicação").font = Font(bold=True, color=NAVY)
+        for j, t in enumerate(("OS", "Cliente", "Maquininha", "Cartão", "Repasse doc.", "Com nota", "Sem explicação", "Motivo"), 1):
+            c = wd.cell(base, j, t); c.font = hfont; c.fill = hfill
+        for i2, e in enumerate(dm['os'], base + 1):
+            for j, k in enumerate(("os", "cliente", "maquininha", "cartao", "repasse_doc", "receita_nota", "sem_explicacao", "motivo"), 1):
+                c = wd.cell(i2, j, e[k])
+                if k in ("cartao", "repasse_doc", "receita_nota", "sem_explicacao"): c.number_format = moeda
+                if k == "sem_explicacao": c.font = Font(bold=True, color="C00000")
+        wd.column_dimensions['H'].width = 46
     aba("Recebimentos", [("Data", "data", 11, 'd'), ("OS", "os", 8, ''), ("Cliente", "cliente", 30, ''), ("Forma", "forma", 14, ''),
                          ("Grupo", "grupo", 26, ''), ("Maquininha", "maquininha", 11, ''), ("Parcelas", "parcelas", 8, ''),
                          ("NSU", "nsu", 12, ''), ("Conta", "conta", 12, ''), ("Valor", "valor", 12, 'm'),
@@ -606,6 +655,17 @@ def registrar(app, db, login_required):
                     if not cur.fetchone():
                         cur.execute("INSERT INTO processo_tipos (nome) VALUES (%s)", (n,))
                 cur.execute("INSERT INTO migracoes (nome) VALUES ('os_fiscal_v2')")
+            cur.execute("SELECT 1 FROM migracoes WHERE nome = 'os_fiscal_v3'")
+            if not cur.fetchone():
+                # OS já entregues/concluídas: data da conclusão pela ocorrência (ou última atualização)
+                cur.execute("""UPDATE ordens_servico o SET concluida_em = COALESCE(
+                                 (SELECT MAX(x.quando) FROM os_ocorrencias x WHERE x.os_id = o.id
+                                   AND (x.tipo = 'entregue' OR x.descricao ILIKE '%%conclu%%')), o.atualizado, o.data_abertura)
+                               WHERE o.status IN ('entregue','concluida') AND o.concluida_em IS NULL""", ())
+                cur.execute("SELECT nome FROM contas")
+                if not any('BRADESCO' in (c['nome'] or '').upper() for c in cur.fetchall()):
+                    cur.execute("INSERT INTO contas (nome) VALUES ('BRADESCO')")
+                cur.execute("INSERT INTO migracoes (nome) VALUES ('os_fiscal_v3')")
             _sincronizar_clientes(cur)
 
     def _sincronizar_clientes(cur, filtro_sql="", filtro_params=None):
@@ -1000,6 +1060,9 @@ def registrar(app, db, login_required):
             out['categorias_repasse'] = [{"id": k, "nome": v} for k, v in CATEGORIAS_REPASSE]
             out['nf_criterio'] = _nf_criterio(cur)
             out['nf_criterios'] = [{"id": k, "nome": v} for k, v in NF_CRITERIOS.items()]
+            out['regime'] = _regime(cur)
+            out['regimes'] = [{"id": k, "nome": v} for k, v in REGIMES.items()]
+            out['maq_conta'] = MAQ_CONTA
             out['motivos_hon_zero'] = MOTIVOS_HON_ZERO
             out['avulso_servicos'] = AVULSO_SERVICOS
             out['maquininhas'] = MAQUININHAS
@@ -1074,6 +1137,10 @@ def registrar(app, db, login_required):
             if "nf_criterio" in d:
                 v = d.get("nf_criterio") if d.get("nf_criterio") in NF_CRITERIOS else "conservador"
                 cur.execute("""INSERT INTO config (chave, valor) VALUES ('nf_criterio', %s)
+                               ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor, atualizado = NOW()""", (v,))
+            if "regime" in d:
+                v = d.get("regime") if d.get("regime") in REGIMES else "competencia"
+                cur.execute("""INSERT INTO config (chave, valor) VALUES ('regime_honorarios', %s)
                                ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor, atualizado = NOW()""", (v,))
             for k in CFG_EMPRESA:
                 if k in d:
@@ -1523,6 +1590,11 @@ def registrar(app, db, login_required):
         return None
 
     # ── parcelamento de débitos no cartão ─────────────────────
+    def _regime(cur):
+        cur.execute("SELECT valor FROM config WHERE chave = 'regime_honorarios'")
+        r = cur.fetchone()
+        return r['valor'] if r and r['valor'] in REGIMES else 'competencia'
+
     def _nf_criterio(cur):
         cur.execute("SELECT valor FROM config WHERE chave = 'nf_criterio'")
         r = cur.fetchone()
@@ -1565,7 +1637,7 @@ def registrar(app, db, login_required):
                 return jsonify({"erro": "Informe o valor total passado no cartão."}), 400
             maq = (d.get("maquininha") or "").strip().upper()
             if maq not in MAQUININHAS and not sim:
-                return jsonify({"erro": "Escolha a maquininha (Stone ou Sicredi)."}), 400
+                return jsonify({"erro": "Escolha a maquininha (Stone, Sicredi ou Listo)."}), 400
             try:
                 parc = int(d.get("parcelas") or 1)
             except (TypeError, ValueError):
@@ -1583,7 +1655,7 @@ def registrar(app, db, login_required):
             conta = d.get("conta_id")
             if not conta:
                 cur.execute("SELECT id FROM contas WHERE ativo AND upper(nome) LIKE %s ORDER BY id LIMIT 1",
-                            ('%' + ('STONE' if maq == 'STONE' else 'SICRED') + '%',))
+                            ('%' + MAQ_CONTA.get(maq, 'SICRED') + '%',))
                 c_ = cur.fetchone()
                 conta = c_['id'] if c_ else None
             if not conta and not sim:
@@ -2026,7 +2098,7 @@ def registrar(app, db, login_required):
             if ftipo in ('debito', 'credito'):
                 maq = (d.get("maquininha") or "").strip().upper()
                 if maq not in MAQUININHAS:
-                    raise ValueError("Pagamento no cartão: escolha a maquininha (Stone ou Sicredi).")
+                    raise ValueError("Pagamento no cartão: escolha a maquininha (Stone, Sicredi ou Listo).")
                 nsu = re.sub(r'\s+', '', (d.get("nsu") or ""))[:30].upper()
                 if ftipo == 'credito':
                     try:
@@ -2441,21 +2513,27 @@ def registrar(app, db, login_required):
         return m, ini, fim
 
     def _rel_contador(cur, ini, fim):
+        """Mês do contador. Recebimentos e repasses pela data do pagamento; NFS-e pela data de emissão;
+        honorários pelo regime das Configurações (competência: data da nota ou da conclusão; caixa: data do recebimento)."""
+        regime = _regime(cur)
         dq = "(r.quando AT TIME ZONE 'America/Sao_Paulo')::date"
-        # recebimentos do mês (regime de caixa — é o que a prefeitura cruza com a maquininha)
-        cur.execute("""SELECT r.*, f.nome AS forma, c.nome AS conta, o.numero, cl.nome AS cliente_nome, """ + dq + """ AS dia
+        cur.execute("""SELECT r.*, f.nome AS forma, c.nome AS conta, o.numero, o.id AS oid, cl.nome AS cliente_nome, """ + dq + """ AS dia
                        FROM os_recebimentos r JOIN ordens_servico o ON o.id = r.os_id
                        LEFT JOIN formas_pgto f ON f.id = r.forma_pgto_id LEFT JOIN contas c ON c.id = r.conta_id
                        LEFT JOIN clientes cl ON cl.id = o.cliente_id
                        WHERE o.excluida_em IS NULL AND r.status IN ('confirmado','pendente') AND """ + dq + """ BETWEEN %s AND %s
                        ORDER BY r.quando, r.id""", (ini, fim))
-        receb, por_forma, pend = [], {}, 0.0
+        receb, por_forma, pend, rec_os, cartoes = [], {}, 0.0, {}, []
         for x in cur.fetchall():
             v = _f(x['valor']); tp = _forma_tipo(x['forma'])
             rot = {"pix": "PIX", "dinheiro": "DINHEIRO", "outro": (x['forma'] or 'OUTROS').upper()}.get(tp) or \
                   ("CARTÃO %s — %s" % ("DÉBITO" if tp == 'debito' else "CRÉDITO", (x['maquininha'] or 'SEM MAQUININHA').upper()))
             if x['status'] == 'confirmado':
                 por_forma[rot] = round(por_forma.get(rot, 0) + v, 2)
+                rec_os[x['oid']] = rec_os.get(x['oid'], 0) + v
+                if tp in ('debito', 'credito'):
+                    cartoes.append({"oid": x['oid'], "os": x['numero'], "cliente": x['cliente_nome'] or '',
+                                    "maquininha": (x['maquininha'] or 'SEM MAQUININHA').upper(), "valor": v})
             else:
                 pend += v
             receb.append({"data": _d(x['dia']), "os": x['numero'], "cliente": x['cliente_nome'] or '', "forma": x['forma'] or '',
@@ -2475,24 +2553,44 @@ def registrar(app, db, login_required):
             reps.append({"data": _d(x['data']), "os": x['numero'], "cliente": x['cliente_nome'] or '', "item": x['descricao'] or '',
                          "categoria": cat, "orgao": x['orgao'] or '', "documento": x['documento'] or '',
                          "conta": x['conta'] or '', "valor": v, "comprovante": bool(x['arquivo_id'])})
-        # OS abertas no mês
-        cur.execute("""SELECT o.*, c.nome AS cliente_nome, c.cpf_cnpj AS cliente_doc, v.placa, pt.nome AS tipo_nome, """ + SQL_TOTAIS + """
-                       FROM ordens_servico o LEFT JOIN clientes c ON c.id = o.cliente_id
-                       LEFT JOIN veiculos v ON v.id = o.veiculo_id LEFT JOIN processo_tipos pt ON pt.id = o.processo_tipo_id
-                       WHERE o.excluida_em IS NULL AND o.status NOT IN ('orcamento','cancelada')
-                         AND o.data_abertura::date BETWEEN %s AND %s ORDER BY o.data_abertura, o.numero""", (ini, fim))
+        # OS do mês conforme o regime
+        base_sql = """COALESCE(CASE WHEN o.nf_status = 'emitida' THEN o.nf_data END,
+                                (o.concluida_em AT TIME ZONE 'America/Sao_Paulo')::date)"""
+        sel = """SELECT o.*, c.nome AS cliente_nome, c.cpf_cnpj AS cliente_doc, v.placa, pt.nome AS tipo_nome,
+                        """ + base_sql + """ AS data_base, """ + SQL_TOTAIS + """
+                 FROM ordens_servico o LEFT JOIN clientes c ON c.id = o.cliente_id
+                 LEFT JOIN veiculos v ON v.id = o.veiculo_id LEFT JOIN processo_tipos pt ON pt.id = o.processo_tipo_id
+                 WHERE o.excluida_em IS NULL AND o.status NOT IN ('orcamento','cancelada') AND """
+        if regime == 'caixa':
+            if rec_os:
+                cur.execute(sel + "o.id = ANY(%s) ORDER BY o.numero", (list(rec_os.keys()),))
+                linhas_os = cur.fetchall()
+            else:
+                linhas_os = []
+        else:
+            cur.execute(sel + base_sql + " BETWEEN %s AND %s ORDER BY " + base_sql + ", o.numero", (ini, fim))
+            linhas_os = cur.fetchall()
         oss = []
-        for r in cur.fetchall():
+        for r in linhas_os:
             o = _nota_de(cur, r)
-            oss.append({"os": o['numero'], "data": (_d(r['data_abertura']) or '')[:10], "cliente": r['cliente_nome'] or '',
+            rec_m = round(rec_os.get(r['id'], 0), 2)
+            fr = 1.0
+            if regime == 'caixa':
+                fr = min(1.0, rec_m / o['total']) if o['total'] > 0.004 else 0.0
+            oss.append({"os": o['numero'], "data": (_d(r['data_abertura']) or '')[:10],
+                        "conclusao": (_d(r['concluida_em']) or '')[:10] if r.get('concluida_em') else '',
+                        "data_base": _d(r['data_base']) if r.get('data_base') else '',
+                        "cliente": r['cliente_nome'] or '',
                         "cpf_cnpj": r['cliente_doc'] or '', "placa": r['placa'] or '', "tipo": r['tipo_nome'] or '',
                         "status": STATUS_OS.get(o['status'], o['status']), "total": o['total'],
-                        "repasse": o['repasse_total'], "receita": o['receita'], "acrescimo": o['acrescimo'],
-                        "retorno": o['retorno'], "custo_maquininha": o['maquininha_custo'], "nota_sugerida": o['nota_valor'],
+                        "repasse": round(o['repasse_total'] * fr, 2), "receita": round(o['receita'] * fr, 2),
+                        "receita_total": o['receita'], "acrescimo": round(o['acrescimo'] * fr, 2),
+                        "retorno": round(o['retorno'] * fr, 2), "custo_maquininha": round(o['maquininha_custo'] * fr, 2),
+                        "nota_sugerida": o['nota_valor'], "recebido_mes": rec_m,
                         "nf_status": NF_STATUS.get(o['nf_status'], 'PENDENTE'), "nf_numero": o.get('nf_numero') or '',
                         "nf_valor": _f(r['nf_valor']) if r['nf_valor'] is not None else None,
                         "recebido": o['pago'], "devedor": o['devedor'], "hon_zero_motivo": r.get('hon_zero_motivo') or ''})
-        # NFS-e emitidas no mês (pela data da nota, qualquer OS)
+        # NFS-e emitidas no mês (pela data de emissão, qualquer OS)
         cur.execute("""SELECT o.numero, o.nf_numero, o.nf_data, o.nf_valor, c.nome AS cliente_nome FROM ordens_servico o
                        LEFT JOIN clientes c ON c.id = o.cliente_id
                        WHERE o.excluida_em IS NULL AND o.nf_status = 'emitida' AND o.nf_data BETWEEN %s AND %s
@@ -2500,9 +2598,11 @@ def registrar(app, db, login_required):
         nfs = [{"data": _d(x['nf_data']), "os": x['numero'], "cliente": x['cliente_nome'] or '', "nf_numero": x['nf_numero'],
                 "valor": _f(x['nf_valor']) if x['nf_valor'] is not None else 0.0} for x in cur.fetchall()]
         sem_nota = [x for x in oss if x['nota_sugerida'] > 0.004 and x['nf_status'] == 'PENDENTE']
-        hon_zero = [x for x in oss if x['nota_sugerida'] <= 0.004 and x['receita'] <= 0.004]
+        hon_zero = [x for x in oss if x['nota_sugerida'] <= 0.004 and x['receita_total'] <= 0.004]
+        dimp = _dimp(cur, cartoes)
         sm = lambda l, k: round(sum((x[k] or 0) for x in l), 2)
         resumo = {
+            "regime": regime, "regime_nome": REGIMES[regime],
             "os_qtd": len(oss), "os_total": sm(oss, 'total'), "repasses_os": sm(oss, 'repasse'),
             "honorarios": sm(oss, 'receita'), "acrescimos": sm(oss, 'acrescimo'), "retornos": sm(oss, 'retorno'),
             "custo_maquininha": sm(oss, 'custo_maquininha'), "nota_sugerida": sm(oss, 'nota_sugerida'),
@@ -2510,9 +2610,61 @@ def registrar(app, db, login_required):
             "aguardando_baixa": round(pend, 2), "repasses_pagos": sm(reps, 'valor'), "repasses_por_categoria": dict(sorted(rep_cat.items())),
             "repasses_sem_comprovante": len([x for x in reps if not x['comprovante']]),
             "nfs_emitidas_qtd": len(nfs), "nfs_emitidas_valor": sm(nfs, 'valor'),
-            "sem_nota_qtd": len(sem_nota), "sem_nota_valor": sm(sem_nota, 'nota_sugerida'), "hon_zero_qtd": len(hon_zero)}
+            "sem_nota_qtd": len(sem_nota), "sem_nota_valor": sm(sem_nota, 'nota_sugerida'), "hon_zero_qtd": len(hon_zero),
+            "dimp_bruto": dimp['total']['bruto'], "dimp_sem_explicacao": dimp['total']['sem_explicacao']}
         return {"resumo": resumo, "os": oss, "recebimentos": receb, "repasses": reps, "notas": nfs,
-                "sem_nota": sem_nota, "hon_zero": hon_zero}
+                "sem_nota": sem_nota, "hon_zero": hon_zero, "dimp": dimp}
+
+    def _dimp(cur, cartoes):
+        """Conferência DIMP: cartão bruto do mês por maquininha, explicado por repasse documentado (DUA/comprovante)
+        e por receita com NFS-e emitida; o resto fica sem explicação. Cada pagamento no cartão explica a parte
+        proporcional dele no total da OS (não supõe que o cartão pagou primeiro as taxas)."""
+        info = {}
+        for oid in {c['oid'] for c in cartoes}:
+            cur.execute("SELECT o.*, " + SQL_TOTAIS + " FROM ordens_servico o WHERE o.id = %s", (oid,))
+            r = cur.fetchone()
+            o = _nota_de(cur, r)
+            cur.execute("""SELECT COALESCE(SUM(i.custo*i.qtd),0) AS v FROM os_itens i
+                           WHERE i.os_id = %s AND i.natureza = 'repasse' AND (COALESCE(i.documento,'') <> '' OR EXISTS (
+                             SELECT 1 FROM os_repasse_pagtos p WHERE p.item_id = i.id
+                               AND (p.arquivo_id IS NOT NULL OR COALESCE(p.documento,'') <> '')))""", (oid,))
+            doc = _f(cur.fetchone()['v'])
+            cur.execute("""SELECT COALESCE(SUM(valor),0) AS v FROM os_repasse_pagtos WHERE os_id = %s AND item_id IS NULL
+                           AND (arquivo_id IS NOT NULL OR COALESCE(documento,'') <> '')""", (oid,))
+            doc += _f(cur.fetchone()['v'])
+            doc = min(doc, o['repasse_total']) if o['repasse_total'] > 0 else doc
+            emit = (o.get('nf_status') == 'emitida')
+            nota = (_f(r['nf_valor']) if r['nf_valor'] is not None else o['nota_valor']) if emit else 0.0
+            motivos = []
+            if o['repasse_total'] - doc > 0.004:
+                motivos.append("repasse sem DUA/comprovante (%s)" % _brl(o['repasse_total'] - doc))
+            if not emit and o['receita'] > 0.004:
+                motivos.append("sem NFS-e")
+            elif emit and o['nota_valor'] - nota > 0.004:
+                motivos.append("nota menor que o honorário")
+            info[oid] = {"total": o['total'], "doc": doc, "nota": nota, "motivos": motivos}
+        maqs = {m: {"maquininha": m, "bruto": 0.0, "repasse_doc": 0.0, "receita_nota": 0.0, "sem_explicacao": 0.0, "qtd": 0}
+                for m in MAQUININHAS}
+        por_os = {}
+        for c in cartoes:
+            i = info[c['oid']]; v = c['valor']
+            fr = v / i['total'] if i['total'] > 0.004 else 0.0
+            rp = min(v, i['doc'] * fr); nt = min(v - rp, i['nota'] * fr); se = max(0.0, v - rp - nt)
+            g = maqs.setdefault(c['maquininha'], {"maquininha": c['maquininha'], "bruto": 0.0, "repasse_doc": 0.0,
+                                                   "receita_nota": 0.0, "sem_explicacao": 0.0, "qtd": 0})
+            g['bruto'] += v; g['repasse_doc'] += rp; g['receita_nota'] += nt; g['sem_explicacao'] += se; g['qtd'] += 1
+            k = (c['os'], c['maquininha'])
+            e = por_os.setdefault(k, {"os": c['os'], "cliente": c['cliente'], "maquininha": c['maquininha'], "cartao": 0.0,
+                                      "repasse_doc": 0.0, "receita_nota": 0.0, "sem_explicacao": 0.0,
+                                      "motivo": "; ".join(i['motivos']) or "—"})
+            e['cartao'] += v; e['repasse_doc'] += rp; e['receita_nota'] += nt; e['sem_explicacao'] += se
+        arred = lambda d: {k: (round(v, 2) if isinstance(v, float) else v) for k, v in d.items()}
+        linhas = [arred(g) for g in maqs.values()]
+        tot = {"maquininha": "TOTAL", "qtd": sum(g['qtd'] for g in linhas)}
+        for k in ("bruto", "repasse_doc", "receita_nota", "sem_explicacao"):
+            tot[k] = round(sum(g[k] for g in linhas), 2)
+        os_l = sorted([arred(e) for e in por_os.values() if e['sem_explicacao'] > 0.004], key=lambda e: -e['sem_explicacao'])
+        return {"maquininhas": linhas, "total": tot, "os": os_l}
 
     @app.route("/api/relatorio-contador", methods=["GET"])
     @equipe
