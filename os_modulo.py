@@ -1547,6 +1547,19 @@ def registrar(app, db, login_required):
                            WHERE o.excluida_em IS NULL AND o.status IN ('andamento','detran','disponivel')
                            GROUP BY 1, 2 ORDER BY 3 DESC, 2""")
             por_tipo = [dict(r) for r in cur.fetchall()]
+            # OS abertas hoje (orçamento aprovado conta no dia em que virou OS) e quem abriu
+            dq = "(o.data_abertura AT TIME ZONE 'America/Sao_Paulo')::date"
+            cur.execute("""SELECT COALESCE(NULLIF(o.user_nome,''),'—') AS quem, COUNT(*) FILTER (WHERE o.status <> 'orcamento') AS os,
+                                  COUNT(*) FILTER (WHERE o.status = 'orcamento') AS orc
+                           FROM ordens_servico o WHERE o.excluida_em IS NULL AND """ + dq + " = " + HOJE_SQL + """
+                           GROUP BY 1 ORDER BY 2 DESC, 1""")
+            hj = [dict(r) for r in cur.fetchall()]
+            cur.execute("""SELECT COUNT(*) FILTER (WHERE """ + dq + " = " + HOJE_SQL + """ - 1) AS ontem,
+                                  COUNT(*) FILTER (WHERE date_trunc('month', """ + dq + ") = date_trunc('month', " + HOJE_SQL + """)) AS mes
+                           FROM ordens_servico o WHERE o.excluida_em IS NULL AND o.status <> 'orcamento'""")
+            oc = cur.fetchone()
+            abertas = {"hoje": sum(x['os'] for x in hj), "orcamentos_hoje": sum(x['orc'] for x in hj),
+                       "ontem": oc['ontem'], "mes": oc['mes'], "por_usuario": [x for x in hj if x['os'] or x['orc']]}
             pf_sql, pf_args = _pend_filtro(cur)
             cur.execute("""SELECT p.id, p.limite, p.lancado, p.descricao, p.responsavel, p.user_nome,
                                   t.nome AS tipo, o.numero, c.nome AS cliente_nome, v.placa
@@ -1579,7 +1592,7 @@ def registrar(app, db, login_required):
             recebido_hoje = _f(cur.fetchone()['v'])
             cur.execute("SELECT COUNT(*) AS n, COALESCE(SUM(valor),0) AS v FROM os_recebimentos WHERE status = 'pendente'")
             pb = cur.fetchone()
-        return jsonify({"por_status": por_status, "por_tipo": por_tipo, "pendencias": pend,
+        return jsonify({"por_status": por_status, "por_tipo": por_tipo, "pendencias": pend, "abertas": abertas,
                         "devedor_total": _f(dv['dev']), "devedor_qtd": dv['n'],
                         "recebido_hoje": recebido_hoje,
                         "baixa_pendente_qtd": pb['n'], "baixa_pendente_valor": _f(pb['v'])})

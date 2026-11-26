@@ -568,12 +568,17 @@ function osVer(v){
 }
 
 // ── painel (cards + pendências vencendo) ──
+function osFiltroHoje(){ var h=osHoje(); osE('os-de').value=h; osE('os-ate').value=h; osE('os-fst').value=''; osLista(); osE('os-tbody').scrollIntoView({behavior:'smooth'}); }
 function osPainel(){
   osApi('/api/os/painel').then(function(p){
     var s=p.por_status||{};
     var c=[['andamento','Em andamento','var(--warn)'],['detran','No Detran','var(--acc2)'],
            ['disponivel','Disponível p/ entrega','#c084fc'],['entregue','Entregue','var(--acc)'],['orcamento','Orçamentos','#b8bdc9']];
     var h='';
+    var ab=p.abertas||{hoje:0,por_usuario:[]};
+    h+='<div class="os-card" style="border-color:rgba(0,212,170,.5)" onclick="osFiltroHoje()" title="'+osEsc((ab.por_usuario||[]).map(function(u){ return u.quem+': '+u.os+' OS'+(u.orc?' + '+u.orc+' orç.':''); }).join(' · '))+'"><div class="v" style="color:var(--acc)">'+ab.hoje+'</div><div class="l">📅 OS abertas hoje'+
+       (ab.orcamentos_hoje?' · '+ab.orcamentos_hoje+' orç.':'')+'<br><span style="opacity:.8">ontem '+(ab.ontem||0)+' · mês '+(ab.mes||0)+'</span>'+
+       ((ab.por_usuario||[]).length?'<br><span style="opacity:.8">'+ab.por_usuario.map(function(u){ return osEsc(u.quem.split(' ')[0])+' '+u.os; }).join(' · ')+'</span>':'')+'</div></div>';
     c.forEach(function(x){ h+='<div class="os-card" onclick="osFiltroSt(\''+x[0]+'\')"><div class="v" style="color:'+x[2]+'">'+(s[x[0]]||0)+'</div><div class="l">'+x[1]+'</div></div>'; });
     var venc=(p.pendencias||[]).filter(function(x){return x.dias<0;}).length;
     h+='<div class="os-card" onclick="osFiltroDev()"><div class="v" style="color:var(--red);font-size:16px">'+osR(p.devedor_total)+'</div><div class="l">A receber ('+p.devedor_qtd+' OS)</div></div>';
