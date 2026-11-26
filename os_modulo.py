@@ -238,11 +238,19 @@ ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS nf_arquivo_id BIGINT REFEREN
 -- data em que a OS foi entregue/concluída (competência do honorário quando não há nota)
 ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS concluida_em TIMESTAMPTZ;
 ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS cancelada_em TIMESTAMPTZ;
+-- quando foi criada e se nasceu como orçamento (para o relatório por funcionário)
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS criado TIMESTAMPTZ;
+ALTER TABLE ordens_servico ALTER COLUMN criado SET DEFAULT NOW();
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS foi_orcamento BOOLEAN DEFAULT FALSE;
 -- OS cancelada com dinheiro recebido: quanto foi devolvido e quanto ficou retido (vira receita)
 ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS cancel_devolvido NUMERIC(12,2);
 ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS cancel_retido NUMERIC(12,2);
 CREATE OR REPLACE FUNCTION os_marca_conclusao() RETURNS trigger AS $$
 BEGIN
+  IF TG_OP = 'INSERT' THEN
+    NEW.foi_orcamento := (NEW.status = 'orcamento');
+    IF NEW.criado IS NULL THEN NEW.criado := NOW(); END IF;
+  END IF;
   IF NEW.status IN ('entregue','concluida') THEN
     IF NEW.concluida_em IS NULL THEN NEW.concluida_em := NOW(); END IF;
   ELSE
@@ -842,6 +850,13 @@ def registrar(app, db, login_required):
                     if not cur.fetchone():
                         cur.execute("INSERT INTO processo_tipos (nome) VALUES (%s)", (n,))
                 cur.execute("INSERT INTO migracoes (nome) VALUES ('os_fiscal_v2')")
+            cur.execute("SELECT 1 FROM migracoes WHERE nome = 'os_func_v1'")
+            if not cur.fetchone():
+                cur.execute("""UPDATE ordens_servico o SET
+                                 criado = COALESCE(o.criado, (SELECT MIN(x.quando) FROM os_ocorrencias x WHERE x.os_id = o.id), o.data_abertura),
+                                 foi_orcamento = (o.status = 'orcamento' OR EXISTS (SELECT 1 FROM os_ocorrencias x WHERE x.os_id = o.id
+                                                  AND x.descricao LIKE 'Orçamento aprovado%%'))""", ())
+                cur.execute("INSERT INTO migracoes (nome) VALUES ('os_func_v1')")
             cur.execute("SELECT 1 FROM migracoes WHERE nome = 'os_fiscal_v4'")
             if not cur.fetchone():
                 cur.execute("""UPDATE ordens_servico o SET cancelada_em = COALESCE(o.atualizado, o.data_abertura)
@@ -3415,6 +3430,139 @@ def registrar(app, db, login_required):
             cur.execute("DELETE FROM extrato_linhas WHERE lote = %s", (lote,))
             n = cur.rowcount
         return jsonify({"ok": True, "apagadas": n})
+
+    # ── RELATÓRIO POR FUNCIONÁRIO: OS e orçamentos abertos, faturamento e lucro ──
+    def _rel_func(cur, de, ate, quem=None):
+        dq = lambda c: "(%s AT TIME ZONE 'America/Sao_Paulo')::date" % c
+        nome = "COALESCE(NULLIF(o.user_nome,''),'(sem nome)')"
+        cur.execute("""SELECT o.*, """ + nome + """ AS quem, """ + dq('o.data_abertura') + """ AS dia_ab, """ + dq('o.criado') + """ AS dia_cr,
+                              c.nome AS cliente_nome, v.placa, pt.nome AS tipo_nome, """ + SQL_TOTAIS + """
+                       FROM ordens_servico o LEFT JOIN clientes c ON c.id = o.cliente_id LEFT JOIN veiculos v ON v.id = o.veiculo_id
+                       LEFT JOIN processo_tipos pt ON pt.id = o.processo_tipo_id
+                       WHERE o.excluida_em IS NULL AND ((""" + dq('o.data_abertura') + """ BETWEEN %s AND %s)
+                              OR (o.foi_orcamento AND """ + dq('o.criado') + """ BETWEEN %s AND %s))""" +
+                    (" AND " + nome + " = %s" if quem else ""), [de, ate, de, ate] + ([quem] if quem else []))
+        F, dias, oss = {}, {}, []
+        dentro = lambda d: d is not None and de <= d <= ate
+        for r in cur.fetchall():
+            o = _os_saida(r); q = r['quem']
+            f = F.setdefault(q, {"quem": q, "os": 0, "orc_feitos": 0, "orc_aprovados": 0, "orc_abertos": 0, "concluidas": 0, "canceladas": 0,
+                                 "faturamento": 0.0, "repasse": 0.0, "honorarios": 0.0, "lucro": 0.0})
+            if r['foi_orcamento'] and dentro(r['dia_cr']):
+                f['orc_feitos'] += 1
+                dias.setdefault(_d(r['dia_cr']), {}).setdefault(q, {"os": 0, "orc": 0})['orc'] += 1
+                if r['status'] == 'orcamento':
+                    f['orc_abertos'] += 1
+            if r['status'] == 'orcamento' or not dentro(r['dia_ab']):
+                continue
+            f['os'] += 1
+            dias.setdefault(_d(r['dia_ab']), {}).setdefault(q, {"os": 0, "orc": 0})['os'] += 1
+            if r['foi_orcamento']:
+                f['orc_aprovados'] += 1
+            if r['status'] in ('entregue', 'concluida'):
+                f['concluidas'] += 1
+            canc = r['status'] == 'cancelada'
+            if canc:
+                f['canceladas'] += 1
+            fat = 0.0 if canc else o['total']
+            rep_ = 0.0 if canc else o['repasse_total']
+            hon = o['receita']                      # cancelada: valor retido
+            luc = o['receita'] if canc else o['lucro']
+            f['faturamento'] += fat; f['repasse'] += rep_; f['honorarios'] += hon; f['lucro'] += luc
+            oss.append({"os": o['numero'], "data": _d(r['dia_ab']), "quem": q, "cliente": r['cliente_nome'] or '', "placa": r['placa'] or '',
+                        "tipo": r['tipo_nome'] or '', "status": STATUS_OS.get(r['status'], r['status']), "orcamento": bool(r['foi_orcamento']),
+                        "total": round(fat, 2), "repasse": round(rep_, 2), "honorarios": round(hon, 2), "lucro": round(luc, 2),
+                        "pago": o['pago'], "devedor": o['devedor']})
+        linhas = []
+        for f in F.values():
+            for k in ('faturamento', 'repasse', 'honorarios', 'lucro'):
+                f[k] = round(f[k], 2)
+            ativas = f['os'] - f['canceladas']
+            f['ticket'] = round(f['faturamento'] / ativas, 2) if ativas else 0.0
+            f['lucro_medio'] = round(f['lucro'] / f['os'], 2) if f['os'] else 0.0
+            f['conversao'] = round(100.0 * f['orc_aprovados'] / f['orc_feitos'], 1) if f['orc_feitos'] else None
+            linhas.append(f)
+        linhas.sort(key=lambda x: (-x['lucro'], x['quem']))
+        tot = {k: (round(sum(x[k] for x in linhas), 2) if isinstance(linhas[0][k], float) else sum(x[k] for x in linhas))
+               for k in ('os', 'orc_feitos', 'orc_aprovados', 'orc_abertos', 'concluidas', 'canceladas', 'faturamento', 'repasse', 'honorarios', 'lucro')} if linhas else {}
+        por_dia = [{"dia": k, "por": v} for k, v in sorted(dias.items())]
+        oss.sort(key=lambda x: (x['data'], x['os']))
+        return {"linhas": linhas, "total": tot, "por_dia": por_dia, "os": oss, "quem": sorted(F.keys())}
+
+    def _func_args():
+        de, ate = _data(request.args.get("de")), _data(request.args.get("ate"))
+        h = _hoje()
+        de = de or h.replace(day=1); ate = ate or h
+        if ate < de:
+            de, ate = ate, de
+        return de, ate
+
+    @app.route("/api/relatorio-funcionarios", methods=["GET"])
+    @equipe
+    def relatorio_funcionarios():
+        de, ate = _func_args()
+        with db() as cur:
+            if not _perms(cur)['ver_lucro']:
+                return jsonify({"erro": "Só quem vê o lucro puxa o relatório por funcionário."}), 403
+            r = _rel_func(cur, de, ate, request.args.get("quem") or None)
+        r.update({"de": _d(de), "ate": _d(ate)})
+        return jsonify(r)
+
+    @app.route("/api/relatorio-funcionarios.xlsx", methods=["GET"])
+    @equipe
+    def relatorio_funcionarios_xlsx():
+        from io import BytesIO
+        from flask import send_file
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill
+        from openpyxl.utils import get_column_letter
+        de, ate = _func_args()
+        with db() as cur:
+            if not _perms(cur)['ver_lucro']:
+                return jsonify({"erro": "Sem permissão."}), 403
+            r = _rel_func(cur, de, ate, request.args.get("quem") or None)
+        wb = Workbook(); moeda = '#,##0.00'
+        hf, hb = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="1F3864")
+        def aba(ws, titulo, cols, dados, tot=None):
+            ws["A1"] = titulo; ws["A1"].font = Font(bold=True, size=12, color="1F3864")
+            ws["A2"] = "Período: %s a %s" % (de.strftime('%d/%m/%Y'), ate.strftime('%d/%m/%Y'))
+            for j, (t, k, w, f) in enumerate(cols, 1):
+                c = ws.cell(4, j, t); c.font = hf; c.fill = hb; ws.column_dimensions[get_column_letter(j)].width = w
+            for i, x in enumerate(dados, 5):
+                for j, (t, k, w, f) in enumerate(cols, 1):
+                    v = x.get(k)
+                    if k == 'data' and v: v = datetime.strptime(v, "%Y-%m-%d").date()
+                    if isinstance(v, bool): v = "SIM" if v else ""
+                    c = ws.cell(i, j, v)
+                    if f == 'm': c.number_format = moeda
+                    if k == 'data': c.number_format = 'DD/MM/YYYY'
+            if tot is not None and dados:
+                t = len(dados) + 5; ws.cell(t, 1, "TOTAL").font = Font(bold=True)
+                for j, (tt, k, w, f) in enumerate(cols, 1):
+                    if f in ('m', 'n') and j > 1:
+                        L = get_column_letter(j); c = ws.cell(t, j, "=SUM(%s5:%s%d)" % (L, L, t - 1)); c.font = Font(bold=True)
+                        if f == 'm': c.number_format = moeda
+            ws.freeze_panes = "A5"
+        ws = wb.active; ws.title = "Por funcionário"
+        aba(ws, "Relatório por funcionário — OS, orçamentos e lucro",
+            [("Funcionário", "quem", 24, ''), ("OS abertas", "os", 11, 'n'), ("Orçamentos feitos", "orc_feitos", 12, 'n'),
+             ("Orçamentos aprovados", "orc_aprovados", 13, 'n'), ("Conversão %", "conversao", 11, ''), ("Concluídas", "concluidas", 11, 'n'),
+             ("Canceladas", "canceladas", 11, 'n'), ("Faturamento", "faturamento", 14, 'm'), ("Taxas (repasse)", "repasse", 14, 'm'),
+             ("Honorários", "honorarios", 14, 'm'), ("Lucro", "lucro", 14, 'm'), ("Ticket médio", "ticket", 13, 'm'),
+             ("Lucro médio por OS", "lucro_medio", 14, 'm')], r['linhas'], True)
+        nomes = r['quem']
+        dias = [dict({"data": d['dia']}, **{("os_" + q): d['por'].get(q, {}).get('os', 0) for q in nomes},
+                     **{("orc_" + q): d['por'].get(q, {}).get('orc', 0) for q in nomes}) for d in r['por_dia']]
+        aba(wb.create_sheet("Por dia"), "OS e orçamentos abertos por dia",
+            [("Dia", "data", 11, 'd')] + [("OS — " + q, "os_" + q, 14, 'n') for q in nomes] + [("Orç. — " + q, "orc_" + q, 14, 'n') for q in nomes], dias, True)
+        aba(wb.create_sheet("OS"), "OS do período (data de abertura)",
+            [("OS", "os", 8, ''), ("Data", "data", 11, 'd'), ("Funcionário", "quem", 20, ''), ("Cliente", "cliente", 28, ''), ("Placa", "placa", 10, ''),
+             ("Tipo", "tipo", 22, ''), ("Situação", "status", 14, ''), ("Veio de orçamento", "orcamento", 10, ''), ("Total", "total", 12, 'm'),
+             ("Taxas", "repasse", 12, 'm'), ("Honorários", "honorarios", 12, 'm'), ("Lucro", "lucro", 12, 'm'), ("Pago", "pago", 12, 'm'),
+             ("Em aberto", "devedor", 12, 'm')], r['os'], True)
+        bio = BytesIO(); wb.save(bio); bio.seek(0)
+        return send_file(bio, as_attachment=True, download_name="funcionarios_%s_%s.xlsx" % (de.strftime('%Y%m%d'), ate.strftime('%Y%m%d')),
+                         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     # ── RELATÓRIO MENSAL DO CONTADOR ───────────────────────────
     def _mes_args():

@@ -352,6 +352,7 @@ input[type=date].os-dt,.fg input[type=date]{color-scheme:dark}
       <button id="osf-b-nf" class="os-nfp" style="display:none" onclick="osFinAba('nf')">🧾 Notas fiscais</button>
       <button id="osf-b-cont" class="os-vlp" style="display:none" onclick="osFinAba('cont')">📊 Relatório do contador</button>
       <button id="osf-b-extr" style="display:none" onclick="osFinAba('extr')">🏦 Extrato e conciliação</button>
+      <button id="osf-b-func" style="display:none" onclick="osFinAba('func')">👥 Funcionários</button>
       <button id="osf-b-cad" onclick="osFinAba('cad')">Cadastros (tipos de processo, contas, formas, centros)</button>
     </div>
     <div id="osf-nf" style="display:none">
@@ -383,6 +384,21 @@ input[type=date].os-dt,.fg input[type=date]{color-scheme:dark}
       </div>
       <div style="margin:-4px 0 10px"><button class="os-b pri" onclick="osExtrLista()">Filtrar</button></div>
       <div id="osx-res"></div>
+    </div>
+    <div id="osf-func" style="display:none">
+      <div class="os-box"><h4>👥 Relatório por funcionário — OS, orçamentos e lucro</h4>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          <button class="os-b" onclick="osFuncPer('hoje')">📅 Hoje</button><button class="os-b" onclick="osFuncPer('ontem')">Ontem</button>
+          <button class="os-b" onclick="osFuncPer('mes')">Este mês</button><button class="os-b" onclick="osFuncPer('mesant')">Mês passado</button></div>
+        <div class="os-g4">
+          <div class="fg"><label>De</label><input type="date" id="osfu-de"></div>
+          <div class="fg"><label>Até</label><input type="date" id="osfu-ate"></div>
+          <div class="fg"><label>Funcionário</label><select id="osfu-quem"><option value="">Todos</option></select></div>
+          <div class="fg" style="flex-direction:row;gap:6px;align-items:flex-end"><button class="os-b pri" onclick="osFuncLista()">Ver</button><button class="os-b" onclick="osFuncPdf()">📄 PDF</button><button class="os-b" onclick="osFuncXls()">⬇ Excel</button></div>
+        </div>
+        <p class="cfg-note" style="margin:4px 0 0">OS contam no dia em que foram abertas (orçamento aprovado conta no dia em que virou OS) para quem abriu. Lucro = honorário + o que foi cobrado acima do valor real das taxas − desconto. OS cancelada só conta o valor retido.</p>
+      </div>
+      <div id="osfu-res"></div>
     </div>
     <div id="osf-cont" style="display:none">
       <div class="os-box"><h4>Relatório mensal para o contador</h4>
@@ -573,7 +589,7 @@ function osPainel(){
   osApi('/api/os/painel').then(function(p){
     var s=p.por_status||{};
     var c=[['andamento','Em andamento','var(--warn)'],['detran','No Detran','var(--acc2)'],
-           ['disponivel','Disponível p/ entrega','#c084fc'],['entregue','Entregue','var(--acc)'],['orcamento','Orçamentos','#b8bdc9']];
+           ['disponivel','Disponível p/ entrega','#c084fc'],['entregue','Entregue','var(--acc)']];
     var h='';
     var ab=p.abertas||{hoje:0,por_usuario:[]};
     h+='<div class="os-card" style="border-color:rgba(0,212,170,.5)" onclick="osFiltroHoje()" title="'+osEsc((ab.por_usuario||[]).map(function(u){ return u.quem+': '+u.os+' OS'+(u.orc?' + '+u.orc+' orç.':''); }).join(' · '))+'"><div class="v" style="color:var(--acc)">'+ab.hoje+'</div><div class="l">📅 OS abertas hoje'+
@@ -2165,6 +2181,61 @@ function osNfLista(){
   }).catch(osErr);
 }
 
+// ── RELATÓRIO POR FUNCIONÁRIO ──
+function osFuncPer(p,sem){
+  var h=osHoje(), d=new Date(h+'T12:00:00'), de=h, ate=h, iso=function(x){ return x.toISOString().slice(0,10); };
+  if(p==='ontem'){ d.setDate(d.getDate()-1); de=ate=iso(d); }
+  if(p==='mes'){ de=h.slice(0,8)+'01'; }
+  if(p==='mesant'){ var a=new Date(d.getFullYear(),d.getMonth()-1,1,12), b=new Date(d.getFullYear(),d.getMonth(),0,12); de=iso(a); ate=iso(b); }
+  osE('osfu-de').value=de; osE('osfu-ate').value=ate; if(!sem) osFuncLista();
+}
+function osFuncQ(){ return '?de='+osE('osfu-de').value+'&ate='+osE('osfu-ate').value+(osE('osfu-quem').value?'&quem='+encodeURIComponent(osE('osfu-quem').value):''); }
+function osFuncLista(){
+  osApi('/api/relatorio-funcionarios'+osFuncQ()).then(function(r){
+    OS.ultFunc=r;
+    var sel=osE('osfu-quem'), cur=sel.value, nomes=r.quem.slice();
+    if(cur && nomes.indexOf(cur)<0) nomes.push(cur);
+    sel.innerHTML='<option value="">Todos</option>'+nomes.map(function(q){ return '<option'+(q===cur?' selected':'')+'>'+osEsc(q)+'</option>'; }).join('');
+    var per=osBr(r.de)+(r.ate!==r.de?' a '+osBr(r.ate):'');
+    if(!r.linhas.length){ osE('osfu-res').innerHTML='<div class="os-box os-vazio">Nenhuma OS ou orçamento em '+per+'.</div>'; return; }
+    var t=r.total, h='<div class="os-box"><h4>'+per+'</h4><div class="table-wrap" style="margin:0"><table><thead><tr><th>Funcionário</th><th style="text-align:right">OS abertas</th><th style="text-align:right">Orçamentos feitos</th><th style="text-align:right">Aprovados</th><th style="text-align:right">Concluídas</th><th style="text-align:right">Canceladas</th><th style="text-align:right">Faturamento</th><th style="text-align:right">Honorários</th><th style="text-align:right">Lucro 🔒</th><th style="text-align:right">Lucro médio/OS</th></tr></thead><tbody>';
+    r.linhas.forEach(function(x){
+      h+='<tr style="cursor:pointer" onclick="osE(\'osfu-quem\').value=\''+osEsc(x.quem).replace(/'/g,"\\'")+'\';osFuncLista()"><td><b>'+osEsc(x.quem)+'</b></td><td class="os-money">'+x.os+'</td><td class="os-money">'+x.orc_feitos+(x.orc_abertos?'<div class="os-small">'+x.orc_abertos+' ainda aberto(s)</div>':'')+'</td>'+
+        '<td class="os-money">'+x.orc_aprovados+(x.conversao!=null?'<div class="os-small">'+String(x.conversao).replace('.',',')+'%</div>':'')+'</td><td class="os-money">'+x.concluidas+'</td><td class="os-money">'+(x.canceladas||'')+'</td>'+
+        '<td class="os-money">'+osN(x.faturamento)+'</td><td class="os-money">'+osN(x.honorarios)+'</td><td class="os-money" style="color:var(--acc);font-weight:700">'+osN(x.lucro)+'</td><td class="os-money">'+osN(x.lucro_medio)+'</td></tr>'; });
+    if(r.linhas.length>1) h+='<tr class="os-soma"><td>TOTAL</td><td class="os-money">'+t.os+'</td><td class="os-money">'+t.orc_feitos+'</td><td class="os-money">'+t.orc_aprovados+'</td><td class="os-money">'+t.concluidas+'</td><td class="os-money">'+(t.canceladas||'')+'</td><td class="os-money">'+osN(t.faturamento)+'</td><td class="os-money">'+osN(t.honorarios)+'</td><td class="os-money">'+osN(t.lucro)+'</td><td></td></tr>';
+    h+='</tbody></table></div><div class="os-small" style="margin-top:6px">Clique num funcionário para ver só as OS dele.</div></div>';
+    if(r.por_dia.length>1){
+      h+='<div class="os-box"><h4>Por dia — OS / orçamentos abertos</h4><div class="table-wrap" style="margin:0"><table><thead><tr><th>Dia</th>'+r.quem.map(function(q){ return '<th style="text-align:right">'+osEsc(q.split(' ')[0])+'</th>'; }).join('')+'<th style="text-align:right">Total</th></tr></thead><tbody>'+
+        r.por_dia.map(function(d){ var so=0, sr=0; return '<tr><td>'+osBr(d.dia)+'</td>'+r.quem.map(function(q){ var v=d.por[q]||{os:0,orc:0}; so+=v.os; sr+=v.orc; return '<td class="os-money">'+(v.os||v.orc?v.os+(v.orc?' <span class="os-small">/ '+v.orc+' orç.</span>':''):'<span class="os-small">—</span>')+'</td>'; }).join('')+'<td class="os-money"><b>'+so+'</b>'+(sr?' <span class="os-small">/ '+sr+' orç.</span>':'')+'</td></tr>'; }).join('')+'</tbody></table></div></div>';
+    }
+    if(r.os.length){
+      h+='<div class="os-box"><h4>OS do período ('+r.os.length+')</h4><div class="table-wrap" style="margin:0"><table><thead><tr><th>OS</th><th>Data</th><th>Funcionário</th><th>Cliente</th><th>Placa</th><th>Situação</th><th style="text-align:right">Total</th><th style="text-align:right">Honorários</th><th style="text-align:right">Lucro</th></tr></thead><tbody>'+
+        r.os.map(function(x){ return '<tr style="cursor:pointer" onclick="osAbrir('+x.os+')"><td class="os-num">'+x.os+(x.orcamento?' <span class="os-small" title="veio de orçamento">orç.</span>':'')+'</td><td>'+osBr(x.data)+'</td><td>'+osEsc(x.quem)+'</td><td>'+osEsc(x.cliente)+'</td><td>'+osEsc(x.placa)+'</td><td>'+osEsc(x.status)+'</td><td class="os-money">'+osN(x.total)+'</td><td class="os-money">'+osN(x.honorarios)+'</td><td class="os-money" style="color:var(--acc)">'+osN(x.lucro)+'</td></tr>'; }).join('')+'</tbody></table></div></div>';
+    }
+    osE('osfu-res').innerHTML=h;
+  }).catch(osErr);
+}
+function osFuncXls(){ osBaixar('/api/relatorio-funcionarios.xlsx'+osFuncQ(),'funcionarios_'+osE('osfu-de').value+'_'+osE('osfu-ate').value+'.xlsx').then(function(){ osMsg('✓ Excel baixado.'); }).catch(osErr); }
+function osFuncPdf(){
+  if(!window.jspdf){ osMsg('Gerador de PDF ainda carregando, tente de novo em instantes.','err'); return; }
+  osApi('/api/relatorio-funcionarios'+osFuncQ()).then(function(r){
+    if(!r.linhas.length){ osMsg('Nada no período.','warn'); return; }
+    var S=rqNovoDeitado(), per=osBr(r.de)+(r.ate!==r.de?' a '+osBr(r.ate):''), t=r.total;
+    rqTopo(S,'DIEGO DESPACHANTE  ·  USO INTERNO','RELATÓRIO POR FUNCIONÁRIO','Período '+per+(osE('osfu-quem').value?' · '+osE('osfu-quem').value:''));
+    rqTabela(S,[{t:'Funcionário',w:46},{t:'OS',w:16,r:1},{t:'Orç. feitos',w:20,r:1},{t:'Aprovados',w:20,r:1},{t:'Concluídas',w:20,r:1},{t:'Canceladas',w:20,r:1},{t:'Faturamento',w:30,r:1},{t:'Honorários',w:28,r:1},{t:'Lucro',w:28,r:1},{t:'Lucro médio/OS',w:41,r:1}],
+      r.linhas.map(function(x){ return [x.quem,String(x.os),String(x.orc_feitos),String(x.orc_aprovados)+(x.conversao!=null?' ('+String(x.conversao).replace('.',',')+'%)':''),String(x.concluidas),String(x.canceladas||0),osN(x.faturamento),osN(x.honorarios),'**'+osN(x.lucro)+'**',osN(x.lucro_medio)]; })
+      .concat(r.linhas.length>1?[['**TOTAL**','**'+t.os+'**','**'+t.orc_feitos+'**','**'+t.orc_aprovados+'**','**'+t.concluidas+'**','**'+(t.canceladas||0)+'**','**'+osN(t.faturamento)+'**','**'+osN(t.honorarios)+'**','**'+osN(t.lucro)+'**','']]:[]));
+    if(r.por_dia.length>1){ rqTitulo(S,'POR DIA — OS ABERTAS (ORÇAMENTOS)');
+      var w=Math.max(18,Math.min(40,Math.floor(229/(r.quem.length+1))));
+      rqTabela(S,[{t:'Dia',w:22}].concat(r.quem.map(function(q){ return {t:q.split(' ')[0],w:w,r:1}; })).concat([{t:'Total',w:w,r:1}]),
+        r.por_dia.map(function(d){ var so=0,sr=0; return [osBr(d.dia)].concat(r.quem.map(function(q){ var v=d.por[q]||{os:0,orc:0}; so+=v.os; sr+=v.orc; return v.os+(v.orc?' ('+v.orc+')':''); })).concat(['**'+so+(sr?' ('+sr+')':'')+'**']); }),{sz:7.8}); }
+    rqTitulo(S,'OS DO PERÍODO');
+    rqTabela(S,[{t:'OS',w:14},{t:'Data',w:18},{t:'Funcionário',w:32},{t:'Cliente',w:50},{t:'Placa',w:17},{t:'Situação',w:26},{t:'Total',w:26,r:1},{t:'Taxas',w:26,r:1},{t:'Honorários',w:27,r:1},{t:'Lucro',w:33,r:1}],
+      r.os.map(function(x){ return [String(x.os),osBr(x.data),x.quem,x.cliente,x.placa,x.status,osN(x.total),osN(x.repasse),osN(x.honorarios),osN(x.lucro)]; }),{sz:7.6});
+    rqRodape(S); S.doc.save('funcionarios_'+r.de+'_'+r.ate+'.pdf'); osMsg('✓ PDF gerado.');
+  }).catch(osErr);
+}
 // ── RELATÓRIO DO CONTADOR ──
 function osContMes(){ var m=osE('osf-ct-mes').value; if(!m){ osMsg('Escolha o mês.','err'); return null; } return m; }
 function osContResumo(){
@@ -3014,12 +3085,13 @@ function osSvEditSalvar(id){
 // ── FINANCEIRO ──
 function osFinAba(a){
   OS.finAba=a;
-  osE('osf-b-nf').style.display=(osVL()||osBX())?'':'none'; osE('osf-b-cont').style.display=osVL()?'':'none'; osE('osf-b-extr').style.display=(osVL()||osBX())?'':'none';
-  ['extrato','nf','cont','extr','cad'].forEach(function(k){ osE('osf-b-'+k).classList.toggle('on',a===k); osE('osf-'+k).style.display=a===k?'':'none'; });
+  osE('osf-b-nf').style.display=(osVL()||osBX())?'':'none'; osE('osf-b-cont').style.display=osVL()?'':'none'; osE('osf-b-extr').style.display=(osVL()||osBX())?'':'none'; osE('osf-b-func').style.display=osVL()?'':'none';
+  ['extrato','nf','cont','extr','func','cad'].forEach(function(k){ osE('osf-b-'+k).classList.toggle('on',a===k); osE('osf-'+k).style.display=a===k?'':'none'; });
   var c=OS.cad;
   osAdiantAlerta();
   if(a==='nf'){ osNfLista(); return; }
   if(a==='extr'){ osExtrPrep(); return; }
+  if(a==='func'){ if(!osE('osfu-de').value) osFuncPer('mes',true); osFuncLista(); return; }
   if(a==='cont'){ if(!osE('osf-ct-mes').value) osE('osf-ct-mes').value=osHoje().slice(0,7); osContResumo(); return; }
   if(a==='extrato'){
     if(!osE('osf-de').value){ var h=osHoje(); osE('osf-de').value=h.slice(0,8)+'01'; osE('osf-ate').value=h; }
