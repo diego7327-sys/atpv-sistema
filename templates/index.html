@@ -1285,7 +1285,7 @@ function acRenderPessoa(lista, pref, dropId){
   lista.forEach(function(p,i){
     var div=document.createElement('div');
     div.className='ac-item';
-    div.innerHTML='<div class="ac-nome">'+(p.nome||'')+'</div><div class="ac-meta">'+(p.cpf||'')+'</div>';
+    div.innerHTML='<div class="ac-nome">'+(p.nome||'')+'</div><div class="ac-meta">'+(p.cpf||'')+(p.cel?' · '+p.cel:'')+({cliente:' · cadastro de clientes',recurso:' · recursos de multa/CNH'}[p.origem]||'')+'</div>';
     div.setAttribute('data-i', i);
     div.setAttribute('data-pref', pref);
     drop.appendChild(div);
@@ -1308,7 +1308,7 @@ function acRenderVeiculo(lista, dropId){
   lista.forEach(function(v,i){
     var div=document.createElement('div');
     div.className='ac-item';
-    div.innerHTML='<div class="ac-nome">'+v.placa+' — '+(v.modelo||'')+'</div><div class="ac-meta">'+(v.ano||'')+(v.chassi?' · '+v.chassi:'')+'</div>';
+    div.innerHTML='<div class="ac-nome">'+v.placa+' — '+(v.modelo||'')+'</div><div class="ac-meta">'+[v.ano||'',v.chassi||'',v.prop_nome?'prop.: '+v.prop_nome:'',v.origem==='recurso'?'recursos de multa/CNH':''].filter(Boolean).join(' · ')+'</div>';
     div.setAttribute('data-i', i);
     drop.appendChild(div);
   });
@@ -1361,6 +1361,17 @@ function acPreencherVeiculo(idx){
   acFecharTodos();
   atualizarContadores(); gerarPreview();
   showAlert('✓ Veículo carregado: '+v.placa+' — '+(v.modelo||''),'ok');
+  // vendedor ainda vazio: já traz o proprietário cadastrado desse veículo
+  if(v.prop_nome && !g('v_nome') && !g('v_cpf')){
+    var qd=String(v.prop_cpf||'').replace(/\D/g,'')||v.prop_nome;
+    fetch('/api/pessoas?q='+encodeURIComponent(qd)).then(function(r){ return r.json(); }).then(function(l){
+      if(g('v_nome')||g('v_cpf')) return;
+      var dd=String(v.prop_cpf||'').replace(/\D/g,'');
+      var p=(l||[]).filter(function(x){ return dd?String(x.cpf||'').replace(/\D/g,'')===dd:String(x.nome||'').toUpperCase()===String(v.prop_nome).toUpperCase(); })[0]||{nome:v.prop_nome,cpf:v.prop_cpf||''};
+      AC['pessoa_v']=[p]; acPreencherPessoa(0,'v');
+      showAlert('✓ Veículo '+v.placa+' carregado e vendedor preenchido com o proprietário: '+p.nome,'ok');
+    }).catch(function(){});
+  }
 }
 
 function salvarPessoa(pref){

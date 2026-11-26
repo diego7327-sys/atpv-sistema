@@ -763,18 +763,70 @@ def _pessoa_saida(r):
     d['end'] = d.pop('endereco', '')
     return d
 
+def _so_dig(x):
+    return re.sub(r'\D', '', x or '')
+
+def _tem_tabela(cur, nome):
+    cur.execute("SELECT to_regclass(%s) AS t", ('public.' + nome,))
+    return bool(cur.fetchone()['t'])
+
 @app.route("/api/pessoas", methods=["GET"])
 @login_required
 def api_pessoas_get():
+    """Busca única para Vendedor/Comprador/Procurador do ATPV: junta o cadastro do
+    ATPV (pessoas), o de clientes das OS e os clientes dos recursos/agenda."""
     q = (request.args.get("q") or "").strip().lower()
     with db() as cur:
-        if q:
-            cur.execute("""SELECT * FROM pessoas
-                           WHERE lower(nome) LIKE %s OR cpf LIKE %s
-                           ORDER BY id DESC LIMIT 20""", ('%'+q+'%', '%'+q+'%'))
-        else:
+        if not q:
             cur.execute("SELECT * FROM pessoas ORDER BY id DESC LIMIT 20")
-        return jsonify([_pessoa_saida(r) for r in cur.fetchall()])
+            return jsonify([_pessoa_saida(r) for r in cur.fetchall()])
+        d = _so_dig(q)
+        like = '%' + q + '%'
+        out, vistos = [], {}
+
+        def add(p, origem):
+            p = {k: ('' if v is None else v) for k, v in p.items()}
+            k = _so_dig(p.get('cpf')) or (p.get('nome') or '').strip().upper()
+            if not k:
+                return
+            if k in vistos:  # mesmo CPF em outro cadastro: completa o que estiver vazio
+                for c, v in p.items():
+                    if v and not vistos[k].get(c):
+                        vistos[k][c] = v
+                return
+            p['origem'] = origem
+            vistos[k] = p
+            out.append(p)
+
+        def busca(sql_nome, sql_doc, sql):
+            w = "lower(" + sql_nome + ") LIKE %s"
+            par = [like]
+            if d:
+                w += " OR regexp_replace(" + sql_doc + ",'\\D','','g') LIKE %s"
+                par.append('%' + d + '%')
+            cur.execute(sql.replace('{W}', '(' + w + ')'), par)
+            return cur.fetchall()
+
+        for r in busca('nome', 'cpf', "SELECT * FROM pessoas WHERE {W} ORDER BY id DESC LIMIT 20"):
+            add(_pessoa_saida(r), 'atpv')
+        if _tem_tabela(cur, 'clientes'):
+            for r in busca('nome', 'cpf_cnpj', "SELECT * FROM clientes WHERE {W} ORDER BY atualizado DESC LIMIT 20"):
+                end = r.get('endereco') or ''
+                if r.get('numero'):
+                    end += (', ' if end else '') + r['numero']
+                if r.get('complemento'):
+                    end += ' ' + r['complemento']
+                add({'nome': r.get('nome'), 'cpf': r.get('cpf_cnpj'), 'rg': r.get('rg'), 'rg_org': r.get('rg_org'),
+                     'nasc': r.get('nasc'), 'ecivil': r.get('ecivil'), 'end': end, 'bairro': r.get('bairro'),
+                     'cidade': r.get('cidade'), 'cep': r.get('cep'), 'cel': r.get('cel') or r.get('fone'),
+                     'email': r.get('email')}, 'cliente')
+        for r in busca('cliente_nome', 'cliente_cpf',
+                       "SELECT cliente_nome, cliente_cpf, cliente_tel FROM processos WHERE cliente_nome <> '' AND {W} ORDER BY id DESC LIMIT 15"):
+            add({'nome': r['cliente_nome'], 'cpf': r['cliente_cpf'], 'cel': r['cliente_tel']}, 'recurso')
+        cur.execute("SELECT cliente_nome, cliente_tel FROM agenda WHERE cliente_nome <> '' AND lower(cliente_nome) LIKE %s ORDER BY id DESC LIMIT 15", (like,))
+        for r in cur.fetchall():
+            add({'nome': r['cliente_nome'], 'cpf': '', 'cel': r['cliente_tel']}, 'recurso')
+        return jsonify(out[:25])
 
 @app.route("/api/pessoas", methods=["POST"])
 @login_required
@@ -806,15 +858,41 @@ def api_pessoas_post():
 @app.route("/api/veiculos", methods=["GET"])
 @login_required
 def api_veiculos_get():
+    """Busca de veículo do ATPV: cadastro único (ATPV + OS) por placa, modelo, chassi
+    ou RENAVAM, com o proprietário da OS; e placas que só existem nos recursos."""
     q = (request.args.get("q") or "").strip().lower()
     with db() as cur:
+        tem_cli = _tem_tabela(cur, 'clientes')
+        cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name='veiculos'")
+        cols = {r['column_name'] for r in cur.fetchall()}
+        extra = ["renavam", "chassi"] if 'renavam' in cols else ["chassi"]
+        sel = "SELECT v.*"
+        jn = ""
+        if tem_cli and 'proprietario_id' in cols:
+            sel += ", c.nome AS prop_nome, c.cpf_cnpj AS prop_cpf"
+            jn = " LEFT JOIN clientes c ON c.id = v.proprietario_id"
         if q:
-            cur.execute("""SELECT * FROM veiculos
-                           WHERE lower(placa) LIKE %s OR lower(modelo) LIKE %s
-                           ORDER BY id DESC LIMIT 20""", ('%'+q+'%', '%'+q+'%'))
+            w = " OR ".join(["lower(v.placa) LIKE %s", "lower(v.modelo) LIKE %s"] + ["lower(v." + c + ") LIKE %s" for c in extra])
+            cur.execute(sel + " FROM veiculos v" + jn + " WHERE " + w + " ORDER BY v.id DESC LIMIT 20",
+                        ['%' + q + '%'] * (2 + len(extra)))
         else:
-            cur.execute("SELECT * FROM veiculos ORDER BY id DESC LIMIT 20")
-        return jsonify([dict(r) for r in cur.fetchall()])
+            cur.execute(sel + " FROM veiculos v" + jn + " ORDER BY v.id DESC LIMIT 20")
+        out = []
+        for r in cur.fetchall():
+            v = {k: ('' if x is None else x) for k, x in dict(r).items()}
+            if not v.get('ano') and (v.get('ano_fab') or v.get('ano_mod')):
+                v['ano'] = '/'.join([a for a in (v.get('ano_fab'), v.get('ano_mod')) if a])
+            out.append(v)
+        if q:
+            ja = {v['placa'].upper() for v in out}
+            cur.execute("""SELECT DISTINCT ON (upper(placa)) upper(placa) AS placa, cliente_nome, cliente_cpf
+                           FROM processos WHERE placa <> '' AND lower(placa) LIKE %s
+                           ORDER BY upper(placa), id DESC LIMIT 10""", ('%' + q + '%',))
+            for r in cur.fetchall():
+                if r['placa'] not in ja:
+                    out.append({'placa': r['placa'], 'modelo': '', 'chassi': '', 'ano': '',
+                                'prop_nome': r['cliente_nome'], 'prop_cpf': r['cliente_cpf'], 'origem': 'recurso'})
+        return jsonify(out)
 
 @app.route("/api/veiculos", methods=["POST"])
 @login_required
