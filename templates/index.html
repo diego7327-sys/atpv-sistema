@@ -2436,9 +2436,19 @@ function acBuscarContratante(el){
   if(q.length<1){acFechar('ac-ct_busca');return;}
   clearTimeout(_timers['ct_busca']);
   _timers['ct_busca']=setTimeout(function(){
-    fetch('/api/contratantes?q='+encodeURIComponent(q))
-    .then(function(r){return r.json();})
-    .then(function(lista){acRenderContratante(lista);});
+    var pega=function(u){ return fetch(u).then(function(r){ return r.ok?r.json():[]; }).catch(function(){ return []; }); };
+    Promise.all([pega('/api/contratantes?q='+encodeURIComponent(q)), pega('/api/clientes?q='+encodeURIComponent(q))])
+    .then(function(rs){
+      var vistos={}, lista=[], dg=function(x){ return String(x||'').replace(/\D/g,''); };
+      var add=function(p){ var k=dg(p.cpf)||String(p.nome||'').toUpperCase(); if(!k||vistos[k]) return; vistos[k]=1; lista.push(p); };
+      (Array.isArray(rs[0])?rs[0]:[]).forEach(add);
+      (Array.isArray(rs[1])?rs[1]:[]).forEach(function(c){
+        var d=dg(c.cpf_cnpj);
+        add({nome:c.nome, cpf:c.cpf_cnpj||'', tel:c.cel||c.fone||'',
+             tipo:c.tipo==='revenda'?'empresa':(d.length===14?'empresa':'pessoa_fisica'), pgto:'', origem:'cliente'});
+      });
+      acRenderContratante(lista.slice(0,25));
+    });
   },200);
 }
 function acRenderContratante(lista){
@@ -2450,7 +2460,7 @@ function acRenderContratante(lista){
   lista.forEach(function(p,i){
     var div=document.createElement('div');
     div.className='ac-item';
-    div.innerHTML='<div class="ac-nome">'+(p.nome||'')+'</div><div class="ac-meta">'+(p.cpf||'')+(p.tipo?' · '+p.tipo:'')+'</div>';
+    div.innerHTML='<div class="ac-nome">'+(p.nome||'')+'</div><div class="ac-meta">'+(p.cpf||'')+(p.tipo?' · '+p.tipo:'')+(p.origem==='cliente'?' · cadastro de clientes':'')+'</div>';
     div.setAttribute('data-i',i);
     drop.appendChild(div);
     (function(idx){
