@@ -985,8 +985,9 @@ def registrar(app, db, login_required):
         o = _os_saida(r)
         st = 'cancelado' if r['status'] == 'cancelada' or r['excluida_em'] else \
              ('pago' if o['total'] > 0.004 and o['devedor'] <= 0.004 else 'pendente')
+        cortesia = st == 'pendente' and o['total'] <= 0.004 and (r.get('hon_zero_motivo') or '').upper().startswith('CORTESIA')
         cur.execute("UPDATE atendimentos SET status_pgto=%s, valor_cobrado=%s WHERE id=%s",
-                    (st, _brl(o['total']), r['atendimento_id']))
+                    ('cortesia' if cortesia else st, 'CORTESIA' if cortesia else _brl(o['total']), r['atendimento_id']))
 
     def _cliente_saida(r):
         if not r:
@@ -3156,17 +3157,22 @@ def registrar(app, db, login_required):
                 cur.execute("INSERT INTO veiculos (placa, chassi, modelo, proprietario_id) VALUES (%s,%s,%s,%s) RETURNING id",
                             (placa, g('ve_chassi').upper(), g('ve_modelo').upper(), prop))
                 vid = cur.fetchone()['id']
-        valor = _num(data.get('valor_cobrado') or g('ct_valor_servico'))
-        # o valor é decidido em cada ATPV; sem valor a OS fica em andamento (honorário zero pede motivo ao concluir)
-        st_os = 'concluida' if valor > 0 else 'andamento'
+        valor_txt = str(data.get('valor_cobrado') or g('ct_valor_servico') or '')
+        cortesia = 'CORTES' in valor_txt.upper()
+        valor = 0.0 if cortesia else _num(valor_txt)
+        # o valor é decidido em cada ATPV; cortesia já fica concluída sem cobrança (motivo CORTESIA);
+        # sem valor a OS fica em andamento (honorário zero pede motivo ao concluir)
+        st_os = 'concluida' if (valor > 0 or cortesia) else 'andamento'
         numero = _proximo_numero(cur)
         cur.execute("""INSERT INTO ordens_servico (numero, tipo, cliente_id, responsavel_id, veiculo_id, user_id, user_nome, status,
-                           honorario, obs, empresa_id, atendimento_id, processo_tipo_id)
+                           honorario, obs, empresa_id, atendimento_id, processo_tipo_id, hon_zero_motivo)
                        VALUES (%s,'os',%s,%s,%s,%s,%s,%s,0,%s,%s,%s,
-                               (SELECT id FROM processo_tipos WHERE upper(nome) = upper(%s) LIMIT 1)) RETURNING id""",
+                               (SELECT id FROM processo_tipos WHERE upper(nome) = upper(%s) LIMIT 1), %s) RETURNING id""",
                     (numero, prop, resp, vid, str(session.get('user_id') or ''), _eu(), st_os, (data.get('obs') or g('ct_obs') or '').strip(),
-                     session.get('empresa_id'), aid, TIPO_ATPV))
+                     session.get('empresa_id'), aid, TIPO_ATPV, 'CORTESIA' if cortesia else ''))
         oid = cur.fetchone()['id']
+        if cortesia:
+            _ocorrencia(cur, oid, 'outras', 'ATPV feito como CORTESIA (sem cobrança) — OS concluída com honorário R$ 0,00')
         _add_item(cur, oid, {"descricao": "ATPV-E — PROCURAÇÃO / AUTORIZAÇÃO DE TRANSFERÊNCIA", "valor": str(valor), "natureza": "honorario"})
         _ocorrencia(cur, oid, 'outras', 'OS criada pelo ATPV-e (atendimento nº %s)' % aid)
         _sync_atpv(cur, oid)

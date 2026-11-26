@@ -488,7 +488,11 @@ tr:hover td{background:var(--surf2)}
       <div class="g2">
         <div class="fg">
           <label>Valor do serviço (R$) ★</label>
-          <input id="ct_valor_servico" oninput="atualizar()" placeholder="R$ 0,00 — valor deste ATPV" style="border-color:rgba(0,212,170,.4)">
+          <div style="display:flex;gap:8px;align-items:stretch">
+            <input id="ct_valor_servico" oninput="atualizar()" placeholder="R$ 0,00 — valor deste ATPV" style="border-color:rgba(0,212,170,.4);flex:1">
+            <button type="button" onclick="ctCortesia()" title="ATPV sem cobrança: a OS já fica concluída como cortesia" style="white-space:nowrap;padding:0 16px;background:rgba(255,165,2,.08);border:1px solid rgba(255,165,2,.5);color:#ffa502;border-radius:8px;cursor:pointer;font-weight:600;font-size:14px">🎁 Cortesia</button>
+          </div>
+          <div style="font-size:11px;color:var(--mut);margin-top:4px">Sem cobrança? Clique em <b>🎁 Cortesia</b> — a OS fica concluída com R$ 0,00 e motivo "cortesia".</div>
         </div>
         <div class="fg">
           <label>Pagamento</label>
@@ -1940,14 +1944,19 @@ function carregarHist(){
     renderHist(itens);
   }).catch(function(){});
 }
+function ctCortesia(){
+  var cv=document.getElementById('ct_valor_servico'); if(!cv) return;
+  cv.value='CORTESIA'; cv.style.boxShadow=''; atualizar();
+  showAlert('✓ Marcado como cortesia (sem cobrança). Agora é só Salvar histórico.','ok');
+}
 function renderHist(lista){
   var el=document.getElementById('hist-list');
   if(!lista||!lista.length){el.innerHTML='<div class="hist-empty">Nenhum atendimento salvo</div>';return;}
   el.innerHTML=lista.map(function(h,i){
     var idx=h.id;
     var status = h.status_pgto||'pendente';
-    var tagCls = status==='pago'?'tag-pago':'tag-pendente';
-    var tagTxt = status==='pago'?'Pago':(status==='cancelado'?'Cancelado':'Pendente');
+    var tagCls = (status==='pago'||status==='cortesia')?'tag-pago':'tag-pendente';
+    var tagTxt = status==='pago'?'Pago':(status==='cancelado'?'Cancelado':(status==='cortesia'?'🎁 Cortesia':'Pendente'));
     return '<div class="hist-item">'+
       '<button class="hist-del" onclick="delHist('+idx+',event)">✕</button>'+
       '<div onclick="carregarItem('+idx+')">'+
@@ -1958,7 +1967,7 @@ function renderHist(lista){
       '<span class="'+tagCls+'">'+tagTxt+'</span>'+
       (h.valor_cobrado?'<span style="font-size:11px;color:var(--mut);font-family:var(--mono)">'+h.valor_cobrado+'</span>':'')+
       (h.os_numero?'<button class="btn-fin" title="Abrir a OS" onclick="atpvOS('+h.os_numero+',event,false)">OS '+h.os_numero+'</button>'+
-        (status!=='pago'&&status!=='cancelado'?'<button class="btn-fin" style="color:var(--acc);border-color:rgba(0,212,170,.4)" onclick="atpvOS('+h.os_numero+',event,true)">💰 Receber</button>':''):
+        (status!=='pago'&&status!=='cancelado'&&status!=='cortesia'?'<button class="btn-fin" style="color:var(--acc);border-color:rgba(0,212,170,.4)" onclick="atpvOS('+h.os_numero+',event,true)">💰 Receber</button>':''):
         '<button class="btn-fin" onclick="abrirFin('+idx+',event,'+JSON.stringify(h.valor_cobrado||'')+')">R$ Editar</button>')+
       '</div>'+
       '</div>';
@@ -2276,7 +2285,7 @@ function salvar(){
     ftab('contratante');
     var cv=document.getElementById('ct_valor_servico');
     setTimeout(function(){ cv.scrollIntoView({behavior:'smooth',block:'center'}); cv.focus(); cv.style.boxShadow='0 0 0 3px rgba(255,165,2,.7)'; setTimeout(function(){ cv.style.boxShadow=''; },4000); },80);
-    showAlert('Falta o valor deste ATPV: digite em ★ Contratante → "Valor do serviço" (0 se não for cobrar agora) e clique em Salvar histórico de novo.','warn');
+    showAlert('Falta o valor deste ATPV: digite em ★ Contratante → "Valor do serviço" (ou clique em 🎁 Cortesia se não for cobrar) e clique em Salvar histórico de novo.','warn');
     return;
   }
   var igual=todosHist.slice(0,2).some(function(h){return h.nome===nome&&h.placa===placa;});
