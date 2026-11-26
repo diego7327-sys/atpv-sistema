@@ -2169,6 +2169,18 @@ def registrar(app, db, login_required):
                     (o['id'], item['id'] if item else None, dia, d["conta_id"], valor, orgao, docto, aid, lid,
                      (d.get("obs") or "").strip(), _eu()))
         pid = cur.fetchone()['id']
+        # DUA saiu diferente do que foi cobrado: a taxa passa a ser o valor real pago; a diferença vira honorário (ou reduz)
+        if item and _sim(d.get("quitar"), False):
+            cur.execute("SELECT COALESCE(SUM(valor),0) AS v FROM os_repasse_pagtos WHERE item_id=%s", (item['id'],))
+            real = _num(cur.fetchone()['v'])
+            antes = _num(item['custo']) * _num(item['qtd'] or 1)
+            if abs(real - antes) > Decimal('0.004'):
+                cur.execute("UPDATE os_itens SET custo=%s, valor=%s, qtd=1 WHERE id=%s",
+                            (real, _num(item['valor']) * _num(item['qtd'] or 1), item['id']))
+                dif = antes - real
+                _ocorrencia(cur, o['id'], 'outras', 'Taxa %s saiu R$ %s %s que o previsto (R$ %s): %s'
+                            % (item['descricao'], _br(abs(dif)), 'menor' if dif > 0 else 'maior', _br(antes),
+                               'a diferença vira honorário' if dif > 0 else 'o honorário diminui'))
         cur.execute("SELECT nome FROM contas WHERE id=%s", (d["conta_id"],))
         cn = (cur.fetchone() or {}).get('nome', '')
         _ocorrencia(cur, o['id'], 'outras', 'Repasse pago: %s — R$ %s (saiu da %s em %s)%s%s'

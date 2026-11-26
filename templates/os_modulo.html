@@ -782,11 +782,11 @@ function osNova(tipo){
   var h='<div class="nv-topo"><button class="os-b" onclick="osVer(\'lista\')">← Voltar para a lista</button>'+
     '<div class="nv-modo"><button id="nvm-orc" onclick="nvModo(\'orcamento\')">Orçamento</button><button id="nvm-os" onclick="nvModo(\'os\')">OS direta</button></div></div>'+
     '<div class="nv-grade"><div class="nv-esq" data-enter>'+
-    '<div class="os-box nv-passo nv-p1"><div class="nv-ph"><span class="nv-n">1</span> Cliente e veículo</div>'+
-      '<div class="nv-sub">Veículo <span class="nv-st" id="nv-st"></span></div>'+g(NV_VEI,'nv-')+
-      '<div class="nv-sub">Cliente (proprietário) * <span class="nv-st" id="nc-st"></span></div>'+g(NV_CLI,'nc-')+
-      '<div class="nv-sub">Responsável / revenda — quem paga, se for outro <span class="nv-st" id="nr-st"></span></div>'+g(NV_RESP,'nr-')+'</div>'+
-    '<div class="os-box nv-passo nv-p2"><div class="nv-ph"><span class="nv-n">2</span> Serviços <span class="nv-dica">taxas do Detran/terceiros e honorários</span></div>'+
+    '<div class="os-box nv-passo ocx-bloco ocx-c1"><div class="nv-ph"><span class="nv-n">1</span> Veículo <span class="nv-st" id="nv-st"></span></div>'+g(NV_VEI,'nv-')+'</div>'+
+    '<div class="os-box nv-passo ocx-bloco ocx-c2"><div class="nv-ph"><span class="nv-n">2</span> Cliente (proprietário) * <span class="nv-st" id="nc-st"></span></div>'+g(NV_CLI,'nc-')+'</div>'+
+    '<div class="os-box nv-passo ocx-bloco ocx-c3"><div class="nv-ph"><span class="nv-n">3</span> Responsável / revenda — quem paga, se for outro <span class="nv-st" id="nr-st"></span></div>'+g(NV_RESP,'nr-')+'</div>'+
+    '<div class="os-box nv-passo ocx-bloco nv-p2"><div class="nv-ph"><span class="nv-n">4</span> Serviços <span class="nv-dica">taxas do Detran/terceiros e honorários</span></div>'+
+      '<div class="os-g5"><div class="fg" style="grid-column:span 3"><label>Tipo de processo * (vem do serviço)</label><select id="osn-tipo">'+osTiposOpts('','— escolha —')+'</select></div></div>'+
       (pac?'<div class="nv-chips">'+pac+'</div>':'')+
       '<div class="nv-add"><div class="fg"><label>Da tabela</label><select id="nvi-serv" onchange="nvItemServ()">'+sv+'</select></div>'+
       '<div class="fg"><label>Descrição</label><input id="nvi-desc" placeholder="ou digite um item avulso" onkeydown="nvItemTecla(event)"></div>'+
@@ -795,13 +795,12 @@ function osNova(tipo){
       '<div class="fg"><label>Tipo</label><select id="nvi-tipo"><option value="taxa">REPASSE (taxa / débito)</option><option value="hon">HONORÁRIO (serviço)</option></select></div>'+
       '<div class="fg"><label>&nbsp;</label><button type="button" class="os-b pri" onclick="nvItemAdd()">Adicionar</button></div></div>'+
       '<div class="table-wrap" style="margin:4px 0 0"><table class="nv-tab"><thead><tr><th>Serviço</th><th style="width:70px;text-align:center">Qtd</th><th style="width:130px;text-align:right">Valor un.</th><th style="width:120px;text-align:right">Total</th><th style="width:96px"></th><th style="width:40px"></th></tr></thead><tbody id="nvi-tbody"></tbody></table></div></div>'+
-    '<div class="os-box nv-passo nv-p3"><div class="nv-ph"><span class="nv-n">3</span> Fechamento</div>'+
+    '<div class="os-box nv-passo ocx-bloco ocx-c4"><div class="nv-ph"><span class="nv-n">5</span> Fechamento</div>'+
       '<div class="os-g5">'+
         '<div class="fg" style="grid-column:span 2"><label>Honorário do despachante (R$)</label><input id="osn-hon" placeholder="0,00" oninput="nvAtualizar()"></div>'+
         '<div class="fg" style="grid-column:span 2"><label>Desconto (R$)</label><input id="osn-desc" placeholder="0,00" oninput="nvAtualizar()"></div>'+
         '<div class="fg nv-so-orc" style="grid-column:span 2"><label>Validade (dias)</label><input id="osn-valdias" value="7" oninput="nvAtualizar()"></div>'+
-        '<div class="fg" style="grid-column:span 3"><label>Tipo de processo * (vem do serviço)</label><select id="osn-tipo">'+osTiposOpts('','— escolha —')+'</select></div>'+
-        '<div class="fg" style="grid-column:span 3"><label>Observação interna (não vai para o cliente)</label><input id="osn-obs"></div>'+
+        '<div class="fg" style="grid-column:span 6"><label>Observação interna (não vai para o cliente)</label><input id="osn-obs"></div>'+
       '</div><div class="fg"><label>Observação para o cliente (vai na mensagem)</label><textarea class="os-ta" id="osn-obscli" style="min-height:48px" placeholder="Ex.: trazer o CRV assinado e reconhecido em cartório" oninput="nvAtualizar()"></textarea></div>'+
       '<div class="nv-resumo"><div class="nv-l"><span>Subtotal</span><b id="nvt-sub">R$ 0,00</b></div><div class="nv-l"><span>Desconto</span><b id="nvt-desc">− R$ 0,00</b></div>'+
         '<div class="nv-total"><span>TOTAL</span><b id="nvt-total">R$ 0,00</b></div>'+
@@ -1620,7 +1619,8 @@ function osRepasseModal(iid){
       '<option value="">— outro (sem item da OS) —</option></select></div>'+
     '<div class="g3"><div class="fg"><label>Data do pagamento</label><input type="date" id="osrp-data" value="'+osHoje()+'"></div>'+
       '<div class="fg"><label>Saiu da conta *</label><select id="osrp-conta">'+osOpts(c.contas,osContaPor('CAIXA'),'— conta —')+'</select>'+osContaChips('osrp-conta')+'</div>'+
-      '<div class="fg"><label>Valor pago (R$) *</label><input id="osrp-valor" placeholder="0,00"></div></div>'+
+      '<div class="fg"><label>Valor pago (R$) *</label><input id="osrp-valor" placeholder="0,00" oninput="osRepasseQuit()"></div></div>'+
+    '<div id="osrp-quit-w" style="display:none;margin:-4px 0 10px"><label class="os-chk" style="margin:0"><input type="checkbox" id="osrp-quit" checked> <span id="osrp-quit-t"></span></label></div>'+
     '<div class="g2"><div class="fg"><label>Órgão / beneficiário</label><input id="osrp-orgao"></div>'+
       '<div class="fg"><label>Nº do DUA / boleto</label><input id="osrp-doc"></div></div>'+
     '<div class="fg"><label>Comprovante (PDF ou foto — pelo celular abre a câmera)</label><input type="file" id="osrp-arq" accept="application/pdf,image/*"></div>'+
@@ -1633,10 +1633,22 @@ function osRepassePreenche(){
   osE('osrp-orgao').value=i?(i.orgao||''):''; osE('osrp-doc').value=i?(i.documento||''):'';
   osE('osrp-valor').value=(i&&i.custo!=null)?osN(Math.max(i.custo*i.qtd-(i.repasse_pago||0),0)):'';
   setTimeout(function(){ osE('osrp-valor').focus(); osE('osrp-valor').select(); },40);
+  osRepasseQuit();
+}
+// DUA saiu diferente do cobrado: quita a taxa pelo valor real e a diferença vira honorário (ou reduz)
+function osRepasseQuit(){
+  var id=Number(osE('osrp-item').value), i=OS.atual.itens.filter(function(x){ return x.id===id; })[0], w=osE('osrp-quit-w');
+  if(!i||i.custo==null){ w.style.display='none'; return; }
+  var resta=Math.max(i.custo*i.qtd-(i.repasse_pago||0),0), v=nvNum(osE('osrp-valor').value), dif=resta-v;
+  if(!(v>0)||Math.abs(dif)<0.005){ w.style.display='none'; return; }
+  w.style.display='';
+  osE('osrp-quit-t').innerHTML=dif>0?'<b>O DUA saiu '+osR(dif)+' menor</b> — quitar esta taxa por '+osR((i.repasse_pago||0)+v)+'; a diferença de '+osR(dif)+' vira honorário. <span class="os-small">(desmarque se for só parte do pagamento)</span>':
+    '<b style="color:var(--warn)">O DUA saiu '+osR(-dif)+' maior</b> — ajustar a taxa para '+osR((i.repasse_pago||0)+v)+'; o honorário diminui '+osR(-dif)+'.';
 }
 function osRepasseSalvar(){
   var c={item_id:osE('osrp-item').value||null, data:osE('osrp-data').value, conta_id:osE('osrp-conta').value, valor:osE('osrp-valor').value,
-         orgao:osE('osrp-orgao').value, documento:osE('osrp-doc').value, obs:osE('osrp-obs').value};
+         orgao:osE('osrp-orgao').value, documento:osE('osrp-doc').value, obs:osE('osrp-obs').value,
+         quitar:osE('osrp-quit-w').style.display!=='none'&&osE('osrp-quit').checked};
   if(!(nvNum(c.valor)>0)){ osMsg('Informe o valor pago.','err'); osE('osrp-valor').focus(); return; }
   if(!c.conta_id){ osMsg('Escolha de qual conta saiu.','err'); return; }
   var bt=osE('osrp-bt'); bt.disabled=true;
