@@ -213,6 +213,21 @@ CREATE TABLE IF NOT EXISTS os_repasse_pagtos (
     lancamento_id BIGINT REFERENCES lancamentos(id) ON DELETE SET NULL,
     obs TEXT DEFAULT '', user_nome TEXT DEFAULT '', criado TIMESTAMPTZ DEFAULT NOW());
 CREATE INDEX IF NOT EXISTS os_repasse_os_idx ON os_repasse_pagtos (os_id);
+-- origem do item: '' (normal) | 'acrescimo' (acréscimo do parcelamento no cartão)
+ALTER TABLE os_itens ADD COLUMN IF NOT EXISTS origem TEXT DEFAULT '';
+-- honorário zero só com motivo
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS hon_zero_motivo TEXT DEFAULT '';
+-- parcelamento de débitos no cartão (um por OS)
+CREATE TABLE IF NOT EXISTS os_parcelamentos (
+    id BIGSERIAL PRIMARY KEY,
+    os_id BIGINT UNIQUE REFERENCES ordens_servico(id) ON DELETE CASCADE,
+    data DATE, valor_cartao NUMERIC(12,2) DEFAULT 0,
+    maquininha TEXT DEFAULT '', parcelas INT DEFAULT 1, nsu TEXT DEFAULT '',
+    forma_pgto_id BIGINT REFERENCES formas_pgto(id), conta_id BIGINT REFERENCES contas(id),
+    retorno_tipo TEXT DEFAULT '', retorno_valor NUMERIC(12,2) DEFAULT 0,
+    custo_maquininha NUMERIC(12,2) DEFAULT 0, hon_no_cartao BOOLEAN DEFAULT TRUE,
+    recebimento_id BIGINT REFERENCES os_recebimentos(id) ON DELETE SET NULL,
+    user_nome TEXT DEFAULT '', criado TIMESTAMPTZ DEFAULT NOW(), atualizado TIMESTAMPTZ DEFAULT NOW());
 """
 
 # Cadastros iniciais — tirados das telas do BitDesp (levantamento de 13/11/2026)
@@ -257,6 +272,12 @@ CATEGORIAS_REPASSE = [("taxa_detran", "TAXA DETRAN"), ("ipva", "IPVA"), ("licenc
                       ("multa", "MULTA"), ("vistoria", "VISTORIA"), ("placa", "PLACA"), ("outros", "OUTROS")]
 CAT_REPASSE = dict(CATEGORIAS_REPASSE)
 MAQUININHAS = ["STONE", "SICREDI"]
+TIPO_PARCELAMENTO = "PAGAMENTO/PARCELAMENTO DE DÉBITOS"
+TIPO_AVULSO = "ATENDIMENTO AVULSO"
+MOTIVOS_HON_ZERO = ["CORTESIA", "RETORNO (SERVIÇO REFEITO)", "CLIENTE PARCEIRO", "ERRO DO ESCRITÓRIO", "OUTRO"]
+NF_CRITERIOS = {"conservador": "Conservador — honorário + tudo cobrado no cartão acima dos débitos",
+                "retorno": "Só retorno — honorário + retorno da maquininha"}
+AVULSO_SERVICOS = ["CONSULTA", "AGENDAMENTO", "CONSULTA DE DÉBITOS", "IMPRESSÃO DE DOCUMENTO", "SERVIÇO DESPACHANTE"]
 ARQ_MIMES = ("application/pdf", "image/jpeg", "image/png", "image/webp")
 ARQ_MAX = 6 * 1024 * 1024
 
@@ -271,6 +292,9 @@ def _cat_palpite(desc):
         if chave in d:
             return "taxa_detran"
     return "outros"
+
+class _Rollback(Exception):
+    """Erro de validação no meio de uma gravação: desfaz tudo e devolve a mensagem."""
 
 def _forma_tipo(nome):
     n = (nome or '').upper()
@@ -458,6 +482,13 @@ def registrar(app, db, login_required):
                     if not any(chave in c for c in cs):
                         cur.execute("INSERT INTO contas (nome) VALUES (%s)", (nome,))
                 cur.execute("INSERT INTO migracoes (nome) VALUES ('os_fiscal_v1')")
+            cur.execute("SELECT 1 FROM migracoes WHERE nome = 'os_fiscal_v2'")
+            if not cur.fetchone():
+                for n in (TIPO_PARCELAMENTO, TIPO_AVULSO):
+                    cur.execute("SELECT 1 FROM processo_tipos WHERE upper(nome) = upper(%s)", (n,))
+                    if not cur.fetchone():
+                        cur.execute("INSERT INTO processo_tipos (nome) VALUES (%s)", (n,))
+                cur.execute("INSERT INTO migracoes (nome) VALUES ('os_fiscal_v2')")
             _sincronizar_clientes(cur)
 
     def _sincronizar_clientes(cur, filtro_sql="", filtro_params=None):
@@ -527,7 +558,7 @@ def registrar(app, db, login_required):
                 (str(session.get('user_id') or ''), _eu()))
 
     CAMPOS_LUCRO = ('custo', 'lucro', 'lucro_terceiros', 'taxas', 'honorarios', 'repasse_total', 'repasse_pago',
-                    'repasse_a_pagar', 'receita')
+                    'repasse_a_pagar', 'receita', 'nota_valor')
 
     def _sem_lucro_os(o):
         for k in CAMPOS_LUCRO:
@@ -850,6 +881,10 @@ def registrar(app, db, login_required):
             row = cur.fetchone()
             out['os_numero_inicial'] = row['valor'] if row else ''
             out['categorias_repasse'] = [{"id": k, "nome": v} for k, v in CATEGORIAS_REPASSE]
+            out['nf_criterio'] = _nf_criterio(cur)
+            out['nf_criterios'] = [{"id": k, "nome": v} for k, v in NF_CRITERIOS.items()]
+            out['motivos_hon_zero'] = MOTIVOS_HON_ZERO
+            out['avulso_servicos'] = AVULSO_SERVICOS
             out['maquininhas'] = MAQUININHAS
             cur.execute("SELECT chave, valor FROM config WHERE chave = ANY(%s)", (list(CFG_EMPRESA),))
             emp = {k: '' for k in CFG_EMPRESA}
@@ -919,6 +954,10 @@ def registrar(app, db, login_required):
                 cur.execute("""INSERT INTO config (chave, valor) VALUES ('os_numero_inicial', %s)
                                ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor, atualizado = NOW()""",
                             (ini,))
+            if "nf_criterio" in d:
+                v = d.get("nf_criterio") if d.get("nf_criterio") in NF_CRITERIOS else "conservador"
+                cur.execute("""INSERT INTO config (chave, valor) VALUES ('nf_criterio', %s)
+                               ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor, atualizado = NOW()""", (v,))
             for k in CFG_EMPRESA:
                 if k in d:
                     cur.execute("""INSERT INTO config (chave, valor) VALUES (%s, %s)
@@ -1135,6 +1174,17 @@ def registrar(app, db, login_required):
             if it.get('natureza') == 'repasse':
                 it['repasse_pago'] = round(pago_item.get(it['id'], 0), 2)
                 it['repasse_quitado'] = it['repasse_pago'] + 0.004 >= it['custo'] * it['qtd']
+        cur.execute("SELECT * FROM os_parcelamentos WHERE os_id = %s", (oid,))
+        pr = cur.fetchone()
+        parc = None
+        if pr:
+            parc = dict(pr)
+            for k in ('valor_cartao', 'retorno_valor', 'custo_maquininha'):
+                parc[k] = _f(parc[k])
+            parc['data'] = _d(parc['data']); parc['criado'] = _dt(parc['criado']); parc['atualizado'] = _dt(parc['atualizado'])
+            parc['calc'] = _parc_calc(cur, oid, pr)
+        # valor da nota fiscal do honorário: receita; no parcelamento segue o critério das Configurações
+        o['nota_valor'] = parc['calc']['nota'] if parc else o['receita']
         cur.execute("SELECT * FROM os_ocorrencias WHERE os_id = %s ORDER BY id DESC", (oid,))
         ocor = [dict(x, quando=_dt(x['quando'])) for x in cur.fetchall()]
         pf_sql, pf_args = _pend_filtro(cur)
@@ -1159,7 +1209,7 @@ def registrar(app, db, login_required):
                            WHERE os_id = %s ORDER BY id""", (oid,))
             procs = [dict(x, prazo_final=_d(x['prazo_final'])) for x in cur.fetchall()]
         return {"os": o, "cliente": cli, "responsavel": resp, "veiculo": vei, "itens": itens,
-                "recebimentos": receb, "ocorrencias": ocor, "pendencias": pend, "repasses": reps,
+                "recebimentos": receb, "ocorrencias": ocor, "pendencias": pend, "repasses": reps, "parcelamento": parc,
                 "documentos": docs, "processos": procs}
 
     @app.route("/api/os/<int:numero>", methods=["GET"])
@@ -1178,6 +1228,11 @@ def registrar(app, db, login_required):
                     it.pop('repasse_pago', None)
             if not pm['dar_baixa']:
                 d['repasses'] = []
+            if d.get('parcelamento'):   # retorno, custo da maquininha e nota: só quem vê lucro
+                pc = d['parcelamento']
+                for k in ('retorno_tipo', 'retorno_valor', 'custo_maquininha'):
+                    pc.pop(k, None)
+                pc['calc'] = {k: pc['calc'][k] for k in ('debitos', 'acrescimo', 'valor_cartao')}
         d['perm'] = pm
         return jsonify(d)
 
@@ -1273,6 +1328,9 @@ def registrar(app, db, login_required):
                 return jsonify({"erro": "OS não encontrada"}), 404
             if o['status'] == st:
                 return jsonify({"ok": True})
+            erro = _hon_zero_checa(cur, o, st, d.get("hon_zero_motivo"))
+            if erro:
+                return jsonify(erro), 400
             cur.execute("UPDATE ordens_servico SET status=%s, tipo='os', atualizado=NOW() WHERE id=%s",
                         (st, o['id']))
             tipo_oc = {'detran': 'detran', 'disponivel': 'disponivel', 'entregue': 'entregue'}.get(st, 'outras')
@@ -1320,6 +1378,224 @@ def registrar(app, db, login_required):
             cur.execute("UPDATE ordens_servico SET excluida_em=NULL, excluida_por='' WHERE id=%s", (o['id'],))
             _ocorrencia(cur, o['id'], 'outras', 'OS restaurada da lixeira')
         return jsonify({"ok": True})
+
+    # ── honorário zero: só finaliza com motivo ────────────────
+    def _receita_os(cur, numero):
+        r = _os_completa(cur, numero, incluir_excluida=True)
+        return r['os']['receita'] if r else 0
+
+    def _hon_zero_checa(cur, o, novo_status, motivo):
+        """Ao finalizar (entregue/concluída) OS com honorário R$ 0,00, exige um motivo. Devolve dict de erro ou None."""
+        if novo_status not in ('entregue', 'concluida'):
+            return None
+        if _receita_os(cur, o['numero']) > 0.004 or (o.get('hon_zero_motivo') or '').strip():
+            return None
+        motivo = (motivo or '').strip().upper()
+        base = motivo.split(':')[0].strip()
+        if not motivo or base not in MOTIVOS_HON_ZERO or (base == 'OUTRO' and len(motivo) < 8):
+            return {"erro": "Esta OS está com honorário R$ 0,00. Para finalizar, escolha o motivo.",
+                    "codigo": "honorario_zero", "motivos": MOTIVOS_HON_ZERO}
+        cur.execute("UPDATE ordens_servico SET hon_zero_motivo=%s WHERE id=%s", (motivo, o['id']))
+        _ocorrencia(cur, o['id'], 'outras', 'Finalizada com honorário R$ 0,00 — motivo: %s' % motivo)
+        return None
+
+    # ── parcelamento de débitos no cartão ─────────────────────
+    def _nf_criterio(cur):
+        cur.execute("SELECT valor FROM config WHERE chave = 'nf_criterio'")
+        r = cur.fetchone()
+        return r['valor'] if r and r['valor'] in NF_CRITERIOS else 'conservador'
+
+    def _parc_calc(cur, oid, p, hon_no_cartao=None):
+        """Débitos (repasse), honorário, acréscimo do parcelamento e valor da nota pelos dois critérios."""
+        cur.execute("""SELECT
+              COALESCE(SUM(CASE WHEN natureza = 'repasse' THEN custo*qtd END),0) AS debitos,
+              COALESCE(SUM(CASE WHEN origem <> 'acrescimo' THEN valor*qtd END),0) AS itens_sem_acr
+            FROM os_itens WHERE os_id = %s""", (oid,))
+        x = cur.fetchone()
+        cur.execute("SELECT honorario, desconto FROM ordens_servico WHERE id=%s", (oid,))
+        o = cur.fetchone()
+        debitos = x['debitos']
+        hon = (x['itens_sem_acr'] + (o['honorario'] or 0) - (o['desconto'] or 0)) - debitos
+        no_cartao = p['hon_no_cartao'] if hon_no_cartao is None else hon_no_cartao
+        cartao = _num(p['valor_cartao']) if p else Decimal('0')
+        acr = max(Decimal('0'), cartao - debitos - (hon if no_cartao else 0))
+        ret = _num(p.get('retorno_valor')) if p else Decimal('0')
+        crit = _nf_criterio(cur)
+        nc, nr = hon + acr, hon + ret
+        return {"debitos": _f(debitos), "honorario": _f(hon), "acrescimo": _f(acr), "valor_cartao": _f(cartao),
+                "nota_conservador": _f(nc), "nota_retorno": _f(nr), "criterio": crit,
+                "nota": _f(nr if crit == 'retorno' else nc)}
+
+    @app.route("/api/os/<int:numero>/parcelamento", methods=["POST"])
+    @equipe
+    def os_parcelamento(numero):
+        d = request.get_json() or {}
+        with db(commit=True) as cur:
+            o = _os_por_numero(cur, numero)
+            if not o:
+                return jsonify({"erro": "OS não encontrada"}), 404
+            vl = _perms(cur)['ver_lucro']
+            sim = _sim(d.get("simular"), False)
+            cartao = _num(d.get("valor_cartao"))
+            if cartao <= 0 and not sim:
+                return jsonify({"erro": "Informe o valor total passado no cartão."}), 400
+            maq = (d.get("maquininha") or "").strip().upper()
+            if maq not in MAQUININHAS and not sim:
+                return jsonify({"erro": "Escolha a maquininha (Stone ou Sicredi)."}), 400
+            try:
+                parc = int(d.get("parcelas") or 1)
+            except (TypeError, ValueError):
+                parc = 1
+            if not 1 <= parc <= 24:
+                return jsonify({"erro": "Parcelas: de 1 a 24."}), 400
+            cur.execute("SELECT COUNT(*) AS n FROM os_itens WHERE os_id=%s AND natureza='repasse'", (o['id'],))
+            if not cur.fetchone()['n'] and not sim:
+                return jsonify({"erro": "Lance primeiro os débitos pagos (IPVA, licenciamento, multas...)."}), 400
+            cur.execute("SELECT * FROM os_parcelamentos WHERE os_id=%s", (o['id'],))
+            atual = cur.fetchone()
+            cur.execute("SELECT id, nome FROM formas_pgto WHERE ativo ORDER BY id")
+            fcred = [f['id'] for f in cur.fetchall() if _forma_tipo(f['nome']) == 'credito']
+            forma = d.get("forma_pgto_id") or (fcred[0] if fcred else None)
+            conta = d.get("conta_id")
+            if not conta:
+                cur.execute("SELECT id FROM contas WHERE ativo AND upper(nome) LIKE %s ORDER BY id LIMIT 1",
+                            ('%' + ('STONE' if maq == 'STONE' else 'SICRED') + '%',))
+                c_ = cur.fetchone()
+                conta = c_['id'] if c_ else None
+            if not conta and not sim:
+                return jsonify({"erro": "Escolha a conta onde cai o cartão."}), 400
+            p = {"data": _data(d.get("data")) or _hoje(), "valor_cartao": cartao, "maquininha": maq, "parcelas": parc,
+                 "nsu": re.sub(r'\s+', '', (d.get("nsu") or ""))[:30].upper(), "forma_pgto_id": forma, "conta_id": conta,
+                 "hon_no_cartao": _sim(d.get("hon_no_cartao"), True),
+                 # retorno e custo da maquininha: só quem vê lucro informa (os outros mantêm o que já estava)
+                 "retorno_tipo": ((d.get("retorno_tipo") or "").strip().upper()[:10] if vl else (atual or {}).get('retorno_tipo', '')),
+                 "retorno_valor": (_num(d.get("retorno_valor")) if vl else (atual or {}).get('retorno_valor') or 0),
+                 "custo_maquininha": (_num(d.get("custo_maquininha")) if vl else (atual or {}).get('custo_maquininha') or 0)}
+            calc = _parc_calc(cur, o['id'], p)
+            if _sim(d.get("simular"), False):      # só calcula (tela mostra ao vivo), não grava nada
+                if not vl:
+                    calc = {k: calc[k] for k in ('debitos', 'acrescimo', 'valor_cartao')}
+                return jsonify({"ok": True, "calc": calc})
+            acr = _num(calc['acrescimo'])
+            # acréscimo do parcelamento: item separado (receita), fora do repasse
+            cur.execute("SELECT id FROM os_itens WHERE os_id=%s AND origem='acrescimo'", (o['id'],))
+            ia = cur.fetchone()
+            desc_acr = "ACRÉSCIMO PARCELAMENTO NO CARTÃO (%dx)" % parc
+            if acr > 0 and ia:
+                cur.execute("UPDATE os_itens SET valor=%s, custo=0, qtd=1, descricao=%s WHERE id=%s", (acr, desc_acr, ia['id']))
+            elif acr > 0:
+                cur.execute("""INSERT INTO os_itens (os_id, descricao, qtd, valor, custo, user_nome, natureza, categoria, origem)
+                               VALUES (%s,%s,1,%s,0,%s,'honorario','','acrescimo')""", (o['id'], desc_acr, acr, _eu()))
+            elif ia:
+                cur.execute("DELETE FROM os_itens WHERE id=%s", (ia['id'],))
+            cols = ("data", "valor_cartao", "maquininha", "parcelas", "nsu", "forma_pgto_id", "conta_id", "hon_no_cartao",
+                    "retorno_tipo", "retorno_valor", "custo_maquininha")
+            if atual:
+                cur.execute("UPDATE os_parcelamentos SET " + ", ".join(c + "=%s" for c in cols) +
+                            ", atualizado=NOW(), user_nome=%s WHERE id=%s", tuple(p[c] for c in cols) + (_eu(), atual['id']))
+                pid, rec_id = atual['id'], atual['recebimento_id']
+            else:
+                cur.execute("INSERT INTO os_parcelamentos (os_id, " + ", ".join(cols) + ", user_nome) VALUES (%s," +
+                            ",".join(["%s"] * len(cols)) + ",%s) RETURNING id", (o['id'],) + tuple(p[c] for c in cols) + (_eu(),))
+                pid, rec_id = cur.fetchone()['id'], None
+            cur.execute("""UPDATE ordens_servico SET processo_tipo_id = COALESCE(processo_tipo_id,
+                             (SELECT id FROM processo_tipos WHERE upper(nome) = upper(%s) LIMIT 1)) WHERE id=%s""",
+                        (TIPO_PARCELAMENTO, o['id']))
+            _ocorrencia(cur, o['id'], 'outras', 'Parcelamento no cartão: R$ %s em %dx na %s — débitos R$ %s, acréscimo R$ %s'
+                        % (_br(cartao), parc, maq, _br(calc['debitos']), _br(acr)))
+            msg_rec = ''
+            if not rec_id and _sim(d.get("lancar_recebimento"), True):
+                try:
+                    rec_id, st = _receber(cur, numero, {"valor": str(cartao), "forma_pgto_id": forma, "conta_id": conta,
+                                                        "maquininha": maq, "parcelas": parc, "nsu": p['nsu'],
+                                                        "data": p['data'].isoformat(), "obs": "Parcelamento de débitos no cartão"})
+                    cur.execute("UPDATE os_parcelamentos SET recebimento_id=%s WHERE id=%s", (rec_id, pid))
+                    msg_rec = 'pendente' if st == 'pendente' else 'ok'
+                except ValueError as e:
+                    msg_rec = str(e)
+            _toca(cur, o['id'])
+        return jsonify({"ok": True, "calc": calc, "recebimento": msg_rec})
+
+    @app.route("/api/os/<int:numero>/parcelamento", methods=["DELETE"])
+    @equipe
+    def os_parcelamento_del(numero):
+        if not _admin():
+            return jsonify({"erro": "Só o administrador desfaz o parcelamento."}), 403
+        with db(commit=True) as cur:
+            o = _os_por_numero(cur, numero)
+            if not o:
+                return jsonify({"erro": "OS não encontrada"}), 404
+            cur.execute("DELETE FROM os_parcelamentos WHERE os_id=%s", (o['id'],))
+            cur.execute("DELETE FROM os_itens WHERE os_id=%s AND origem='acrescimo'", (o['id'],))
+            _ocorrencia(cur, o['id'], 'outras', 'Dados do parcelamento no cartão apagados (o recebimento continua na aba Recebimentos)')
+            _toca(cur, o['id'])
+        return jsonify({"ok": True})
+
+    # ── atendimento avulso rápido (sem placa, sempre com honorário) ──
+    @app.route("/api/os/avulso", methods=["POST"])
+    @equipe
+    def os_avulso():
+        d = request.get_json() or {}
+        servico = (d.get("servico") or "").strip().upper()
+        valor = _num(d.get("valor"))
+        if not servico:
+            return jsonify({"erro": "Diga qual foi o serviço (consulta, agendamento...)."}), 400
+        if valor <= 0:
+            return jsonify({"erro": "Atendimento avulso sempre tem honorário: informe o valor."}), 400
+        try:
+            return _avulso_grava(d, servico, valor)
+        except _Rollback as e:
+            return jsonify({"erro": str(e)}), 400
+
+    def _avulso_grava(d, servico, valor):
+        with db(commit=True) as cur:
+            cid = d.get("cliente_id")
+            if not cid:
+                nome = (d.get("nome") or "").strip().upper()
+                if not nome:
+                    raise _Rollback("Informe o nome do cliente.")
+                doc = _so_dig(d.get("cpf_cnpj"))
+                if doc:
+                    cur.execute("SELECT id FROM clientes WHERE regexp_replace(cpf_cnpj,'\\D','','g') = %s LIMIT 1", (doc,))
+                    c_ = cur.fetchone()
+                    cid = c_['id'] if c_ else None
+                if not cid:
+                    cur.execute("""INSERT INTO clientes (cpf_cnpj, nome, cel, tipo) VALUES (%s,%s,%s,%s) RETURNING id""",
+                                (_fmt_doc(doc) if doc else '', nome, (d.get("cel") or "").strip(),
+                                 'pj' if len(doc) == 14 else 'pf'))
+                    cid = cur.fetchone()['id']
+            vid = None
+            placa = re.sub(r'[^A-Z0-9]', '', (d.get("placa") or "").upper())
+            if placa:
+                cur.execute("SELECT id FROM veiculos WHERE upper(regexp_replace(placa,'[^A-Za-z0-9]','','g')) = %s LIMIT 1", (placa,))
+                v_ = cur.fetchone()
+                if v_:
+                    vid = v_['id']
+                else:
+                    cur.execute("INSERT INTO veiculos (placa, proprietario_id) VALUES (%s,%s) RETURNING id", (placa, cid))
+                    vid = cur.fetchone()['id']
+            numero = _proximo_numero(cur)
+            cur.execute("""INSERT INTO ordens_servico (numero, tipo, cliente_id, veiculo_id, user_id, user_nome, status,
+                               honorario, obs, empresa_id, processo_tipo_id)
+                           VALUES (%s,'os',%s,%s,%s,%s,'andamento',0,%s,%s,
+                                   (SELECT id FROM processo_tipos WHERE upper(nome) = upper(%s) LIMIT 1)) RETURNING id""",
+                        (numero, cid, vid, str(session.get('user_id') or ''), _eu(), (d.get("obs") or "").strip(),
+                         session.get('empresa_id'), TIPO_AVULSO))
+            oid = cur.fetchone()['id']
+            _ocorrencia(cur, oid, 'outras', 'Atendimento avulso aberto por %s' % _eu())
+            _add_item(cur, oid, {"descricao": servico, "valor": str(valor), "natureza": "honorario"})
+            st = None
+            rec = d.get("recebimento") or {}
+            if rec.get("forma_pgto_id"):
+                rec = dict(rec, valor=str(valor), obs=rec.get("obs") or 'Atendimento avulso')
+                try:
+                    _, st = _receber(cur, numero, rec)
+                except ValueError as e:
+                    raise _Rollback(str(e))
+                if st == 'confirmado':
+                    cur.execute("UPDATE ordens_servico SET status='concluida' WHERE id=%s", (oid,))
+                    _ocorrencia(cur, oid, 'outras', 'Em andamento → Concluída (atendimento avulso pago na hora)')
+        return jsonify({"ok": True, "numero": numero, "recebimento": st})
 
     # ── itens ──────────────────────────────────────────────────
     def _natureza(it):
@@ -1606,25 +1882,23 @@ def registrar(app, db, login_required):
                      valor, valor, conta_id, centro, forma_id, os_id, obs, quem, session.get('empresa_id')))
         return cur.fetchone()['id']
 
-    @app.route("/api/os/<int:numero>/recebimentos", methods=["POST"])
-    @equipe
-    def os_receber(numero):
-        d = request.get_json() or {}
+    def _receber(cur, numero, d):
+        """Lança um recebimento na OS (com baixa se o usuário pode dar baixa). Devolve (id, status)."""
         valor = _num(d.get("valor"))
         if valor <= 0:
-            return jsonify({"erro": "Informe o valor recebido."}), 400
+            raise ValueError("Informe o valor recebido.")
         if not d.get("forma_pgto_id"):
-            return jsonify({"erro": "Escolha a forma de pagamento."}), 400
+            raise ValueError("Escolha a forma de pagamento.")
         if not d.get("conta_id"):
-            return jsonify({"erro": "Escolha a conta."}), 400
-        with db(commit=True) as cur:
+            raise ValueError("Escolha a conta.")
+        if True:
             cur.execute("SELECT nome FROM formas_pgto WHERE id=%s", (d["forma_pgto_id"],))
             ftipo = _forma_tipo((cur.fetchone() or {}).get('nome'))
             maq, parc, nsu = '', 1, ''
             if ftipo in ('debito', 'credito'):
                 maq = (d.get("maquininha") or "").strip().upper()
                 if maq not in MAQUININHAS:
-                    return jsonify({"erro": "Pagamento no cartão: escolha a maquininha (Stone ou Sicredi)."}), 400
+                    raise ValueError("Pagamento no cartão: escolha a maquininha (Stone ou Sicredi).")
                 nsu = re.sub(r'\s+', '', (d.get("nsu") or ""))[:30].upper()
                 if ftipo == 'credito':
                     try:
@@ -1632,17 +1906,17 @@ def registrar(app, db, login_required):
                     except (TypeError, ValueError):
                         parc = 1
                     if not 1 <= parc <= 24:
-                        return jsonify({"erro": "Parcelas: de 1 a 24."}), 400
+                        raise ValueError("Parcelas: de 1 a 24.")
             r = _os_completa(cur, numero)
             if not r:
-                return jsonify({"erro": "OS não encontrada"}), 404
+                raise ValueError("OS não encontrada")
             o = r['os']
             livre = o['devedor'] - o.get('aguardando_baixa', 0)
             if float(valor) > livre + 0.004:
                 msg = "Valor maior que o saldo devedor (R$ %s)." % _br(o['devedor'])
                 if o.get('aguardando_baixa'):
                     msg += " Já há R$ %s informado aguardando baixa." % _br(o['aguardando_baixa'])
-                return jsonify({"erro": msg}), 400
+                raise ValueError(msg)
             centro = d.get("centro_id") or None
             if not centro:  # centro = serviço principal da OS
                 for it in r['itens']:
@@ -1664,10 +1938,11 @@ def registrar(app, db, login_required):
             cur.execute("""INSERT INTO os_recebimentos (os_id, quando, valor, forma_pgto_id, conta_id,
                                centro_id, obs, user_nome, lancamento_id, status, baixa_por, baixa_em,
                                maquininha, parcelas, nsu)
-                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
                         (o['id'], quando, valor, d["forma_pgto_id"], d["conta_id"], centro, obs, _eu(), lid,
                          'confirmado' if baixa else 'pendente', _eu() if baixa else '', _agora() if baixa else None,
                          maq, parc, nsu))
+            rid = cur.fetchone()['id']
             cur.execute("SELECT nome FROM formas_pgto WHERE id=%s", (d["forma_pgto_id"],))
             fn = ((cur.fetchone() or {}).get('nome', '') + cartao)
             if baixa:
@@ -1676,7 +1951,18 @@ def registrar(app, db, login_required):
                 _ocorrencia(cur, o['id'], 'outras', 'Recebimento de R$ %s (%s) informado por %s — AGUARDANDO BAIXA'
                             % (_br(valor), fn, _eu()))
             _toca(cur, o['id'])
-        return jsonify({"ok": True, "status": 'confirmado' if baixa else 'pendente'})
+        return rid, ('confirmado' if baixa else 'pendente')
+
+    @app.route("/api/os/<int:numero>/recebimentos", methods=["POST"])
+    @equipe
+    def os_receber(numero):
+        d = request.get_json() or {}
+        with db(commit=True) as cur:
+            try:
+                rid, st = _receber(cur, numero, d)
+            except ValueError as e:
+                return jsonify({"erro": str(e)}), 400
+        return jsonify({"ok": True, "status": st, "id": rid})
 
     @app.route("/api/os-recebimentos/pendentes", methods=["GET"])
     @equipe
@@ -1796,6 +2082,10 @@ def registrar(app, db, login_required):
             o = _os_por_numero(cur, numero)
             if not o:
                 return jsonify({"erro": "OS não encontrada"}), 404
+            if tipo == 'entregue' and o['status'] != 'entregue':
+                erro = _hon_zero_checa(cur, o, 'entregue', d.get("hon_zero_motivo"))
+                if erro:
+                    return jsonify(erro), 400
             _ocorrencia(cur, o['id'], tipo, desc, (d.get("obs") or "").strip())
             if tipo == 'protocolo' and d.get("protocolo"):
                 cur.execute("UPDATE ordens_servico SET protocolo=%s WHERE id=%s",

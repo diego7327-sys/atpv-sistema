@@ -100,6 +100,11 @@
 .ocx-obs label{font-size:13px!important;color:#ffc61a!important}
 .ocx-obs textarea{min-height:150px!important;font-size:15px!important;border-color:rgba(255,198,26,.45)!important}
 .os-cartao{grid-template-columns:1fr 110px 1.4fr;gap:10px;background:rgba(0,153,255,.06);border:1px dashed rgba(0,153,255,.35);border-radius:10px;padding:10px 12px 0;margin:0 0 10px}
+.osp-add{display:grid;grid-template-columns:150px 1.4fr 1.2fr 110px auto;gap:8px;margin-top:10px}
+.osp-vl{background:rgba(0,212,170,.05);border:1px dashed rgba(0,212,170,.35);border-radius:10px;padding:10px 12px 0;margin-bottom:10px}
+.osp-res{position:sticky;top:10px}
+.os-cchips{display:flex;gap:6px;margin-top:5px}.os-cchips button{background:var(--surf2,#1c2230);border:1px solid var(--brd);color:var(--txt);border-radius:6px;padding:3px 10px;font-size:11.5px;font-weight:700;cursor:pointer}
+.os-cchips button:hover{border-color:var(--acc);color:var(--acc)}
 .osi-rep{display:grid;grid-template-columns:1fr 2fr 1.4fr;gap:10px;background:rgba(255,165,2,.05);border:1px dashed rgba(255,165,2,.35);border-radius:10px;padding:10px 12px 0;margin:2px 0 8px}
 .rq-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
 .rq-card{text-align:left;background:rgba(79,139,255,.07);border:1px solid rgba(79,139,255,.35);border-left:5px solid #4f8bff;border-radius:10px;padding:12px 14px;cursor:pointer;color:var(--txt);font-family:var(--font);display:flex;flex-direction:column;gap:4px}
@@ -252,6 +257,8 @@ input[type=date].os-dt,.fg input[type=date]{color-scheme:dark}
   <div id="osv-lista">
     <div class="fb-title" style="display:flex;justify-content:space-between;align-items:center">📋 Ordens de Serviço
       <span style="display:flex;gap:6px">
+        <button class="os-b" onclick="osAvulsoModal()">⚡ Atendimento avulso</button>
+        <button class="os-b" onclick="osNovaParc()">💳 Parcelamento no cartão</button>
         <button class="os-b" onclick="osNova('os')">+ OS direta</button>
         <button class="os-b pri" onclick="osNova('orcamento')">+ Novo orçamento</button>
       </span></div>
@@ -389,6 +396,11 @@ input[type=date].os-dt,.fg input[type=date]{color-scheme:dark}
           <div class="fg" style="flex:0"><button class="os-b pri" onclick="osNumIni()">Salvar</button></div>
         </div><div class="os-small" id="osf-prox"></div>
       </div>
+      <div class="os-box os-adm" style="display:none"><h4>🧾 Nota fiscal do honorário — parcelamento de débitos no cartão</h4>
+        <p class="os-small" style="margin-bottom:8px">Como o sistema calcula o valor da nota nas OS de parcelamento. Vale para a tela da OS e para o relatório do contador.</p>
+        <div id="osf-nfcrit"></div>
+        <div style="text-align:right"><button class="os-b pri" onclick="osNfCritSalvar()">Salvar critério</button></div>
+      </div>
       <div class="os-cad" id="osf-cads"></div>
     </div>
   </div>
@@ -424,7 +436,7 @@ function osSt(s){ return '<span class="os-st st-'+s+'">'+osEsc(OS_STATUS[s]||s)+
 function osApi(url, metodo, corpo){
   var o={method:metodo||'GET',headers:{'Content-Type':'application/json'}};
   if(corpo) o.body=JSON.stringify(corpo);
-  return fetch(url,o).then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error(j.erro||'Erro'); return j; }); });
+  return fetch(url,o).then(function(r){ return r.json().then(function(j){ if(!r.ok){ var e=new Error(j.erro||'Erro'); e.dados=j; throw e; } return j; }); });
 }
 function osMsg(m,t){ if(typeof showAlert==='function') showAlert(m,t||'ok'); else alert(m); }
 function osErr(e){ osMsg(e.message||String(e),'err'); }
@@ -1057,7 +1069,8 @@ function osNovaSalvar(acao){
       var n=osZapNumero(zapCel), url=(n?'https://wa.me/'+n:'https://wa.me/')+'?text='+encodeURIComponent(osMsgTexto(dadosMsg));
       if(zapJanela) zapJanela.location.href=url; else osAbrirZap(zapCel, osMsgTexto(dadosMsg));
     }
-    osAbrir(numero, 'doc');
+    var tsel=osE('osn-tipo'), tnome=tsel&&tsel.selectedIndex>=0?tsel.options[tsel.selectedIndex].text:'';
+    osAbrir(numero, (ehOS&&tnome===OS_TIPO_PARC)?'parcelamento':'doc');
     if(acao==='imagem') setTimeout(function(){ osGerarImagem(dadosMsg); },500);
   }).catch(function(e){
     if(zapJanela) zapJanela.close();
@@ -1085,6 +1098,7 @@ function osRender(){
   if(exc) h+='<div class="alert err" style="display:block;margin:0 0 12px">🗑 Esta OS está na lixeira (excluída em '+osEsc(o.excluida_em)+' por '+osEsc(o.excluida_por)+').'+
     (osAdm()?' <button class="os-b" onclick="osRestaurar()">Restaurar</button>':'')+'</div>';
   h+='<div class="os-head"><div><h2>'+(o.status==='orcamento'?'ORÇAMENTO':'OS')+' Nº '+o.numero+' '+osSt(o.status)+
+     (o.hon_zero_motivo?' <span class="os-tp" style="font-size:11px;vertical-align:middle;color:var(--warn);border-color:rgba(255,165,2,.4);background:rgba(255,165,2,.1)">HONORÁRIO ZERO · '+osEsc(o.hon_zero_motivo)+'</span>':'')+
      (o.processo_tipo?' <span class="os-tp" style="font-size:11px;vertical-align:middle">'+osEsc(o.processo_tipo)+'</span>':' <span class="os-tp" style="color:var(--warn);border-color:rgba(255,165,2,.4);background:rgba(255,165,2,.1)">SEM TIPO DE PROCESSO</span>')+'</h2>'+
      '<div class="os-small">Aberta em '+osEsc(o.data_abertura)+' por '+osEsc(o.user_nome||'—')+(o.protocolo?' · Protocolo <b style="color:var(--txt)">'+osEsc(o.protocolo)+'</b>':'')+
      (o.status==='orcamento'&&o.validade?' · Válido até '+osBr(o.validade):'')+'</div>'+
@@ -1110,13 +1124,14 @@ function osRender(){
   }
   var abas=[['doc','📄 Ordem de Serviço'],['cadastro','Cadastro'],['itens','Itens e honorário',d.itens.length],['recebimentos','Recebimentos',d.recebimentos.length],
             ['ocorrencias','Ocorrências',d.ocorrencias.length],['pendencias','Pendências',d.pendencias.filter(function(p){return !p.resolvida;}).length],
+            ].concat((o.processo_tipo===OS_TIPO_PARC||d.parcelamento)?[['parcelamento','💳 Parcelamento']]:[]).concat([
             ['repasses','🧾 Repasses',d.itens.filter(function(i){ return i.natureza==='repasse'&&!i.repasse_quitado; }).length],
-            ['documentos','Documentos',d.documentos.length],['req','📝 Requerimentos']];
+            ['documentos','Documentos',d.documentos.length],['req','📝 Requerimentos']]);
   h+='<div class="os-abas">';
   abas.forEach(function(a){ h+='<button class="'+(OS.aba===a[0]?'on':'')+'" onclick="OS.aba=\''+a[0]+'\';osRender()">'+a[1]+(a[2]?'<span class="cnt">'+a[2]+'</span>':'')+'</button>'; });
   h+='</div><div id="os-aba-corpo"></div>';
   osE('osv-os').innerHTML=h;
-  ({doc:osAbaDoc,cadastro:osAbaCadastro,itens:osAbaItens,recebimentos:osAbaReceb,ocorrencias:osAbaOcor,pendencias:osAbaPend,documentos:osAbaDocs,req:osAbaReq,repasses:osAbaRepasses}[OS.aba]||osAbaCadastro)();
+  ({doc:osAbaDoc,cadastro:osAbaCadastro,itens:osAbaItens,recebimentos:osAbaReceb,ocorrencias:osAbaOcor,pendencias:osAbaPend,documentos:osAbaDocs,req:osAbaReq,repasses:osAbaRepasses,parcelamento:osAbaParc}[OS.aba]||osAbaCadastro)();
 }
 function osFichaCli(c){
   if(!c) return '';
@@ -1230,7 +1245,7 @@ function osAbaItens(){
       '<label class="os-chk" style="margin:0 0 12px"><input type="checkbox" id="osi-pago" onchange="osE(\'osi-pgcampos\').style.display=this.checked?\'flex\':\'none\'"> Já paguei este repasse (lança saída no caixa)</label>'+
       '<div id="osi-pgcampos" style="display:none;gap:10px;flex:1;flex-wrap:wrap">'+
         '<div class="fg" style="flex:1;min-width:130px"><label>Data do pagamento</label><input type="date" id="osi-pgdata" value="'+osHoje()+'"></div>'+
-        '<div class="fg" style="flex:1;min-width:140px"><label>Saiu da conta</label><select id="osi-pgconta">'+osOpts(c0.contas,osContaPor('CAIXA'),'— conta —')+'</select></div>'+
+        '<div class="fg" style="flex:1;min-width:140px"><label>Saiu da conta</label><select id="osi-pgconta">'+osOpts(c0.contas,osContaPor('CAIXA'),'— conta —')+'</select>'+osContaChips('osi-pgconta')+'</div>'+
         '<div class="fg" style="flex:2;min-width:200px"><label>Comprovante (PDF ou foto)</label><input type="file" id="osi-pgarq" accept="application/pdf,image/*"></div></div></div>':'')+
     '<p class="os-small" style="margin-top:6px">O item entra no total da OS e no saldo do cliente na hora, e fica no histórico com seu nome e horário. O pagamento do repasse e o comprovante ficam na aba <b>🧾 Repasses</b>.</p></div>';
   h+='<div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Descrição</th><th style="text-align:right">Qtd</th><th style="text-align:right">Valor</th>'+(vl?'<th style="text-align:right">Repasse 🔒</th><th style="text-align:right">Honorário 🔒</th>':'')+'<th>Repasse pago?</th><th>Lançado</th><th></th></tr></thead><tbody>';
@@ -1351,6 +1366,157 @@ function osHonSalvar(){
   osApi('/api/os/'+OS.atual.os.numero,'PUT',{honorario:osE('osi-hon').value, desconto:osE('osi-desc2').value, obs_cliente:osE('osi-obscli').value}).then(function(){ osMsg('✓ Salvo.'); osRecarregar('itens'); }).catch(osErr);
 }
 
+// ── 💳 PARCELAMENTO DE DÉBITOS NO CARTÃO ──
+var OS_TIPO_PARC='PAGAMENTO/PARCELAMENTO DE DÉBITOS';
+function osAbaParc(){
+  var d=OS.atual, o=d.os, pr=d.parcelamento||{}, vl=osVL(), ro=!!o.excluida_em, c=OS.cad;
+  var its=d.itens.filter(function(i){ return i.natureza==='repasse'; }), soma=0;
+  var h='<div class="g2" style="align-items:start;grid-template-columns:1.35fr 1fr"><div>';
+  h+='<div class="os-box"><h4>1 · Débitos pagos — viram repasse</h4><div class="table-wrap" style="margin:0"><table><thead><tr><th>Tipo</th><th>Descrição</th><th>Nº DUA / boleto</th><th style="text-align:right">Valor</th><th></th></tr></thead><tbody>';
+  its.forEach(function(i){ soma+=i.valor*i.qtd;
+    h+='<tr><td><span class="nv-tag tx">'+osEsc(osCatNome(i.categoria)||'REPASSE')+'</span></td><td>'+osEsc(i.descricao)+'</td><td>'+(i.documento?osEsc(i.documento):'<span class="os-small" style="color:var(--warn)">⚠ falta</span>')+'</td>'+
+       '<td class="os-money">'+osN(i.valor*i.qtd)+'</td><td>'+(ro?'':'<button class="os-b del" onclick="osItemDel('+i.id+')">✕</button>')+'</td></tr>'; });
+  if(!its.length) h+='<tr><td colspan="5" class="os-vazio">Lance abaixo cada débito pago: IPVA, licenciamento, multas…</td></tr>';
+  else h+='<tr class="os-soma"><td colspan="3">Total dos débitos</td><td class="os-money">'+osN(soma)+'</td><td></td></tr>';
+  h+='</tbody></table></div>';
+  if(!ro) h+='<div class="osp-add"><div class="fg"><label>Tipo</label><select id="ospd-cat" onchange="osParcDescPadrao()">'+osCatOpts('ipva')+'</select></div>'+
+    '<div class="fg"><label>Descrição</label><input id="ospd-desc" onkeydown="if(event.key===\'Enter\'){event.preventDefault();osE(\'ospd-doc\').focus();}"></div>'+
+    '<div class="fg"><label>Nº DUA / boleto</label><input id="ospd-doc" onkeydown="if(event.key===\'Enter\'){event.preventDefault();osE(\'ospd-valor\').focus();}"></div>'+
+    '<div class="fg"><label>Valor (R$)</label><input id="ospd-valor" placeholder="0,00" onkeydown="if(event.key===\'Enter\'){event.preventDefault();osParcDebAdd();}"></div>'+
+    '<div class="fg"><label>&nbsp;</label><button class="os-b pri" onclick="osParcDebAdd()">+ Adicionar</button></div></div>';
+  h+='</div>';
+  var parc=''; for(var k=1;k<=24;k++) parc+='<option value="'+k+'">'+k+'x</option>';
+  var inp=' oninput="osDeb(\'parc\',osParcSimular)" onchange="osDeb(\'parc\',osParcSimular)"';
+  h+='<div class="os-box"><h4>2 · Cartão</h4><div class="g3">'+
+    '<div class="fg"><label>Data</label><input type="date" id="osp-data" value="'+(pr.data||osHoje())+'"'+inp+'></div>'+
+    '<div class="fg"><label>Valor total passado no cartão *</label><input id="osp-cartao" placeholder="0,00" value="'+(pr.valor_cartao?osN(pr.valor_cartao):'')+'"'+inp+'></div>'+
+    '<div class="fg"><label>Maquininha *</label><select id="osp-maq" onchange="osParcMaq();osDeb(\'parc\',osParcSimular)"><option value="">— escolha —</option>'+(c.maquininhas||['STONE','SICREDI']).map(function(m){ return '<option'+(pr.maquininha===m?' selected':'')+'>'+m+'</option>'; }).join('')+'</select></div>'+
+    '<div class="fg"><label>Nº de parcelas</label><select id="osp-parc"'+inp+'>'+parc+'</select></div>'+
+    '<div class="fg"><label>NSU / autorização</label><input id="osp-nsu" value="'+osEsc(pr.nsu||'')+'"></div>'+
+    '<div class="fg"><label>Conta onde cai</label><select id="osp-conta">'+osOpts(c.contas,pr.conta_id||'','— pela maquininha —')+'</select></div></div>'+
+    '<label class="os-chk" style="margin:2px 0 10px"><input type="checkbox" id="osp-honc" '+(pr.hon_no_cartao===false?'':'checked')+' onchange="osParcSimular()"> O honorário foi cobrado junto no cartão</label>'+
+    (vl?'<div class="g3 osp-vl"><div class="fg"><label>Retorno da maquininha 🔒</label><select id="osp-rtipo"'+inp+'>'+['','R0','R3','R6','OUTRO'].map(function(r){ return '<option value="'+r+'"'+((pr.retorno_tipo||'')===r?' selected':'')+'>'+(r||'—')+'</option>'; }).join('')+'</select></div>'+
+      '<div class="fg"><label>Valor do retorno (R$) 🔒</label><input id="osp-rval" placeholder="0,00" value="'+(pr.retorno_valor?osN(pr.retorno_valor):'')+'"'+inp+'></div>'+
+      '<div class="fg"><label>Custo da maquininha (R$) 🔒</label><input id="osp-custo" placeholder="0,00" value="'+(pr.custo_maquininha?osN(pr.custo_maquininha):'')+'"'+inp+'></div></div>':'')+
+    (ro?'':'<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">'+(osAdm()&&pr.id?'<button class="os-b del" onclick="osParcDesfazer()">Desfazer parcelamento</button>':'')+
+      '<button class="os-b pri" id="osp-bt" onclick="osParcSalvar()">'+(pr.id?'Salvar alterações':'Salvar e lançar o recebimento do cartão')+'</button></div>')+'</div>';
+  h+='</div><div><div class="os-box osp-res" id="osp-res"><span class="os-small">Calculando…</span></div></div></div>';
+  osE('os-aba-corpo').innerHTML=h;
+  if(pr.parcelas) osE('osp-parc').value=pr.parcelas;
+  if(osE('ospd-cat')) osParcDescPadrao();
+  osParcSimular();
+}
+function osParcDescPadrao(){ var cat=osE('ospd-cat').value, a=(new Date()).getFullYear();
+  osE('ospd-desc').value={ipva:'IPVA '+a,licenciamento:'LICENCIAMENTO '+a,multa:'MULTA AIT ',taxa_detran:'TAXA DETRAN',vistoria:'VISTORIA',placa:'PLACA',outros:''}[cat]||''; }
+function osParcDebAdd(){
+  var c={descricao:osE('ospd-desc').value.trim(), valor:osE('ospd-valor').value, natureza:'repasse', categoria:osE('ospd-cat').value, documento:osE('ospd-doc').value};
+  if(!c.descricao){ osMsg('Descreva o débito.','err'); osE('ospd-desc').focus(); return; }
+  if(!(nvNum(c.valor)>0)){ osMsg('Informe o valor do débito.','err'); osE('ospd-valor').focus(); return; }
+  osApi('/api/os/'+OS.atual.os.numero+'/itens','POST',c).then(function(){ osMsg('✓ Débito lançado: '+c.descricao.toUpperCase()); osRecarregar('parcelamento'); }).catch(osErr);
+}
+function osParcMaq(){ var m=osE('osp-maq').value, k=m==='STONE'?'STONE':(m==='SICREDI'?'SICRED':''); if(k){ var id=osContaPor(k); if(id) osE('osp-conta').value=id; } }
+function osParcDados(){
+  var c={data:osE('osp-data').value, valor_cartao:osE('osp-cartao').value, maquininha:osE('osp-maq').value, parcelas:osE('osp-parc').value,
+         nsu:osE('osp-nsu').value, conta_id:osE('osp-conta').value||null, hon_no_cartao:osE('osp-honc').checked};
+  if(osE('osp-rtipo')){ c.retorno_tipo=osE('osp-rtipo').value; c.retorno_valor=osE('osp-rval').value; c.custo_maquininha=osE('osp-custo').value; }
+  return c; }
+function osParcSimular(){
+  if(!osE('osp-res')) return;
+  var c=osParcDados(); c.simular=true;
+  osApi('/api/os/'+OS.atual.os.numero+'/parcelamento','POST',c).then(function(r){
+    var k=r.calc, vl=osVL(), pr=OS.atual.parcelamento||{}, np=Number(c.parcelas)||1, h='<h4>Resumo do parcelamento</h4><table style="width:100%;font-size:14px">';
+    var L=function(a,b,st){ return '<tr><td style="padding:5px 0">'+a+'</td><td class="os-money" style="'+(st||'')+'">'+b+'</td></tr>'; };
+    h+=L('Débitos pagos (repasse)',osR(k.debitos));
+    if(vl) h+=L('Honorário do despachante',osR(k.honorario));
+    h+=L('<b>Acréscimo cobrado do cliente</b><div class="os-small">pelo parcelamento — fica separado do repasse</div>','<b>'+osR(k.acrescimo)+'</b>','color:var(--acc)');
+    h+=L('Total passado no cartão',osR(k.valor_cartao)+(k.valor_cartao>0?'<div class="os-small">'+np+'x de '+osR(k.valor_cartao/np)+'</div>':''));
+    if(vl){
+      var ch=function(id){ return k.criterio===id?' <span class="nv-tag hn" style="font-size:10px">USADO</span>':''; };
+      h+='<tr><td colspan="2" style="padding:12px 0 4px;border-top:1px solid var(--brd)"><b style="font-size:12px;letter-spacing:.06em;color:var(--mut)">NOTA FISCAL DO HONORÁRIO 🔒</b></td></tr>'+
+        L('Conservador'+ch('conservador')+'<div class="os-small">honorário + tudo cobrado no cartão acima dos débitos</div>',osR(k.nota_conservador),k.criterio==='conservador'?'color:var(--acc);font-weight:800':'opacity:.7')+
+        L('Só retorno'+ch('retorno')+'<div class="os-small">honorário + retorno da maquininha</div>',osR(k.nota_retorno),k.criterio==='retorno'?'color:var(--acc);font-weight:800':'opacity:.7')+
+        '<tr><td colspan="2" class="os-small" style="padding-top:6px">O critério se escolhe em Financeiro → Cadastros.</td></tr>';
+    }
+    h+='</table>';
+    var rec=pr.recebimento_id?(OS.atual.recebimentos.filter(function(x){ return x.id===pr.recebimento_id; })[0]):null;
+    if(rec && Math.abs(rec.valor-nvNum(c.valor_cartao))>0.004) h+='<div class="alert" style="display:block;margin:10px 0 0;background:rgba(255,165,2,.1);border:1px solid rgba(255,165,2,.4);color:var(--warn)">⚠ O recebimento lançado é de '+osR(rec.valor)+'. Se o valor no cartão mudou, ajuste na aba Recebimentos.</div>';
+    else if(rec) h+='<p class="os-small" style="margin-top:10px">✓ Recebimento do cartão lançado ('+osEsc(rec.quando)+').</p>';
+    else if(k.valor_cartao>0) h+='<p class="os-small" style="margin-top:10px">Ao salvar, o recebimento de '+osR(k.valor_cartao)+' no crédito ('+np+'x) é lançado na OS.</p>';
+    osE('osp-res').innerHTML=h;
+  }).catch(function(e){ osE('osp-res').innerHTML='<span class="os-small">'+osEsc(e.message)+'</span>'; });
+}
+function osParcSalvar(){
+  var c=osParcDados();
+  if(!(nvNum(c.valor_cartao)>0)){ osMsg('Informe o valor total passado no cartão.','err'); osE('osp-cartao').focus(); return; }
+  if(!c.maquininha){ osMsg('Escolha a maquininha.','err'); osE('osp-maq').focus(); return; }
+  var bt=osE('osp-bt'); bt.disabled=true;
+  osApi('/api/os/'+OS.atual.os.numero+'/parcelamento','POST',c).then(function(r){
+    var m='✓ Parcelamento salvo. Acréscimo '+osR(r.calc.acrescimo)+'.';
+    if(r.recebimento==='ok') m+=' Recebimento do cartão lançado.'; else if(r.recebimento==='pendente') m+=' Recebimento informado — aguardando baixa.';
+    else if(r.recebimento) m+=' Recebimento NÃO lançado: '+r.recebimento;
+    osMsg(m, r.recebimento&&r.recebimento!=='ok'&&r.recebimento!=='pendente'?'err':'ok'); osRecarregar('parcelamento');
+  }).catch(function(e){ bt.disabled=false; osErr(e); });
+}
+function osParcDesfazer(){
+  if(!confirm('Apagar os dados do parcelamento e o acréscimo? O recebimento continua na aba Recebimentos.')) return;
+  osApi('/api/os/'+OS.atual.os.numero+'/parcelamento','DELETE').then(function(){ osRecarregar('parcelamento'); }).catch(osErr);
+}
+function osNovaParc(){ osNova('os'); var t=(OS.cad.tipos||[]).filter(function(x){ return x.nome===OS_TIPO_PARC; })[0]; if(t&&osE('osn-tipo')) osE('osn-tipo').value=t.id;
+  osMsg('Parcelamento no cartão: cadastre cliente e veículo e o honorário; depois de salvar, lance os débitos e o cartão na aba 💳 Parcelamento.'); }
+
+// ── honorário zero: motivo ao finalizar ──
+function osHonZeroModal(motivos, continuar){
+  osModal('Honorário R$ 0,00 — qual o motivo?',
+    '<p class="os-small" style="margin:-4px 0 12px">Esta OS não tem honorário. Para finalizar, registre o motivo (vai para o histórico e para o relatório do contador).</p>'+
+    '<div class="fg"><label>Motivo</label><select id="oshz-mot" onchange="osE(\'oshz-txt-w\').style.display=this.value===\'OUTRO\'?\'\':\'none\'">'+
+      motivos.map(function(m){ return '<option>'+osEsc(m)+'</option>'; }).join('')+'</select></div>'+
+    '<div class="fg" id="oshz-txt-w" style="display:none"><label>Descreva</label><input id="oshz-txt" placeholder="ex.: serviço feito junto com outra OS"></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn-sec" onclick="osFechar()">Cancelar</button><button class="btn-main" id="oshz-ok">Confirmar e finalizar</button></div>');
+  osE('oshz-ok').onclick=function(){ var m=osE('oshz-mot').value;
+    if(m==='OUTRO'){ var t=osE('oshz-txt').value.trim(); if(t.length<3){ osMsg('Descreva o motivo.','err'); osE('oshz-txt').focus(); return; } m='OUTRO: '+t.toUpperCase(); }
+    osFechar(); continuar(m); };
+}
+
+// ── ⚡ atendimento avulso rápido (consulta, agendamento…) ──
+function osAvulsoModal(){
+  osCarregarCad().then(function(c){
+    var mp=c.meus_padroes||{};
+    osModal('⚡ Atendimento avulso',
+      '<p class="os-small" style="margin:-4px 0 12px">Consulta, agendamento, serviço rápido. Não precisa de placa, mas sempre tem honorário.</p>'+
+      '<div class="g2"><div class="fg"><label>Nome do cliente *</label><input id="osav-nome" style="text-transform:uppercase"></div>'+
+        '<div class="fg"><label>CPF / CNPJ (opcional — se já tiver cadastro, usa o mesmo)</label><input id="osav-doc"></div>'+
+        '<div class="fg"><label>Celular</label><input id="osav-cel"></div><div class="fg"><label>Placa (opcional)</label><input id="osav-placa" style="text-transform:uppercase"></div></div>'+
+      '<div class="fg"><label>Serviço *</label><div class="nv-chips" style="margin-bottom:6px">'+(c.avulso_servicos||[]).map(function(s){ return '<button type="button" class="nv-chip" onclick="osE(\'osav-serv\').value=\''+osEsc(s)+'\';osE(\'osav-valor\').focus()">'+osEsc(s)+'</button>'; }).join('')+'</div>'+
+        '<input id="osav-serv" placeholder="ou digite o serviço" style="text-transform:uppercase"></div>'+
+      '<div class="g2"><div class="fg"><label>Valor do honorário (R$) *</label><input id="osav-valor" placeholder="0,00"></div>'+
+        '<div class="fg"><label>&nbsp;</label><label class="os-chk" style="margin:8px 0 0"><input type="checkbox" id="osav-rec" checked onchange="osE(\'osav-recbox\').style.display=this.checked?\'\':\'none\'"> Cliente pagou agora</label></div></div>'+
+      '<div id="osav-recbox"><div class="g2"><div class="fg"><label>Forma</label><select id="osav-forma" onchange="osCartaoMostrar(\'osav\')">'+osOpts(c.formas,mp.forma_id,'— forma —')+'</select></div>'+
+        '<div class="fg"><label>Conta onde caiu</label><select id="osav-conta">'+osOpts(c.contas,mp.conta_id||osContaPor('SICRED'),'— conta —')+'</select></div></div>'+osCartaoHtml('osav')+'</div>'+
+      '<div class="fg"><label>Observação</label><input id="osav-obs"></div>'+
+      '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn-sec" onclick="osFechar()">Cancelar</button><button class="btn-main" id="osav-bt" onclick="osAvulsoSalvar()">Registrar atendimento</button></div>');
+    osCartaoMostrar('osav'); setTimeout(function(){ osE('osav-nome').focus(); },60);
+  }).catch(osErr);
+}
+function osAvulsoSalvar(){
+  var c={nome:osE('osav-nome').value, cpf_cnpj:osE('osav-doc').value, cel:osE('osav-cel').value, placa:osE('osav-placa').value,
+         servico:osE('osav-serv').value, valor:osE('osav-valor').value, obs:osE('osav-obs').value};
+  if(!c.nome.trim()){ osMsg('Informe o nome do cliente.','err'); osE('osav-nome').focus(); return; }
+  if(!c.servico.trim()){ osMsg('Escolha ou digite o serviço.','err'); osE('osav-serv').focus(); return; }
+  if(!(nvNum(c.valor)>0)){ osMsg('Atendimento avulso sempre tem honorário: informe o valor.','err'); osE('osav-valor').focus(); return; }
+  if(osE('osav-rec').checked){
+    var r={forma_pgto_id:osE('osav-forma').value, conta_id:osE('osav-conta').value};
+    if(!r.forma_pgto_id){ osMsg('Escolha a forma de pagamento.','err'); return; }
+    if(!r.conta_id){ osMsg('Escolha a conta.','err'); return; }
+    if(!osCartaoDados('osav',r)) return;
+    c.recebimento=r;
+  }
+  var bt=osE('osav-bt'); bt.disabled=true;
+  osApi('/api/os/avulso','POST',c).then(function(r){ osFechar();
+    osMsg('✓ Atendimento nº '+r.numero+' registrado'+(r.recebimento==='confirmado'?' e concluído.':(r.recebimento==='pendente'?' — pagamento aguardando baixa.':' — falta receber.')));
+    osLista(); osPainel(); }).catch(function(e){ bt.disabled=false; osErr(e); });
+}
+function osContaChips(sel){ return '<div class="os-cchips">'+['CAIXA','SICRED'].map(function(k){ return '<button type="button" onclick="var i=osContaPor(\''+k+'\');if(i)osE(\''+sel+'\').value=i">'+(k==='SICRED'?'SICREDI':k)+'</button>'; }).join('')+'</div>'; }
+
 // ── aba Repasses: pagamento das taxas/débitos aos órgãos, com comprovante ──
 function osAbaRepasses(){
   var d=OS.atual, o=d.os, bx=osBX(), vl=osVL(), ro=!!o.excluida_em;
@@ -1395,7 +1561,7 @@ function osRepasseModal(iid){
       its.map(function(i){ return '<option value="'+i.id+'"'+(i.id===iid?' selected':'')+'>'+osEsc(i.descricao)+(osVL()?' — '+osR(i.custo*i.qtd):'')+(i.repasse_quitado?' (já pago)':'')+'</option>'; }).join('')+
       '<option value="">— outro (sem item da OS) —</option></select></div>'+
     '<div class="g3"><div class="fg"><label>Data do pagamento</label><input type="date" id="osrp-data" value="'+osHoje()+'"></div>'+
-      '<div class="fg"><label>Saiu da conta *</label><select id="osrp-conta">'+osOpts(c.contas,osContaPor('CAIXA'),'— conta —')+'</select></div>'+
+      '<div class="fg"><label>Saiu da conta *</label><select id="osrp-conta">'+osOpts(c.contas,osContaPor('CAIXA'),'— conta —')+'</select>'+osContaChips('osrp-conta')+'</div>'+
       '<div class="fg"><label>Valor pago (R$) *</label><input id="osrp-valor" placeholder="0,00"></div></div>'+
     '<div class="g2"><div class="fg"><label>Órgão / beneficiário</label><input id="osrp-orgao"></div>'+
       '<div class="fg"><label>Nº do DUA / boleto</label><input id="osrp-doc"></div></div>'+
@@ -1553,13 +1719,17 @@ function osAbaOcor(){
 function osOcorAdd(){
   var c={tipo:osE('oso-tipo').value, descricao:osE('oso-desc').value, obs:osE('oso-obs').value, protocolo:osE('oso-prot').value};
   if(!c.descricao.trim()){ var t=osE('oso-tipo'); c.descricao=t.options[t.selectedIndex].text+(c.protocolo?' — '+c.protocolo:''); }
-  osApi('/api/os/'+OS.atual.os.numero+'/ocorrencias','POST',c).then(function(){ osRecarregar('ocorrencias'); }).catch(osErr);
+  var envia=function(mot){ c.hon_zero_motivo=mot||''; osApi('/api/os/'+OS.atual.os.numero+'/ocorrencias','POST',c).then(function(){ osRecarregar('ocorrencias'); })
+    .catch(function(e){ if(e.dados&&e.dados.codigo==='honorario_zero') osHonZeroModal(e.dados.motivos,envia); else osErr(e); }); };
+  envia();
 }
 function osMudarStatus(st){
   var o=OS.atual.os; if(o.status===st) return;
   var obs=prompt('Mudar para "'+OS_STATUS[st]+'". Observação (opcional):','');
   if(obs===null) return;
-  osApi('/api/os/'+o.numero+'/status','POST',{status:st,obs:obs}).then(function(){ osMsg('✓ Situação: '+OS_STATUS[st]); osRecarregar(); }).catch(osErr);
+  var envia=function(mot){ osApi('/api/os/'+o.numero+'/status','POST',{status:st,obs:obs,hon_zero_motivo:mot||''}).then(function(){ osMsg('✓ Situação: '+OS_STATUS[st]); osRecarregar(); })
+    .catch(function(e){ if(e.dados&&e.dados.codigo==='honorario_zero') osHonZeroModal(e.dados.motivos,envia); else osErr(e); }); };
+  envia();
 }
 function osConverter(){
   if(!confirm('Aprovar o orçamento e transformar em OS (Em andamento)?')) return;
@@ -2302,6 +2472,7 @@ function osFinCads(){
     osE('osf-mp-conta').innerHTML=osOpts(c.contas,mp.conta_id,'— nenhuma —');
     osE('osf-mp-forma').innerHTML=osOpts(c.formas,mp.forma_id,'— nenhuma —');
     osE('osf-numini').value=c.os_numero_inicial||'';
+    osE('osf-nfcrit').innerHTML=(c.nf_criterios||[]).map(function(x){ return '<label class="os-chk" style="margin:0 0 8px"><input type="radio" name="osf-nfc" value="'+x.id+'"'+(c.nf_criterio===x.id?' checked':'')+'> '+osEsc(x.nome)+(x.id==='conservador'?' <span class="os-small">(padrão)</span>':'')+'</label>'; }).join('');
     OS_EMP_CAMPOS.forEach(function(k){ var e=osE('osf-'+k); if(e) e.value=(c.empresa||{})[k]||''; });
     if(osAdm()) osApi('/api/os/permissoes').then(function(l){
       osE('osf-perm').innerHTML=l.map(function(u){ var adm=u.perfil==='admin';
@@ -2336,6 +2507,8 @@ function osEmpresaSalvar(){
   var c={}; OS_EMP_CAMPOS.forEach(function(k){ c[k]=osE('osf-'+k).value; });
   osApi('/api/os-config','POST',c).then(function(){ osMsg('✓ Dados da empresa salvos.'); osCarregarCad(true); }).catch(osErr);
 }
+function osNfCritSalvar(){ var r=document.querySelector('input[name=osf-nfc]:checked'); if(!r) return;
+  osApi('/api/os-config','POST',{nf_criterio:r.value}).then(function(){ osMsg('✓ Critério da nota salvo.'); osFinCads(); }).catch(osErr); }
 function osNumIni(){ osApi('/api/os-config','POST',{os_numero_inicial:osE('osf-numini').value}).then(function(){ osMsg('✓ Numeração salva.'); osFinCads(); }).catch(osErr); }
 </script>
 {% endraw %}
