@@ -236,12 +236,21 @@ ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS nf_valor NUMERIC(12,2);
 ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS nf_obs TEXT DEFAULT '';
 -- data em que a OS foi entregue/concluída (competência do honorário quando não há nota)
 ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS concluida_em TIMESTAMPTZ;
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS cancelada_em TIMESTAMPTZ;
+-- OS cancelada com dinheiro recebido: quanto foi devolvido e quanto ficou retido (vira receita)
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS cancel_devolvido NUMERIC(12,2);
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS cancel_retido NUMERIC(12,2);
 CREATE OR REPLACE FUNCTION os_marca_conclusao() RETURNS trigger AS $$
 BEGIN
   IF NEW.status IN ('entregue','concluida') THEN
     IF NEW.concluida_em IS NULL THEN NEW.concluida_em := NOW(); END IF;
   ELSE
     NEW.concluida_em := NULL;
+  END IF;
+  IF NEW.status = 'cancelada' THEN
+    IF NEW.cancelada_em IS NULL THEN NEW.cancelada_em := NOW(); END IF;
+  ELSE
+    NEW.cancelada_em := NULL;
   END IF;
   RETURN NEW;
 END $$ LANGUAGE plpgsql;
@@ -262,6 +271,18 @@ CREATE TABLE IF NOT EXISTS extrato_linhas (
     user_nome TEXT DEFAULT '', importado TIMESTAMPTZ DEFAULT NOW());
 CREATE INDEX IF NOT EXISTS extrato_data_idx ON extrato_linhas (conta_id, data);
 CREATE INDEX IF NOT EXISTS extrato_ref_idx ON extrato_linhas (ref_tipo, ref_id);
+-- ajustes do dinheiro do cliente: devolução (sai do caixa) e reconhecimento de receita
+CREATE TABLE IF NOT EXISTS os_ajustes (
+    id BIGSERIAL PRIMARY KEY,
+    os_id BIGINT REFERENCES ordens_servico(id) ON DELETE CASCADE,
+    tipo TEXT NOT NULL,                    -- devolucao | receita
+    data DATE NOT NULL, valor NUMERIC(12,2) NOT NULL,
+    reduz_repasse BOOLEAN DEFAULT FALSE,   -- baixou as taxas não pagas da OS
+    conta_id BIGINT REFERENCES contas(id),
+    arquivo_id BIGINT REFERENCES arquivos(id) ON DELETE SET NULL,
+    lancamento_id BIGINT REFERENCES lancamentos(id) ON DELETE SET NULL,
+    obs TEXT DEFAULT '', user_nome TEXT DEFAULT '', criado TIMESTAMPTZ DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS os_ajustes_os_idx ON os_ajustes (os_id);
 """
 
 # Cadastros iniciais — tirados das telas do BitDesp (levantamento de 13/11/2026)
@@ -374,11 +395,19 @@ def xlsx_contador(r, m, ini, fim):
     dm = r.get('dimp') or {"maquininhas": [], "total": {}}
     for g in dm['maquininhas'] + ([dm['total']] if dm.get('total') else []):
         linhas.append(("   %s — bruto no cartão" % g['maquininha'], g['bruto'], False))
-        linhas.append(("      repasse documentado (DUA/comprovante)", g['repasse_doc'], False))
+        linhas.append(("      repasse/devolução documentado", g['repasse_doc'], False))
+        linhas.append(("      adiantamento de taxa (DUA ainda não pago)", g.get('adiantamento', 0), False))
         linhas.append(("      receita com NFS-e", g['receita_nota'], False))
         linhas.append(("      SEM EXPLICAÇÃO", g['sem_explicacao'], False))
     linhas += [("", None, False),
-              ("RECEBIDO NO MÊS (por data do recebimento)", None, True)]
+               ("ADIANTAMENTOS DE CLIENTES PARA TAXAS (não é receita)", None, True),
+               ("Saldo no fim do mês (dinheiro de cliente para taxas ainda não pagas)", rs.get('adiantamentos_saldo', 0), False),
+               ("OS com adiantamento", rs.get('adiantamentos_qtd', 0), False),
+               ("PARADOS há mais de %s dias — quantidade" % rs.get('adiant_dias', 60), rs.get('adiantamentos_parados_qtd', 0), False),
+               ("PARADOS — valor", rs.get('adiantamentos_parados_valor', 0), False),
+               ("Devoluções a clientes no mês", rs.get('devolucoes', 0), False),
+               ("", None, False),
+               ("RECEBIDO NO MÊS (por data do recebimento)", None, True)]
     linhas += [("   " + k, v, False) for k, v in rs['recebido_por_forma'].items()]
     linhas += [("Total recebido (confirmado)", rs['recebido'], False),
                ("Informado e aguardando baixa", rs['aguardando_baixa'], False), ("", None, False),
@@ -387,7 +416,8 @@ def xlsx_contador(r, m, ini, fim):
     linhas += [("Total de repasses pagos", rs['repasses_pagos'], False),
                ("Pagamentos sem comprovante anexado", rs['repasses_sem_comprovante'], False)]
     qtds = ("Quantidade de OS", "NFS-e emitidas no mês — quantidade", "OS com honorário sem nota — quantidade",
-            "OS com honorário zero", "Pagamentos sem comprovante anexado")
+            "OS com honorário zero", "Pagamentos sem comprovante anexado", "OS com adiantamento",
+            "PARADOS há mais de %s dias — quantidade" % rs.get('adiant_dias', 60))
     lin = 4
     for rot, v, tit in linhas:
         ws.cell(lin, 1, rot)
@@ -396,7 +426,7 @@ def xlsx_contador(r, m, ini, fim):
                 ws.cell(lin, col).fill = hfill; ws.cell(lin, col).font = hfont
         elif v is not None:
             c = ws.cell(lin, 2, v)
-            if rot.strip() == "SEM EXPLICAÇÃO" and (v or 0) > 0.004:
+            if (rot.strip() == "SEM EXPLICAÇÃO" or rot.startswith("PARADOS")) and (v or 0) > 0.004:
                 ws.cell(lin, 1).font = Font(bold=True, color="C00000"); c.font = Font(bold=True, color="C00000")
             c.number_format = '0' if rot in qtds else moeda
             if rot.startswith("(=)") or rot.startswith("Total"):
@@ -414,7 +444,7 @@ def xlsx_contador(r, m, ini, fim):
                 v = x.get(k)
                 if isinstance(v, bool):
                     v = "SIM" if v else "NÃO"
-                if k in ('data', 'nf_data', 'conclusao', 'data_base') and v:
+                if k in ('data', 'nf_data', 'conclusao', 'data_base', 'desde') and v:
                     v = datetime.strptime(v[:10], "%Y-%m-%d").date()
                 c = w.cell(i, j, v)
                 if fmt == 'm': c.number_format = moeda
@@ -439,26 +469,41 @@ def xlsx_contador(r, m, ini, fim):
                       ("Valor NFS-e", "nf_valor", 12, 'm'), ("Recebido no mês", "recebido_mes", 12, 'm'), ("Recebido (total)", "recebido", 12, 'm'), ("Em aberto", "devedor", 12, 'm'),
                       ("Motivo hon. zero", "hon_zero_motivo", 22, '')], r['os'])
     aba("Conferência DIMP", [("Maquininha", "maquininha", 16, ''), ("Pagamentos", "qtd", 11, ''), ("Bruto no cartão", "bruto", 15, 'm'),
-                             ("Repasse documentado", "repasse_doc", 17, 'm'), ("Receita com NFS-e", "receita_nota", 16, 'm'),
+                             ("Repasse/devolução documentado", "repasse_doc", 17, 'm'), ("Adiantamento (DUA não pago)", "adiantamento", 17, 'm'),
+                             ("Receita com NFS-e", "receita_nota", 16, 'm'),
                              ("Sem explicação", "sem_explicacao", 15, 'm'), ("Relatório da maquininha", "relatorio", 17, 'm'),
                              ("Venda fora do sistema", "fora_sistema", 17, 'm')], dm['maquininhas'])
     wd = wb["Conferência DIMP"]
-    for row in wd.iter_rows(min_row=2, min_col=6, max_col=8):
+    amarelo = PatternFill("solid", fgColor="FFF2CC")
+    for row in wd.iter_rows(min_row=2, min_col=5, max_col=5):
         for c in row:
-            if c.column == 7: continue
+            c.fill = amarelo
+    for row in wd.iter_rows(min_row=2, min_col=7, max_col=9):
+        for c in row:
+            if c.column == 8: continue
             if isinstance(c.value, (int, float)) and c.value > 0.004 or (isinstance(c.value, str) and c.value.startswith('=')):
                 c.font = Font(bold=True, color="C00000")
     if dm.get('os'):
         base = wd.max_row + 3
         wd.cell(base - 1, 1, "OS com valor no cartão sem explicação").font = Font(bold=True, color=NAVY)
-        for j, t in enumerate(("OS", "Cliente", "Maquininha", "Cartão", "Repasse doc.", "Com nota", "Sem explicação", "Motivo"), 1):
+        for j, t in enumerate(("OS", "Cliente", "Maquininha", "Cartão", "Repasse doc.", "Adiantamento", "Com nota", "Sem explicação", "Motivo"), 1):
             c = wd.cell(base, j, t); c.font = hfont; c.fill = hfill
         for i2, e in enumerate(dm['os'], base + 1):
-            for j, k in enumerate(("os", "cliente", "maquininha", "cartao", "repasse_doc", "receita_nota", "sem_explicacao", "motivo"), 1):
+            for j, k in enumerate(("os", "cliente", "maquininha", "cartao", "repasse_doc", "adiantamento", "receita_nota", "sem_explicacao", "motivo"), 1):
                 c = wd.cell(i2, j, e[k])
-                if k in ("cartao", "repasse_doc", "receita_nota", "sem_explicacao"): c.number_format = moeda
+                if k in ("cartao", "repasse_doc", "adiantamento", "receita_nota", "sem_explicacao"): c.number_format = moeda
+                if k == "adiantamento": c.fill = amarelo
                 if k == "sem_explicacao": c.font = Font(bold=True, color="C00000")
-        wd.column_dimensions['H'].width = 46
+        wd.column_dimensions['I'].width = 46
+    aba("Adiantamentos", [("OS", "os", 8, ''), ("Cliente", "cliente", 30, ''), ("Taxas da OS", "taxas", 13, 'm'),
+                          ("Taxas já pagas", "taxas_pagas", 13, 'm'), ("Adiantamento", "adiantamento", 13, 'm'),
+                          ("Desde", "desde", 11, 'd'), ("Dias", "dias", 7, ''), ("Parado?", "parado", 9, '')], r.get('adiantamentos', []))
+    wa = wb["Adiantamentos"]
+    for row in wa.iter_rows(min_row=2, max_col=8):
+        if row[7].value == "SIM":
+            for c in row: c.font = Font(bold=True, color="C00000")
+    aba("Devoluções", [("Data", "data", 11, 'd'), ("OS", "os", 8, ''), ("Cliente", "cliente", 30, ''), ("Conta", "conta", 12, ''),
+                       ("Valor", "valor", 12, 'm'), ("Comprovante", "comprovante", 12, ''), ("Obs", "obs", 30, '')], r.get('devolucoes', []))
     aba("Recebimentos", [("Data", "data", 11, 'd'), ("OS", "os", 8, ''), ("Cliente", "cliente", 30, ''), ("Forma", "forma", 14, ''),
                          ("Grupo", "grupo", 26, ''), ("Maquininha", "maquininha", 11, ''), ("Parcelas", "parcelas", 8, ''),
                          ("NSU", "nsu", 12, ''), ("Conta", "conta", 12, ''), ("Valor", "valor", 12, 'm'),
@@ -796,6 +841,11 @@ def registrar(app, db, login_required):
                     if not cur.fetchone():
                         cur.execute("INSERT INTO processo_tipos (nome) VALUES (%s)", (n,))
                 cur.execute("INSERT INTO migracoes (nome) VALUES ('os_fiscal_v2')")
+            cur.execute("SELECT 1 FROM migracoes WHERE nome = 'os_fiscal_v4'")
+            if not cur.fetchone():
+                cur.execute("""UPDATE ordens_servico o SET cancelada_em = COALESCE(o.atualizado, o.data_abertura)
+                               WHERE o.status = 'cancelada' AND o.cancelada_em IS NULL""")
+                cur.execute("INSERT INTO migracoes (nome) VALUES ('os_fiscal_v4')")
             cur.execute("SELECT 1 FROM migracoes WHERE nome = 'os_fiscal_v3'")
             if not cur.fetchone():
                 # OS já entregues/concluídas: data da conclusão pela ocorrência (ou última atualização)
@@ -916,7 +966,8 @@ def registrar(app, db, login_required):
         COALESCE((SELECT SUM(i.custo*i.qtd) FROM os_itens i WHERE i.os_id = o.id),0) AS itens_custo,
         COALESCE((SELECT SUM(i.custo*i.qtd) FROM os_itens i WHERE i.os_id = o.id AND i.natureza = 'repasse'),0) AS repasse_total,
         COALESCE((SELECT SUM(p.valor) FROM os_repasse_pagtos p WHERE p.os_id = o.id),0) AS repasse_pago,
-        COALESCE((SELECT SUM(r.valor) FROM os_recebimentos r WHERE r.os_id = o.id AND r.status = 'confirmado'),0) AS pago,
+        COALESCE((SELECT SUM(r.valor) FROM os_recebimentos r WHERE r.os_id = o.id AND r.status = 'confirmado'),0)
+          - COALESCE((SELECT SUM(a.valor) FROM os_ajustes a WHERE a.os_id = o.id AND a.tipo = 'devolucao'),0) AS pago,
         COALESCE((SELECT SUM(r.valor) FROM os_recebimentos r WHERE r.os_id = o.id AND r.status = 'pendente'),0) AS aguardando,
         COALESCE((SELECT COUNT(*) FROM os_pendencias p WHERE p.os_id = o.id AND NOT p.resolvida),0) AS pend_abertas
     """
@@ -946,7 +997,7 @@ def registrar(app, db, login_required):
             'taxas': round(itens_custo, 2),
             # fiscal: repasse = reembolso de taxas/débitos; receita = total − repasse (honorário + diferença cobrada − desconto)
             'repasse_total': round(rep_total, 2), 'repasse_pago': round(rep_pago, 2),
-            'repasse_a_pagar': round(max(rep_total - rep_pago, 0), 2),
+            'repasse_a_pagar': round(max(rep_total - rep_pago, 0), 2) if d.get('status') != 'cancelada' else 0.0,
             'receita': round(total - rep_total, 2),
             'honorarios': round(honor + itens_valor - itens_custo, 2),
             'status_label': STATUS_OS.get(d.get('status'), d.get('status')),
@@ -957,6 +1008,12 @@ def registrar(app, db, login_required):
             'validade': _d(d.get('validade')),
             'data_nf_crv': _d(d.get('data_nf_crv')),
         })
+        if d.get('status') == 'cancelada':
+            d['receita'] = round(_f(d.get('cancel_retido')), 2)
+        for k in ('cancel_retido', 'cancel_devolvido'):
+            d[k] = _f(d[k]) if d.get(k) is not None else None
+        d['cancelada_em'] = _dt(d.get('cancelada_em')) if d.get('cancelada_em') else ''
+        d['concluida_em'] = _dt(d.get('concluida_em')) if d.get('concluida_em') else ''
         return d
 
     def _proximo_numero(cur):
@@ -1537,7 +1594,21 @@ def registrar(app, db, login_required):
             procs = [dict(x, prazo_final=_d(x['prazo_final'])) for x in cur.fetchall()]
         return {"os": o, "cliente": cli, "responsavel": resp, "veiculo": vei, "itens": itens,
                 "recebimentos": receb, "ocorrencias": ocor, "pendencias": pend, "repasses": reps, "parcelamento": parc,
-                "documentos": docs, "processos": procs}
+                "documentos": docs, "processos": procs, "ajustes": _ajustes_os(cur, oid), "adiantamento": _adiant_os(cur, oid)}
+
+    def _ajustes_os(cur, oid):
+        cur.execute("""SELECT a.*, c.nome AS conta, f.nome AS arquivo_nome FROM os_ajustes a LEFT JOIN contas c ON c.id = a.conta_id
+                       LEFT JOIN arquivos f ON f.id = a.arquivo_id WHERE a.os_id = %s ORDER BY a.data, a.id""", (oid,))
+        return [{"id": x['id'], "tipo": x['tipo'], "data": _d(x['data']), "valor": _f(x['valor']), "conta": x['conta'] or '',
+                 "arquivo_id": x['arquivo_id'], "arquivo_nome": x['arquivo_nome'], "obs": x['obs'] or '', "user_nome": x['user_nome'] or '',
+                 "reduz": bool(x['reduz_repasse'])} for x in cur.fetchall()]
+
+    def _adiant_os(cur, oid):
+        f = _fluxos(cur, [oid]).get(oid)
+        if not f or f['status'] == 'cancelada':
+            return {"valor": 0.0, "desde": "", "dias": 0, "parado": False, "dias_alerta": ADIANT_DIAS}
+        a = _adiantamento(f); a['dias_alerta'] = ADIANT_DIAS
+        return a
 
     @app.route("/api/os/<int:numero>", methods=["GET"])
     @equipe
@@ -1555,6 +1626,8 @@ def registrar(app, db, login_required):
                     it.pop('repasse_pago', None)
             if not pm['dar_baixa']:
                 d['repasses'] = []
+                d['ajustes'] = [x for x in d['ajustes'] if x['tipo'] == 'devolucao']
+                d['adiantamento'] = None
             if d.get('parcelamento'):   # retorno, custo da maquininha e nota: só quem vê lucro
                 pc = d['parcelamento']
                 for k in ('retorno_tipo', 'retorno_valor', 'custo_maquininha'):
@@ -1649,20 +1722,52 @@ def registrar(app, db, login_required):
         st = d.get("status")
         if st not in STATUS_OS or st == 'orcamento':
             return jsonify({"erro": "Status inválido"}), 400
-        with db(commit=True) as cur:
-            o = _os_por_numero(cur, numero)
-            if not o:
-                return jsonify({"erro": "OS não encontrada"}), 404
-            if o['status'] == st:
-                return jsonify({"ok": True})
-            erro = _hon_zero_checa(cur, o, st, d.get("hon_zero_motivo"))
-            if erro:
-                return jsonify(erro), 400
-            cur.execute("UPDATE ordens_servico SET status=%s, tipo='os', atualizado=NOW() WHERE id=%s",
-                        (st, o['id']))
-            tipo_oc = {'detran': 'detran', 'disponivel': 'disponivel', 'entregue': 'entregue'}.get(st, 'outras')
-            desc = STATUS_OS.get(o['status'], o['status']) + ' → ' + STATUS_OS[st]
-            _ocorrencia(cur, o['id'], tipo_oc, desc, (d.get("obs") or "").strip())
+        try:
+            with db(commit=True) as cur:
+                o = _os_por_numero(cur, numero)
+                if not o:
+                    return jsonify({"erro": "OS não encontrada"}), 404
+                if o['status'] == st:
+                    return jsonify({"ok": True})
+                erro = _hon_zero_checa(cur, o, st, d.get("hon_zero_motivo"))
+                if erro:
+                    return jsonify(erro), 400
+                if st == 'cancelada':
+                    cur.execute("SELECT o.*, " + SQL_TOTAIS + " FROM ordens_servico o WHERE o.id = %s", (o['id'],))
+                    ox = _os_saida(cur.fetchone())
+                    liq, rp = ox['pago'], ox['repasse_pago']
+                    if liq > 0.004:
+                        c = d.get("cancel")
+                        if not isinstance(c, dict):
+                            return jsonify({"erro": "Esta OS tem dinheiro recebido. Diga o que fazer com ele.", "codigo": "cancelar_recebido",
+                                            "recebido": liq, "repasse_pago": rp, "pode": _perms(cur)['dar_baixa']}), 409
+                        if not _perms(cur)['dar_baixa']:
+                            return jsonify({"erro": "OS com dinheiro recebido: só quem dá baixa pode cancelar."}), 403
+                        dev = _num(c.get("devolver"))
+                        if dev < 0 or dev > Decimal(str(liq)) + Decimal('0.004'):
+                            return jsonify({"erro": "Devolução tem que ser entre R$ 0,00 e R$ %s." % _brl(liq)}), 400
+                        try:
+                            if dev > 0:
+                                _devolucao(cur, o, {"valor": dev, "conta_id": c.get("conta_id"), "data": c.get("data"),
+                                                    "arquivo": c.get("arquivo"), "obs": c.get("obs")}, False)
+                        except ValueError as e:
+                            raise _Rollback(str(e))
+                        ret = max(Decimal('0'), Decimal(str(liq)) - dev - Decimal(str(rp)))
+                        cur.execute("UPDATE ordens_servico SET cancel_devolvido=%s, cancel_retido=%s WHERE id=%s", (dev, ret, o['id']))
+                        if ret > 0:
+                            cur.execute("""INSERT INTO os_ajustes (os_id, tipo, data, valor, reduz_repasse, obs, user_nome)
+                                           VALUES (%s,'receita',%s,%s,FALSE,%s,%s)""", (o['id'], _hoje(), ret, 'OS cancelada — valor retido', _eu()))
+                            _ocorrencia(cur, o['id'], 'outras', 'OS cancelada: R$ %s retido vira receita (entra na lista de OS sem nota)' % _brl(ret))
+                elif o['status'] == 'cancelada':
+                    cur.execute("UPDATE ordens_servico SET cancel_retido=NULL, cancel_devolvido=NULL WHERE id=%s", (o['id'],))
+                    cur.execute("DELETE FROM os_ajustes WHERE os_id=%s AND tipo='receita' AND NOT reduz_repasse", (o['id'],))
+                cur.execute("UPDATE ordens_servico SET status=%s, tipo='os', atualizado=NOW() WHERE id=%s",
+                            (st, o['id']))
+                tipo_oc = {'detran': 'detran', 'disponivel': 'disponivel', 'entregue': 'entregue'}.get(st, 'outras')
+                desc = STATUS_OS.get(o['status'], o['status']) + ' → ' + STATUS_OS[st]
+                _ocorrencia(cur, o['id'], tipo_oc, desc, (d.get("obs") or "").strip())
+        except _Rollback as e:
+            return jsonify({"erro": str(e)}), 400
         return jsonify({"ok": True})
 
     @app.route("/api/os/<int:numero>/converter", methods=["POST"])
@@ -2547,6 +2652,10 @@ def registrar(app, db, login_required):
             receb = [{"data": (x['quando'] or '')[:10], "forma": x.get('forma') or '', "maquininha": x.get('maquininha') or '',
                       "parcelas": x.get('parcelas') or None, "valor": x['valor']}
                      for x in d['recebimentos'] if (x.get('status') or 'confirmado') == 'confirmado']
+            for a in d.get('ajustes', []):
+                if a['tipo'] == 'devolucao':
+                    receb.append({"data": '/'.join(a['data'].split('-')[::-1]),
+                                  "forma": "DEVOLUÇÃO AO CLIENTE", "maquininha": "", "parcelas": None, "valor": -a['valor']})
             pago = round(sum(x['valor'] for x in receb), 2)
             pag = d.get('responsavel') or d.get('cliente') or {}
             vei = d.get('veiculo') or {}
@@ -2557,6 +2666,240 @@ def registrar(app, db, login_required):
                         "veiculo": {"placa": vei.get('placa') or '', "modelo": vei.get('modelo') or ''},
                         "taxas": taxas, "taxas_total": tx, "honorarios": round(total - tx, 2), "total": total,
                         "recebimentos": receb, "pago": pago, "devedor": round(max(total - pago, 0), 2) if o.get('status') != 'cancelada' else 0.0})
+
+    # ── DINHEIRO DO CLIENTE: taxas primeiro, adiantamento, devolução, receita retida ──
+    ADIANT_DIAS = 60   # adiantamento de taxa parado há mais que isso gera alerta
+
+    def _fluxos(cur, oids=None):
+        """Carrega, de uma vez, o que cada OS recebeu, devolveu, pagou de taxa e reconheceu como receita."""
+        cond, args = "o.excluida_em IS NULL AND o.status <> 'orcamento'", []
+        if oids is not None:
+            if not oids:
+                return {}
+            cond += " AND o.id = ANY(%s)"; args.append(list(oids))
+        else:
+            cond += """ AND (EXISTS (SELECT 1 FROM os_recebimentos r WHERE r.os_id = o.id AND r.status = 'confirmado')
+                         OR EXISTS (SELECT 1 FROM os_ajustes a WHERE a.os_id = o.id))"""
+        cur.execute("""SELECT o.id, o.numero, o.status, o.honorario, o.desconto, o.nf_status, o.nf_valor, o.cancel_retido,
+                              (o.cancelada_em AT TIME ZONE 'America/Sao_Paulo')::date AS cancel_dia, cl.nome AS cliente,
+                              COALESCE((SELECT SUM(i.valor*i.qtd) FROM os_itens i WHERE i.os_id = o.id),0) AS itens_valor,
+                              COALESCE((SELECT SUM(i.custo*i.qtd) FROM os_itens i WHERE i.os_id = o.id AND i.natureza='repasse'),0) AS rep
+                       FROM ordens_servico o LEFT JOIN clientes cl ON cl.id = o.cliente_id WHERE """ + cond, args)
+        F = {}
+        for r in cur.fetchall():
+            F[r['id']] = {"id": r['id'], "numero": r['numero'], "status": r['status'], "cliente": r['cliente'] or '',
+                          "total": _f(r['itens_valor']) + _f(r['honorario']) - _f(r['desconto']), "rep": _f(r['rep']),
+                          "nf": (_f(r['nf_valor']) if r['nf_valor'] is not None else None) if r['nf_status'] == 'emitida' else 0.0,
+                          "cancel_dia": r['cancel_dia'] if r['status'] == 'cancelada' else None,
+                          "cancel_retido": _f(r['cancel_retido']), "recs": [], "ajs": [], "pags": []}
+        if not F:
+            return F
+        ids = list(F.keys())
+        cur.execute("""SELECT r.id, r.os_id, r.valor, r.maquininha, f.nome AS forma, (r.quando AT TIME ZONE 'America/Sao_Paulo')::date AS dia
+                       FROM os_recebimentos r LEFT JOIN formas_pgto f ON f.id = r.forma_pgto_id
+                       WHERE r.status = 'confirmado' AND r.os_id = ANY(%s) ORDER BY r.quando, r.id""", (ids,))
+        for x in cur.fetchall():
+            F[x['os_id']]['recs'].append({"id": x['id'], "dia": x['dia'], "valor": _f(x['valor']),
+                                          "maquininha": (x['maquininha'] or '').upper(), "tipo": _forma_tipo(x['forma'])})
+        cur.execute("SELECT * FROM os_ajustes WHERE os_id = ANY(%s) ORDER BY data, id", (ids,))
+        for x in cur.fetchall():
+            F[x['os_id']]['ajs'].append({"tipo": x['tipo'], "dia": x['data'], "valor": _f(x['valor']), "reduz": bool(x['reduz_repasse']),
+                                         "doc": bool(x['arquivo_id'])})
+        cur.execute("""SELECT p.os_id, p.data, p.valor, (p.arquivo_id IS NOT NULL OR COALESCE(p.documento,'') <> ''
+                              OR COALESCE(i.documento,'') <> '') AS doc
+                       FROM os_repasse_pagtos p LEFT JOIN os_itens i ON i.id = p.item_id WHERE p.os_id = ANY(%s)""", (ids,))
+        for x in cur.fetchall():
+            F[x['os_id']]['pags'].append({"dia": x['data'], "valor": _f(x['valor']), "doc": bool(x['doc'])})
+        return F
+
+    def _fluxo_calc(f, ate=None):
+        """Taxas primeiro: cada pagamento cobre primeiro as taxas da OS; só o que passa delas é honorário.
+        O dinheiro de taxa vai para: taxa paga (com/sem documento), devolução, receita reconhecida;
+        o resto é adiantamento (OS aberta) ou receita retida (OS cancelada)."""
+        ok = (lambda dd: ate is None or (dd is not None and dd <= ate))
+        recs = [r for r in f['recs'] if ok(r['dia'])]
+        ajs = [a for a in f['ajs'] if ok(a['dia'])]
+        pags = [x for x in f['pags'] if ok(x['dia'])]
+        R = f['rep'] + sum(a['valor'] for a in f['ajs'] if a['reduz'])     # taxas originais (antes de baixar)
+        c = 0.0; partes = []
+        for r in recs:
+            t = min(c + r['valor'], R) - min(c, R); t = max(t, 0.0)
+            partes.append(dict(r, t=t, h=r['valor'] - t)); c += r['valor']
+        T = sum(x['t'] for x in partes); H = sum(x['h'] for x in partes)
+        dev_doc = sum(a['valor'] for a in ajs if a['tipo'] == 'devolucao' and a['doc'])
+        dev_nd = sum(a['valor'] for a in ajs if a['tipo'] == 'devolucao' and not a['doc'])
+        recon = sum(a['valor'] for a in ajs if a['tipo'] == 'receita' and a['reduz'])
+        doc = sum(x['valor'] for x in pags if x['doc']); nodoc = sum(x['valor'] for x in pags if not x['doc'])
+        dest = {"doc": doc + dev_doc, "nodoc": nodoc + dev_nd, "recon": recon}
+        soma = sum(dest.values())
+        if soma > T + 0.004 and soma > 0:
+            k = T / soma
+            dest = {a: b * k for a, b in dest.items()}; soma = T
+        sobra = max(0.0, T - soma)
+        cancelada = f['cancel_dia'] is not None and (ate is None or f['cancel_dia'] <= ate)
+        dest['pend'] = 0.0 if cancelada else sobra
+        dest['retida'] = sobra if cancelada else 0.0
+        # desde quando o adiantamento está parado: o que sobra é dos pagamentos mais recentes (o mais antigo é usado primeiro)
+        desde = None
+        if dest['pend'] > 0.004:
+            usado, acum = soma, 0.0
+            for x in partes:
+                acum += x['t']
+                if acum > usado + 0.004:
+                    desde = x['dia']; break
+        rb = H + dest['recon'] + dest['retida']                 # receita efetivamente recebida
+        nota = f['nf'] if f['nf'] is not None else max(0.0, f['total'] - f['rep'])
+        cob = min(1.0, nota / rb) if rb > 0.004 else 1.0
+        return {"partes": partes, "T": T, "H": H, "dest": dest, "desde": desde, "cob_nota": cob,
+                "devolvido": dev_doc + dev_nd, "recebido": sum(r['valor'] for r in recs)}
+
+    def _adiantamento(f, ate=None):
+        c = _fluxo_calc(f, ate)
+        hoje = ate or _hoje()
+        dias = (hoje - c['desde']).days if c['desde'] else 0
+        return {"valor": round(c['dest']['pend'], 2), "desde": _d(c['desde']) if c['desde'] else '', "dias": dias,
+                "parado": c['dest']['pend'] > 0.004 and dias > ADIANT_DIAS}
+
+    def _adiant_lista(cur, ate=None):
+        out = []
+        for f in _fluxos(cur).values():
+            if f['status'] == 'cancelada' and (ate is None or (f['cancel_dia'] and f['cancel_dia'] <= ate)):
+                continue
+            a = _adiantamento(f, ate)
+            if a['valor'] > 0.004:
+                pg = sum(x['valor'] for x in f['pags'] if ate is None or x['dia'] <= ate)
+                out.append({"os": f['numero'], "cliente": f['cliente'], "taxas": round(f['rep'], 2), "taxas_pagas": round(pg, 2),
+                            "adiantamento": a['valor'], "desde": a['desde'], "dias": a['dias'], "parado": a['parado']})
+        out.sort(key=lambda x: -x['dias'])
+        return out
+
+    @app.route("/api/adiantamentos", methods=["GET"])
+    @equipe
+    def adiantamentos():
+        with db() as cur:
+            p = _perms(cur)
+            if not (p['ver_lucro'] or p['dar_baixa']):
+                return jsonify({"erro": "Sem permissão."}), 403
+            l = _adiant_lista(cur)
+        par = [x for x in l if x['parado']]
+        return jsonify({"itens": l, "parados": len(par), "parados_valor": round(sum(x['adiantamento'] for x in par), 2),
+                        "total": round(sum(x['adiantamento'] for x in l), 2), "dias_alerta": ADIANT_DIAS})
+
+    def _baixa_taxas(cur, oid, valor, tambem_valor):
+        """Baixa a parte NÃO paga das taxas da OS (mais recentes primeiro). tambem_valor=True reduz o preço cobrado
+        junto (devolução: o cliente deixa de pagar aquilo); False só tira do repasse (vira receita)."""
+        cur.execute("""SELECT i.*, COALESCE((SELECT SUM(p.valor) FROM os_repasse_pagtos p WHERE p.item_id = i.id),0) AS pago
+                       FROM os_itens i WHERE i.os_id = %s AND i.natureza = 'repasse' ORDER BY i.id DESC""", (oid,))
+        resta = Decimal(str(valor))
+        for i in cur.fetchall():
+            if resta <= 0:
+                break
+            ct = _num(i['custo']) * _num(i['qtd'] or 1); vt = _num(i['valor']) * _num(i['qtd'] or 1)
+            livre = ct - _num(i['pago'])
+            if livre <= 0:
+                continue
+            corte = min(livre, resta); resta -= corte
+            novo_c = ct - corte; novo_v = max(Decimal('0'), vt - corte) if tambem_valor else vt
+            if novo_c <= 0 and not tambem_valor:
+                cur.execute("UPDATE os_itens SET qtd=1, custo=0, valor=%s, natureza='honorario', categoria='' WHERE id=%s", (novo_v, i['id']))
+            else:
+                cur.execute("UPDATE os_itens SET qtd=1, custo=%s, valor=%s WHERE id=%s", (novo_c, novo_v, i['id']))
+        return resta
+
+    def _devolucao(cur, o, d, reduz):
+        v = _num(d.get("valor"))
+        if v <= 0:
+            raise ValueError("Informe o valor devolvido.")
+        conta = d.get("conta_id")
+        if not conta:
+            raise ValueError("Escolha de qual conta saiu a devolução.")
+        dia = _data(d.get("data")) or _hoje()
+        arq_id = _salvar_arquivo(cur, o['id'], d.get("arquivo")) if d.get("arquivo") else None
+        cur.execute("""INSERT INTO lancamentos (natureza, vencimento, pago_em, descricao, favorecido, valor, valor_pago, conta_id, os_id, obs, user_nome)
+                       SELECT 'pagar', %s, %s, %s, COALESCE(c.nome,''), %s, %s, %s, o.id, %s, %s
+                       FROM ordens_servico o LEFT JOIN clientes c ON c.id = COALESCE(o.responsavel_id, o.cliente_id) WHERE o.id = %s
+                       RETURNING id""",
+                    (dia, datetime.combine(dia, datetime.min.time()).replace(hour=12, tzinfo=BRT), 'DEVOLUÇÃO AO CLIENTE CONFORME O.S. Nº %s' % o['numero'],
+                     v, v, conta, (d.get("obs") or "").strip(), _eu(), o['id']))
+        lid = cur.fetchone()['id']
+        if reduz:
+            sobra = _baixa_taxas(cur, o['id'], v, True)
+            if sobra > Decimal('0.004'):
+                raise ValueError("Valor maior que o adiantamento de taxa desta OS.")
+        cur.execute("""INSERT INTO os_ajustes (os_id, tipo, data, valor, reduz_repasse, conta_id, arquivo_id, lancamento_id, obs, user_nome)
+                       VALUES (%s,'devolucao',%s,%s,%s,%s,%s,%s,%s,%s)""",
+                    (o['id'], dia, v, reduz, conta, arq_id, lid, (d.get("obs") or "").strip(), _eu()))
+        _ocorrencia(cur, o['id'], 'outras', 'Devolução ao cliente: R$ %s%s' % (_brl(v), '' if arq_id else ' (falta comprovante)'),
+                    (d.get("obs") or "").strip())
+        return v
+
+    @app.route("/api/os/<int:numero>/devolucao", methods=["POST"])
+    @equipe
+    def os_devolucao(numero):
+        d = request.get_json() or {}
+        try:
+            with db(commit=True) as cur:
+                if not _perms(cur)['dar_baixa']:
+                    return jsonify({"erro": "Só quem dá baixa registra devolução."}), 403
+                o = _os_por_numero(cur, numero)
+                if not o:
+                    return jsonify({"erro": "OS não encontrada"}), 404
+                if o['status'] == 'cancelada':
+                    return jsonify({"erro": "OS cancelada: a devolução é feita no cancelamento."}), 400
+                a = _adiantamento(_fluxos(cur, [o['id']])[o['id']])
+                if _num(d.get("valor")) > Decimal(str(a['valor'])) + Decimal('0.004'):
+                    return jsonify({"erro": "Só dá para devolver até o adiantamento de taxa (R$ %s)." % _brl(a['valor'])}), 400
+                _devolucao(cur, o, d, True)
+        except ValueError as e:
+            return jsonify({"erro": str(e)}), 400
+        return jsonify({"ok": True})
+
+    @app.route("/api/os/<int:numero>/reconhecer", methods=["POST"])
+    @equipe
+    def os_reconhecer(numero):
+        d = request.get_json() or {}
+        with db(commit=True) as cur:
+            if not _perms(cur)['dar_baixa']:
+                return jsonify({"erro": "Só quem dá baixa reconhece receita."}), 403
+            o = _os_por_numero(cur, numero)
+            if not o:
+                return jsonify({"erro": "OS não encontrada"}), 404
+            a = _adiantamento(_fluxos(cur, [o['id']])[o['id']])
+            v = _num(d.get("valor"))
+            if v <= 0 or v > Decimal(str(a['valor'])) + Decimal('0.004'):
+                return jsonify({"erro": "Valor tem que ser entre R$ 0,01 e o adiantamento (R$ %s)." % _brl(a['valor'])}), 400
+            mot = (d.get("obs") or "").strip()
+            if not mot:
+                return jsonify({"erro": "Diga o motivo (ex.: taxa não será mais paga, serviço mudou)."}), 400
+            _baixa_taxas(cur, o['id'], v, False)
+            cur.execute("""INSERT INTO os_ajustes (os_id, tipo, data, valor, reduz_repasse, obs, user_nome)
+                           VALUES (%s,'receita',%s,%s,TRUE,%s,%s)""", (o['id'], _hoje(), v, mot, _eu()))
+            _ocorrencia(cur, o['id'], 'outras', 'Adiantamento de taxa reconhecido como receita: R$ %s' % _brl(v), mot)
+            if _sim(d.get("concluir"), False) and o['status'] not in ('entregue', 'concluida', 'cancelada'):
+                cur.execute("UPDATE ordens_servico SET status='concluida', atualizado=NOW() WHERE id=%s", (o['id'],))
+                _ocorrencia(cur, o['id'], 'outras', STATUS_OS.get(o['status'], o['status']) + ' → Concluída')
+        return jsonify({"ok": True})
+
+    @app.route("/api/os-ajustes/<int:aid>/comprovante", methods=["POST"])
+    @equipe
+    def os_ajuste_comprovante(aid):
+        d = request.get_json() or {}
+        try:
+            with db(commit=True) as cur:
+                if not _perms(cur)['dar_baixa']:
+                    return jsonify({"erro": "Sem permissão."}), 403
+                cur.execute("SELECT * FROM os_ajustes WHERE id = %s", (aid,))
+                a = cur.fetchone()
+                if not a:
+                    return jsonify({"erro": "Registro não encontrado."}), 404
+                arq = _salvar_arquivo(cur, a['os_id'], d.get("arquivo"))
+                if not arq:
+                    return jsonify({"erro": "Escolha o arquivo do comprovante."}), 400
+                cur.execute("UPDATE os_ajustes SET arquivo_id=%s WHERE id=%s", (arq, aid))
+                _ocorrencia(cur, a['os_id'], 'outras', 'Comprovante da devolução anexado')
+        except ValueError as e:
+            return jsonify({"erro": str(e)}), 400
+        return jsonify({"ok": True})
 
     # ── NOTA FISCAL (NFS-e) DO HONORÁRIO ──────────────────────
     def _nota_de(cur, r):
@@ -2616,7 +2959,7 @@ def registrar(app, db, login_required):
             if not _pode_nf(cur):
                 return jsonify({"erro": "Sem permissão."}), 403
             vl = _perms(cur)['ver_lucro']
-            cond, args = ["o.excluida_em IS NULL", "o.status NOT IN ('orcamento','cancelada')"], []
+            cond, args = ["o.excluida_em IS NULL", "o.status <> 'orcamento'", "(o.status <> 'cancelada' OR COALESCE(o.cancel_retido,0) > 0)"], []
             if sit in NF_STATUS:
                 cond.append("COALESCE(o.nf_status,'pendente') = %s"); args.append(sit)
             if de:
@@ -2949,7 +3292,7 @@ def registrar(app, db, login_required):
                 por_forma[rot] = round(por_forma.get(rot, 0) + v, 2)
                 rec_os[x['oid']] = rec_os.get(x['oid'], 0) + v
                 if tp in ('debito', 'credito'):
-                    cartoes.append({"oid": x['oid'], "os": x['numero'], "cliente": x['cliente_nome'] or '',
+                    cartoes.append({"oid": x['oid'], "rid": x['id'], "os": x['numero'], "cliente": x['cliente_nome'] or '',
                                     "maquininha": (x['maquininha'] or 'SEM MAQUININHA').upper(), "valor": v})
             else:
                 pend += v
@@ -2971,42 +3314,62 @@ def registrar(app, db, login_required):
                          "categoria": cat, "orgao": x['orgao'] or '', "documento": x['documento'] or '',
                          "conta": x['conta'] or '', "valor": v, "comprovante": bool(x['arquivo_id'])})
         # OS do mês conforme o regime
+        F = _fluxos(cur)
+        calc = {k: _fluxo_calc(f) for k, f in F.items()}
+        dentro = lambda dd: dd is not None and ini <= dd <= fim
         base_sql = """COALESCE(CASE WHEN o.nf_status = 'emitida' THEN o.nf_data END,
-                                (o.concluida_em AT TIME ZONE 'America/Sao_Paulo')::date)"""
+                                (o.concluida_em AT TIME ZONE 'America/Sao_Paulo')::date,
+                                (o.cancelada_em AT TIME ZONE 'America/Sao_Paulo')::date)"""
         sel = """SELECT o.*, c.nome AS cliente_nome, c.cpf_cnpj AS cliente_doc, v.placa, pt.nome AS tipo_nome,
                         """ + base_sql + """ AS data_base, """ + SQL_TOTAIS + """
                  FROM ordens_servico o LEFT JOIN clientes c ON c.id = o.cliente_id
                  LEFT JOIN veiculos v ON v.id = o.veiculo_id LEFT JOIN processo_tipos pt ON pt.id = o.processo_tipo_id
-                 WHERE o.excluida_em IS NULL AND o.status NOT IN ('orcamento','cancelada') AND """
+                 WHERE o.excluida_em IS NULL AND o.status <> 'orcamento'
+                   AND (o.status <> 'cancelada' OR COALESCE(o.cancel_retido,0) > 0 OR o.id = ANY(%s)) AND """
+        cx = {}     # caixa: honorário e taxa recebidos no mês, por OS (taxas primeiro)
+        for k, c in calc.items():
+            f = F[k]
+            hm = sum(x['h'] for x in c['partes'] if dentro(x['dia']))
+            tm = sum(x['t'] for x in c['partes'] if dentro(x['dia']))
+            hm += sum(a['valor'] for a in f['ajs'] if a['tipo'] == 'receita' and a['reduz'] and dentro(a['dia']))
+            if f['cancel_dia'] and dentro(f['cancel_dia']):
+                hm += c['dest']['retida']
+            dv = sum(a['valor'] for a in f['ajs'] if a['tipo'] == 'devolucao' and dentro(a['dia']))
+            if hm > 0.004 or tm > 0.004 or dv > 0.004:
+                cx[k] = {"h": hm, "t": tm, "dev": dv}
         if regime == 'caixa':
-            if rec_os:
-                cur.execute(sel + "o.id = ANY(%s) ORDER BY o.numero", (list(rec_os.keys()),))
+            if cx:
+                cur.execute(sel + "o.id = ANY(%s) ORDER BY o.numero", (list(cx.keys()), list(cx.keys())))
                 linhas_os = cur.fetchall()
             else:
                 linhas_os = []
         else:
-            cur.execute(sel + base_sql + " BETWEEN %s AND %s ORDER BY " + base_sql + ", o.numero", (ini, fim))
-            linhas_os = cur.fetchall()
+            cur.execute(sel + base_sql + " BETWEEN %s AND %s ORDER BY " + base_sql + ", o.numero", ([], ini, fim))
+            linhas_os = [r for r in cur.fetchall() if r['status'] != 'cancelada' or _f(r['cancel_retido']) > 0.004]
         oss = []
         for r in linhas_os:
             o = _nota_de(cur, r)
             rec_m = round(rec_os.get(r['id'], 0), 2)
-            fr = 1.0
+            fr = 1.0; rec_hon = o['receita']; rec_rep = o['repasse_total'] if r['status'] != 'cancelada' else 0.0
             if regime == 'caixa':
+                e = cx.get(r['id'], {"h": 0, "t": 0})
+                rec_hon, rec_rep = round(e['h'], 2), round(e['t'], 2)
                 fr = min(1.0, rec_m / o['total']) if o['total'] > 0.004 else 0.0
             oss.append({"os": o['numero'], "data": (_d(r['data_abertura']) or '')[:10],
-                        "conclusao": (_d(r['concluida_em']) or '')[:10] if r.get('concluida_em') else '',
+                        "conclusao": (_d(r['concluida_em']) or '')[:10] if r.get('concluida_em') else
+                                     ((_d(r['cancelada_em']) or '')[:10] if r.get('cancelada_em') else ''),
                         "data_base": _d(r['data_base']) if r.get('data_base') else '',
                         "cliente": r['cliente_nome'] or '',
                         "cpf_cnpj": r['cliente_doc'] or '', "placa": r['placa'] or '', "tipo": r['tipo_nome'] or '',
                         "status": STATUS_OS.get(o['status'], o['status']), "total": o['total'],
-                        "repasse": round(o['repasse_total'] * fr, 2), "receita": round(o['receita'] * fr, 2),
+                        "repasse": round(rec_rep, 2), "receita": round(rec_hon, 2),
                         "receita_total": o['receita'], "acrescimo": round(o['acrescimo'] * fr, 2),
                         "retorno": round(o['retorno'] * fr, 2), "custo_maquininha": round(o['maquininha_custo'] * fr, 2),
                         "nota_sugerida": o['nota_valor'], "recebido_mes": rec_m,
                         "nf_status": NF_STATUS.get(o['nf_status'], 'PENDENTE'), "nf_numero": o.get('nf_numero') or '',
                         "nf_valor": _f(r['nf_valor']) if r['nf_valor'] is not None else None,
-                        "recebido": o['pago'], "devedor": o['devedor'], "hon_zero_motivo": r.get('hon_zero_motivo') or ''})
+                        "recebido": o['pago'], "devedor": o['devedor'], "hon_zero_motivo": r.get('hon_zero_motivo') or '',
+                        "cancelada": r['status'] == 'cancelada', "retido": _f(r.get('cancel_retido'))})
         # NFS-e emitidas no mês (pela data de emissão, qualquer OS)
         cur.execute("""SELECT o.numero, o.nf_numero, o.nf_data, o.nf_valor, c.nome AS cliente_nome FROM ordens_servico o
                        LEFT JOIN clientes c ON c.id = o.cliente_id
@@ -3015,9 +3378,27 @@ def registrar(app, db, login_required):
         nfs = [{"data": _d(x['nf_data']), "os": x['numero'], "cliente": x['cliente_nome'] or '', "nf_numero": x['nf_numero'],
                 "valor": _f(x['nf_valor']) if x['nf_valor'] is not None else 0.0} for x in cur.fetchall()]
         sem_nota = [x for x in oss if x['nota_sugerida'] > 0.004 and x['nf_status'] == 'PENDENTE']
-        hon_zero = [x for x in oss if x['nota_sugerida'] <= 0.004 and x['receita_total'] <= 0.004]
-        dimp = _dimp(cur, cartoes, ini, fim)
+        hon_zero = [x for x in oss if x['nota_sugerida'] <= 0.004 and x['receita_total'] <= 0.004 and not x['cancelada']]
+        # adiantamentos de clientes para taxas: saldo no fim do mês
+        adiant = []
+        for k, f in F.items():
+            if f['cancel_dia'] and f['cancel_dia'] <= fim:
+                continue
+            a = _adiantamento(f, fim)
+            if a['valor'] > 0.004:
+                adiant.append({"os": f['numero'], "cliente": f['cliente'], "taxas": round(f['rep'], 2),
+                               "taxas_pagas": round(sum(x['valor'] for x in f['pags'] if x['dia'] <= fim), 2),
+                               "adiantamento": a['valor'], "desde": a['desde'], "dias": a['dias'], "parado": a['parado']})
+        adiant.sort(key=lambda x: -x['dias'])
+        cur.execute("""SELECT a.data, a.valor, a.arquivo_id, o.numero, c.nome AS cliente, ct.nome AS conta, a.obs
+                       FROM os_ajustes a JOIN ordens_servico o ON o.id = a.os_id AND o.excluida_em IS NULL
+                       LEFT JOIN clientes c ON c.id = o.cliente_id LEFT JOIN contas ct ON ct.id = a.conta_id
+                       WHERE a.tipo = 'devolucao' AND a.data BETWEEN %s AND %s ORDER BY a.data""", (ini, fim))
+        devs = [{"data": _d(x['data']), "os": x['numero'], "cliente": x['cliente'] or '', "conta": x['conta'] or '',
+                 "valor": _f(x['valor']), "comprovante": bool(x['arquivo_id']), "obs": x['obs'] or ''} for x in cur.fetchall()]
+        dimp = _dimp(cur, cartoes, ini, fim, F, calc)
         sm = lambda l, k: round(sum((x[k] or 0) for x in l), 2)
+        par = [x for x in adiant if x['parado']]
         resumo = {
             "regime": regime, "regime_nome": REGIMES[regime],
             "os_qtd": len(oss), "os_total": sm(oss, 'total'), "repasses_os": sm(oss, 'repasse'),
@@ -3028,71 +3409,62 @@ def registrar(app, db, login_required):
             "repasses_sem_comprovante": len([x for x in reps if not x['comprovante']]),
             "nfs_emitidas_qtd": len(nfs), "nfs_emitidas_valor": sm(nfs, 'valor'),
             "sem_nota_qtd": len(sem_nota), "sem_nota_valor": sm(sem_nota, 'nota_sugerida'), "hon_zero_qtd": len(hon_zero),
+            "adiantamentos_saldo": sm(adiant, 'adiantamento'), "adiantamentos_qtd": len(adiant),
+            "adiantamentos_parados_qtd": len(par), "adiantamentos_parados_valor": sm(par, 'adiantamento'), "adiant_dias": ADIANT_DIAS,
+            "devolucoes": sm(devs, 'valor'), "devolucoes_qtd": len(devs),
             "dimp_bruto": dimp['total']['bruto'], "dimp_sem_explicacao": dimp['total']['sem_explicacao']}
         return {"resumo": resumo, "os": oss, "recebimentos": receb, "repasses": reps, "notas": nfs,
-                "sem_nota": sem_nota, "hon_zero": hon_zero, "dimp": dimp}
+                "sem_nota": sem_nota, "hon_zero": hon_zero, "dimp": dimp, "adiantamentos": adiant, "devolucoes": devs}
 
-    def _dimp(cur, cartoes, ini=None, fim=None):
-        """Conferência DIMP: cartão bruto do mês por maquininha, explicado por repasse documentado (DUA/comprovante)
-        e por receita com NFS-e emitida; o resto fica sem explicação. Cada pagamento no cartão explica a parte
-        proporcional dele no total da OS (não supõe que o cartão pagou primeiro as taxas)."""
-        info = {}
-        for oid in {c['oid'] for c in cartoes}:
-            cur.execute("SELECT o.*, " + SQL_TOTAIS + " FROM ordens_servico o WHERE o.id = %s", (oid,))
-            r = cur.fetchone()
-            o = _nota_de(cur, r)
-            cur.execute("""SELECT COALESCE(SUM(i.custo*i.qtd),0) AS v FROM os_itens i
-                           WHERE i.os_id = %s AND i.natureza = 'repasse' AND (COALESCE(i.documento,'') <> '' OR EXISTS (
-                             SELECT 1 FROM os_repasse_pagtos p WHERE p.item_id = i.id
-                               AND (p.arquivo_id IS NOT NULL OR COALESCE(p.documento,'') <> '')))""", (oid,))
-            doc = _f(cur.fetchone()['v'])
-            cur.execute("""SELECT COALESCE(SUM(valor),0) AS v FROM os_repasse_pagtos WHERE os_id = %s AND item_id IS NULL
-                           AND (arquivo_id IS NOT NULL OR COALESCE(documento,'') <> '')""", (oid,))
-            doc += _f(cur.fetchone()['v'])
-            doc = min(doc, o['repasse_total']) if o['repasse_total'] > 0 else doc
-            emit = (o.get('nf_status') == 'emitida')
-            nota = (_f(r['nf_valor']) if r['nf_valor'] is not None else o['nota_valor']) if emit else 0.0
-            motivos = []
-            if o['repasse_total'] - doc > 0.004:
-                motivos.append("repasse sem DUA/comprovante (%s)" % _brl(o['repasse_total'] - doc))
-            if not emit and o['receita'] > 0.004:
-                motivos.append("sem NFS-e")
-            elif emit and o['nota_valor'] - nota > 0.004:
-                motivos.append("nota menor que o honorário")
-            info[oid] = {"total": o['total'], "doc": doc, "nota": nota, "motivos": motivos}
-        maqs = {m: {"maquininha": m, "bruto": 0.0, "repasse_doc": 0.0, "receita_nota": 0.0, "sem_explicacao": 0.0, "qtd": 0}
-                for m in MAQUININHAS}
+    def _dimp(cur, cartoes, ini, fim, F, calc):
+        """Conferência DIMP: cada pagamento no cartão (taxas primeiro) é explicado pelo destino do dinheiro de taxa da OS
+        (taxa paga com DUA/comprovante ou devolução com comprovante; adiantamento ainda não pago = amarelo) e, na parte de
+        honorário/receita, pela NFS-e emitida. O resto fica sem explicação (vermelho)."""
+        cats = ("bruto", "repasse_doc", "adiantamento", "receita_nota", "sem_explicacao")
+        novo = lambda m: dict({"maquininha": m, "qtd": 0}, **{c: 0.0 for c in cats})
+        maqs = {m: novo(m) for m in MAQUININHAS}
         por_os = {}
         for c in cartoes:
-            i = info[c['oid']]; v = c['valor']
-            fr = v / i['total'] if i['total'] > 0.004 else 0.0
-            rp = min(v, i['doc'] * fr); nt = min(v - rp, i['nota'] * fr); se = max(0.0, v - rp - nt)
-            g = maqs.setdefault(c['maquininha'], {"maquininha": c['maquininha'], "bruto": 0.0, "repasse_doc": 0.0,
-                                                   "receita_nota": 0.0, "sem_explicacao": 0.0, "qtd": 0})
-            g['bruto'] += v; g['repasse_doc'] += rp; g['receita_nota'] += nt; g['sem_explicacao'] += se; g['qtd'] += 1
-            k = (c['os'], c['maquininha'])
-            e = por_os.setdefault(k, {"os": c['os'], "cliente": c['cliente'], "maquininha": c['maquininha'], "cartao": 0.0,
-                                      "repasse_doc": 0.0, "receita_nota": 0.0, "sem_explicacao": 0.0,
-                                      "motivo": "; ".join(i['motivos']) or "—"})
-            e['cartao'] += v; e['repasse_doc'] += rp; e['receita_nota'] += nt; e['sem_explicacao'] += se
+            f, k = F.get(c['oid']), calc.get(c['oid'])
+            v = c['valor']
+            parte = next((x for x in k['partes'] if x['id'] == c['rid']), None) if k else None
+            t, h = (parte['t'], parte['h']) if parte else (0.0, v)
+            d, T = (k['dest'], k['T']) if k else ({}, 0.0)
+            sh = (lambda x: t * d.get(x, 0) / T) if T > 0.004 else (lambda x: 0.0)
+            rdoc, rnd, rpend = sh('doc'), sh('nodoc'), sh('pend')
+            receita = h + sh('recon') + sh('retida')
+            cob = k['cob_nota'] if k else 0.0
+            nota = receita * cob
+            se = max(0.0, v - rdoc - rpend - nota)
+            g = maqs.setdefault(c['maquininha'], novo(c['maquininha']))
+            for kk, vv in (("bruto", v), ("repasse_doc", rdoc), ("adiantamento", rpend), ("receita_nota", nota), ("sem_explicacao", se)):
+                g[kk] += vv
+            g['qtd'] += 1
+            mot = []
+            if d.get('nodoc', 0) > 0.004: mot.append("taxa paga sem DUA/comprovante")
+            if d.get('pend', 0) > 0.004: mot.append("adiantamento de taxa (DUA não pago)")
+            if receita > 0.004 and cob < 0.999:
+                mot.append("sem NFS-e" if f and not f['nf'] else "nota menor que a receita")
+            e = por_os.setdefault((c['os'], c['maquininha']), dict({"os": c['os'], "cliente": c['cliente'], "maquininha": c['maquininha'],
+                                                                     "cartao": 0.0, "motivo": "; ".join(mot) or "—"}, **{x: 0.0 for x in cats[1:]}))
+            e['cartao'] += v; e['repasse_doc'] += rdoc; e['adiantamento'] += rpend; e['receita_nota'] += nota; e['sem_explicacao'] += se
         # relatório de vendas importado da maquininha (o que a operadora informa à prefeitura)
-        if ini:
-            cur.execute("""SELECT maquininha, COALESCE(SUM(valor),0) AS v, COALESCE(SUM(CASE WHEN status='aberto' THEN valor END),0) AS fora,
-                                  COUNT(*) AS n FROM extrato_linhas WHERE COALESCE(maquininha,'') <> '' AND valor > 0
-                                  AND data BETWEEN %s AND %s GROUP BY maquininha""", (ini, fim))
-            for x in cur.fetchall():
-                g = maqs.setdefault(x['maquininha'], {"maquininha": x['maquininha'], "bruto": 0.0, "repasse_doc": 0.0,
-                                                       "receita_nota": 0.0, "sem_explicacao": 0.0, "qtd": 0})
-                g['relatorio'] = _f(x['v']); g['fora_sistema'] = _f(x['fora']); g['relatorio_qtd'] = x['n']
-        arred = lambda d: {k: (round(v, 2) if isinstance(v, float) else v) for k, v in d.items()}
+        cur.execute("""SELECT maquininha, COALESCE(SUM(valor),0) AS v, COALESCE(SUM(CASE WHEN status='aberto' THEN valor END),0) AS fora
+                       FROM extrato_linhas WHERE COALESCE(maquininha,'') <> '' AND valor > 0 AND data BETWEEN %s AND %s
+                       GROUP BY maquininha""", (ini, fim))
+        for x in cur.fetchall():
+            g = maqs.setdefault(x['maquininha'], novo(x['maquininha']))
+            g['relatorio'] = _f(x['v']); g['fora_sistema'] = _f(x['fora'])
+        arred = lambda dd: {a: (round(b, 2) if isinstance(b, float) else b) for a, b in dd.items()}
         linhas = [arred(g) for g in maqs.values()]
         tot = {"maquininha": "TOTAL", "qtd": sum(g['qtd'] for g in linhas)}
-        for k in ("bruto", "repasse_doc", "receita_nota", "sem_explicacao"):
-            tot[k] = round(sum(g[k] for g in linhas), 2)
+        for kk in cats:
+            tot[kk] = round(sum(g[kk] for g in linhas), 2)
         if any('relatorio' in g for g in linhas):
             tot['relatorio'] = round(sum(g.get('relatorio', 0) for g in linhas), 2)
             tot['fora_sistema'] = round(sum(g.get('fora_sistema', 0) for g in linhas), 2)
-        os_l = sorted([arred(e) for e in por_os.values() if e['sem_explicacao'] > 0.004], key=lambda e: -e['sem_explicacao'])
+        os_l = sorted([arred(e) for e in por_os.values() if e['sem_explicacao'] > 0.004 or e['adiantamento'] > 0.004],
+                      key=lambda e: (-e['sem_explicacao'], -e['adiantamento']))
         return {"maquininhas": linhas, "total": tot, "os": os_l}
 
     @app.route("/api/relatorio-contador", methods=["GET"])
