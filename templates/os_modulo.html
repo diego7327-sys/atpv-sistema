@@ -2161,7 +2161,7 @@ function osContPdf(){
       S.y-=1.5; rqPar(S,'Cada pagamento cobre primeiro as taxas da OS. Taxa paga com DUA/comprovante (ou devolvida com comprovante) explica a parte de taxa; taxa ainda não paga é adiantamento do cliente (amarelo, não é receita); a parte de honorário é explicada pela NFS-e. Em vermelho, o que ficou sem explicação.',{sz:7.8,i:true,cor:[110,110,110]});
       if(dm.os.length) rqTabela(S,[{t:'OS',w:13},{t:'Cliente',w:40},{t:'Maq.',w:17},{t:'Cartão',w:20,r:1},{t:'Adiant.',w:20,r:1},{t:'Sem explic.',w:20,r:1},{t:'O que falta',w:40}],
         dm.os.map(function(e){ return [String(e.os),e.cliente,e.maquininha,osN(e.cartao),'??'+osN(e.adiantamento||0),(e.sem_explicacao>0.004?'!!':'')+osN(e.sem_explicacao),e.motivo]; }),{sz:7.4}); }
-    rqTitulo(S,'ADIANTAMENTOS DE CLIENTES PARA TAXAS (NÃO É RECEITA)');
+    rqTitulo(S,'ADIANTAMENTOS PARA TAXAS (NÃO É RECEITA)');
     rqTabela(S,[{t:'',w:120},{t:'R$',w:50,r:1}],[['Saldo no fim do mês — dinheiro de cliente para taxas ainda não pagas',osN(s.adiantamentos_saldo)],['OS com adiantamento',String(s.adiantamentos_qtd)],
       [(s.adiantamentos_parados_qtd?'!!':'')+'Parados há mais de '+s.adiant_dias+' dias ('+s.adiantamentos_parados_qtd+')',(s.adiantamentos_parados_qtd?'!!':'')+osN(s.adiantamentos_parados_valor)],['Devoluções a clientes no mês ('+s.devolucoes_qtd+')',osN(s.devolucoes)]],{semCab:true});
     if((r.adiantamentos||[]).length) rqTabela(S,[{t:'OS',w:14},{t:'Cliente',w:56},{t:'Taxas da OS',w:24,r:1},{t:'Já pagas',w:24,r:1},{t:'Adiantamento',w:24,r:1},{t:'Desde',w:28}],
