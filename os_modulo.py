@@ -1067,6 +1067,91 @@ def registrar(app, db, login_required):
             veics = [_veiculo_saida(r) for r in cur.fetchall()]
         return jsonify({"cliente": _cliente_saida(c), "os": oss, "veiculos": veics})
 
+    def _rel_cliente(cur, cid):
+        """OS do cliente ou da revenda (quando é o responsável), com placa, marca/modelo e chassi."""
+        de, ate = _data(request.args.get("de")), _data(request.args.get("ate"))
+        sit = request.args.get("situacao") or "todas"
+        cur.execute("SELECT * FROM clientes WHERE id = %s", (cid,))
+        c = cur.fetchone()
+        if not c:
+            return None, None
+        cond, args = ["(o.cliente_id = %s OR o.responsavel_id = %s)", "o.excluida_em IS NULL", "o.status NOT IN ('orcamento','cancelada')"], [cid, cid]
+        if de:
+            cond.append("o.data_abertura::date >= %s"); args.append(de)
+        if ate:
+            cond.append("o.data_abertura::date <= %s"); args.append(ate)
+        cur.execute("""SELECT o.*, v.placa, v.modelo, v.chassi, v.renavam, cl.nome AS proprietario, pt.nome AS tipo_nome,
+                              (SELECT string_agg(i.descricao, ' + ' ORDER BY i.id) FROM os_itens i WHERE i.os_id = o.id) AS servicos,
+                              """ + SQL_TOTAIS + """
+                       FROM ordens_servico o LEFT JOIN veiculos v ON v.id = o.veiculo_id
+                       LEFT JOIN clientes cl ON cl.id = o.cliente_id LEFT JOIN processo_tipos pt ON pt.id = o.processo_tipo_id
+                       WHERE """ + " AND ".join(cond) + " ORDER BY o.data_abertura, o.numero", args)
+        out = []
+        for r in cur.fetchall():
+            o = _os_saida(r)
+            if sit == 'aberto' and o['devedor'] <= 0.004:
+                continue
+            if sit == 'pagas' and o['devedor'] > 0.004:
+                continue
+            out.append({"os": o['numero'], "data": (_d(r['data_abertura']) or '')[:10], "placa": r['placa'] or '',
+                        "modelo": r['modelo'] or '', "chassi": r['chassi'] or '', "renavam": r['renavam'] or '',
+                        "proprietario": r['proprietario'] or '', "servicos": r['servicos'] or (r['tipo_nome'] or ''),
+                        "situacao": STATUS_OS.get(o['status'], o['status']), "total": o['total'], "pago": o['pago'], "saldo": o['devedor']})
+        return _cliente_saida(c), out
+
+    @app.route("/api/clientes/<int:cid>/relatorio", methods=["GET"])
+    @equipe
+    def os_cliente_relatorio(cid):
+        with db() as cur:
+            c, l = _rel_cliente(cur, cid)
+        if c is None:
+            return jsonify({"erro": "Cliente não encontrado"}), 404
+        sm = lambda k: round(sum(x[k] for x in l), 2)
+        return jsonify({"cliente": c, "itens": l, "total": sm('total'), "pago": sm('pago'), "saldo": sm('saldo'),
+                        "de": request.args.get("de") or '', "ate": request.args.get("ate") or ''})
+
+    @app.route("/api/clientes/<int:cid>/relatorio.xlsx", methods=["GET"])
+    @equipe
+    def os_cliente_relatorio_xlsx(cid):
+        from io import BytesIO
+        from flask import send_file
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from openpyxl.utils import get_column_letter
+        with db() as cur:
+            c, l = _rel_cliente(cur, cid)
+        if c is None:
+            return jsonify({"erro": "Cliente não encontrado"}), 404
+        wb = Workbook(); ws = wb.active; ws.title = "Serviços"
+        ws["A1"] = "DIEGO DESPACHANTE — Relatório de serviços"; ws["A1"].font = Font(bold=True, size=13, color="1F3864")
+        per = " a ".join(x for x in ('/'.join((request.args.get(k) or '').split('-')[::-1]) for k in ("de", "ate")) if x)
+        ws["A2"] = "%s%s%s" % (c.get('nome') or '', (" — " + c['cpf_cnpj']) if c.get('cpf_cnpj') else '', (" · período " + per) if per else '')
+        cols = [("OS", "os", 8), ("Data", "data", 11), ("Placa", "placa", 10), ("Marca / Modelo", "modelo", 28), ("Chassi", "chassi", 21),
+                ("Renavam", "renavam", 13), ("Proprietário", "proprietario", 28), ("Serviços", "servicos", 42), ("Situação", "situacao", 16),
+                ("Total", "total", 12), ("Pago", "pago", 12), ("Saldo", "saldo", 12)]
+        moeda = '#,##0.00'
+        for j, (t, k, w) in enumerate(cols, 1):
+            x = ws.cell(4, j, t); x.font = Font(bold=True, color="FFFFFF"); x.fill = PatternFill("solid", fgColor="1F3864")
+            ws.column_dimensions[get_column_letter(j)].width = w
+        for i, r in enumerate(l, 5):
+            for j, (t, k, w) in enumerate(cols, 1):
+                v = r[k]
+                if k == 'data' and v:
+                    v = datetime.strptime(v, "%Y-%m-%d").date()
+                x = ws.cell(i, j, v)
+                if k in ('total', 'pago', 'saldo'): x.number_format = moeda
+                if k == 'data': x.number_format = 'DD/MM/YYYY'
+                if k == 'servicos': x.alignment = Alignment(wrap_text=True, vertical="top")
+        t = len(l) + 5
+        ws.cell(t, 1, "TOTAL").font = Font(bold=True)
+        for j in (10, 11, 12):
+            L = get_column_letter(j); x = ws.cell(t, j, "=SUM(%s5:%s%d)" % (L, L, t - 1)); x.number_format = moeda; x.font = Font(bold=True)
+        ws.freeze_panes = "A5"
+        bio = BytesIO(); wb.save(bio); bio.seek(0)
+        nome = re.sub(r'[^A-Za-z0-9]+', '_', (c.get('nome') or 'cliente'))[:30]
+        return send_file(bio, as_attachment=True, download_name="relatorio_%s.xlsx" % nome,
+                         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
     @app.route("/api/clientes", methods=["POST"])
     @equipe
     def os_cliente_salvar():

@@ -2374,7 +2374,7 @@ function rqTabela(S,cols,linhas,o){ o=o||{}; var d=S.doc, sz=o.sz||8.6, lh=sz*0.
     var cel=l.map(function(v,j){ v=String(v==null?'':v); var am=v.indexOf('??')===0; if(am) v=v.slice(2); var vm=v.indexOf('!!')===0; if(vm) v=v.slice(2); var b=vm||/^\*\*.*\*\*$/.test(v); if(/^\*\*.*\*\*$/.test(v)) v=v.slice(2,-2); d.setFont('times',b?'bold':'normal');
       return {b:b, vm:vm, am:am, ls:d.splitTextToSize(v,cols[j].w-2*pad)}; });
     var nl=Math.max.apply(null,cel.map(function(c){ return c.ls.length; })), h=nl*lh+2*pad-0.4;
-    if(S.y+h>282){ d.addPage(); S.y=18; cab(); }
+    if(S.y+h>(S.lim?S.lim-2:282)){ d.addPage(); S.y=18; cab(); }
     if(li%2===0){ d.setFillColor(RQ_FUNDO[0],RQ_FUNDO[1],RQ_FUNDO[2]); d.rect(S.ML,S.y,S.TW,h,'F'); }
     var x=S.ML; rqCor(d,[25,25,25]);
     cel.forEach(function(c,j){ d.setFont('times',c.b?'bold':'normal'); rqCor(d,c.vm?[192,0,0]:(c.am?[170,120,0]:[25,25,25])); c.ls.forEach(function(t,k){ var ty=S.y+pad+lh*(k+0.78);
@@ -2384,7 +2384,8 @@ function rqTabela(S,cols,linhas,o){ o=o||{}; var d=S.doc, sz=o.sz||8.6, lh=sz*0.
 // ── motor do PDF (visual da procuração modelo: título espaçado, faixas azul-marinho, texto corrido) ──
 var RQ_NAVY=[31,56,100], RQ_FUNDO=[243,245,249], RQ_OURO=[176,138,78];
 function rqNovo(){ var J=window.jspdf.jsPDF; var doc=new J({unit:'mm',format:'a4'}); return {doc:doc,y:16,ML:20,TW:170,W:210}; }
-function rqPg(S,h){ if(S.y+h>284){ S.doc.addPage(); S.y=18; } }
+function rqPg(S,h){ if(S.y+h>(S.lim||284)){ S.doc.addPage(); S.y=18; } }
+function rqNovoDeitado(){ var J=window.jspdf.jsPDF; var doc=new J({orientation:'landscape',unit:'mm',format:'a4'}); return {doc:doc,y:14,ML:14,TW:269,W:297,H:210,lim:194}; }
 function rqCor(d,c){ d.setTextColor(c[0],c[1],c[2]); }
 // texto com letras espaçadas (centralizado ou à esquerda)
 function rqEsp(S,t,x,y,sz,cs,centro){ var d=S.doc; d.setFontSize(sz); var w=d.getTextWidth(t)+cs*(t.length-1); d.text(t,centro?x-w/2:x,y,{charSpace:cs}); return w; }
@@ -2471,8 +2472,10 @@ function rqFim(S,D,nome,sub,atesto){ var d=S.doc, cbW=70, cbH=26, temCb=D.carimb
     d.setFont('helvetica','normal'); d.setFontSize(4.8); d.text('CÓD.: '+(cfg.cod||'2670'),cx+35,cy+20.4,{align:'center'}); }
   S.y=Math.max(y0+cbH,ly+9)+5; d.setTextColor(0,0,0); }
 function rqRodape(S){ var d=S.doc, n=d.getNumberOfPages(), t='DIEGO DESPACHANTE · Caetano Despachante Ltda · CNPJ 08.965.960/0001-06 · Cód. DETRAN 2670 · Av. Brasil, 464, Sala 01, Centro · CEP 75020-000 · Anápolis/GO · (62) 99110-1506';
-  for(var i=1;i<=n;i++){ d.setPage(i); d.setDrawColor(190,190,190); d.setLineWidth(0.3); d.line(S.ML,287,S.ML+S.TW,287);
-    d.setFont('times','italic'); d.setFontSize(7.4); d.setTextColor(140,140,140); d.text(t,S.W/2,291,{align:'center'}); } d.setPage(n); }
+  var yb=(S.H||297)-10;
+  for(var i=1;i<=n;i++){ d.setPage(i); d.setDrawColor(190,190,190); d.setLineWidth(0.3); d.line(S.ML,yb,S.ML+S.TW,yb);
+    d.setFont('times','italic'); d.setFontSize(7.4); d.setTextColor(140,140,140); d.text(t,S.W/2,yb+4,{align:'center'});
+    if(n>1){ d.text('pág. '+i+'/'+n,S.ML+S.TW,yb+4,{align:'right'}); } } d.setPage(n); }
 // blocos de texto reaproveitados
 function rqB(x,n){ return x?'**'+x+'**':Array(n||18).join('_'); }
 function rqTxtPessoa(D,papel){
@@ -2782,13 +2785,33 @@ function osCliLista(){
 }
 function osCliFicha(id){
   osApi('/api/clientes/'+id).then(function(r){
-    var h='<div class="os-box"><h4>OS de '+osEsc(r.cliente.nome)+'</h4>'+osFichaCli(r.cliente);
+    var h='<div class="os-box"><h4>OS de '+osEsc(r.cliente.nome)+'</h4>'+osFichaCli(r.cliente)+
+      '<div class="os-box" style="margin:10px 0 0;background:rgba(0,0,0,.15)"><div class="os-small" style="margin-bottom:6px"><b style="color:var(--txt)">📄 Relatório para o cliente / garagem / concessionária</b> — OS com placa, marca/modelo e chassi (inclui as OS em que ele é o responsável/revenda). Não mostra custo nem lucro.</div>'+
+      '<div class="os-g4"><div class="fg"><label>De</label><input type="date" id="ocr-de"></div><div class="fg"><label>Até</label><input type="date" id="ocr-ate"></div>'+
+      '<div class="fg"><label>Quais OS</label><select id="ocr-sit"><option value="todas">Todas</option><option value="aberto">Só com saldo a pagar</option><option value="pagas">Só quitadas</option></select></div>'+
+      '<div class="fg" style="justify-content:flex-end;flex-direction:row;gap:6px;align-items:flex-end"><button class="os-b pri" onclick="osCliRelPdf('+id+')">📄 PDF</button><button class="os-b" onclick="osCliRelXls('+id+')">⬇ Excel</button></div></div></div>';
     if(r.veiculos.length) h+='<div class="os-small" style="margin-top:8px">Veículos: '+r.veiculos.map(function(v){return osEsc(v.placa+' '+(v.modelo||''));}).join(' · ')+'</div>';
     h+='<div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>Nº</th><th>Data</th><th>Situação</th><th style="text-align:right">Total</th><th style="text-align:right">Devedor</th></tr></thead><tbody>';
     r.os.forEach(function(o){ h+='<tr style="cursor:pointer" onclick="osAbrir('+o.numero+')"><td class="os-num">'+o.numero+'</td><td>'+osEsc(o.data_abertura.slice(0,10))+'</td><td>'+osSt(o.status)+'</td><td class="os-money">'+osN(o.total)+'</td><td class="os-money '+(o.devedor>0.004?'os-dev':'')+'">'+osN(o.devedor)+'</td></tr>'; });
     if(!r.os.length) h+='<tr><td colspan="5" class="os-vazio">Sem OS.</td></tr>';
     osE('os-cli-ficha').innerHTML=h+'</tbody></table></div></div>';
     osE('os-cli-ficha').scrollIntoView({behavior:'smooth'});
+  }).catch(osErr);
+}
+function osCliRelQ(){ var q=[]; if(osE('ocr-de').value) q.push('de='+osE('ocr-de').value); if(osE('ocr-ate').value) q.push('ate='+osE('ocr-ate').value); q.push('situacao='+osE('ocr-sit').value); return '?'+q.join('&'); }
+function osCliRelXls(id){ osBaixar('/api/clientes/'+id+'/relatorio.xlsx'+osCliRelQ(),'relatorio_cliente.xlsx').then(function(){ osMsg('✓ Excel baixado.'); }).catch(osErr); }
+function osCliRelPdf(id){
+  if(!window.jspdf){ osMsg('Gerador de PDF ainda carregando, tente de novo em instantes.','err'); return; }
+  osApi('/api/clientes/'+id+'/relatorio'+osCliRelQ()).then(function(r){
+    if(!r.itens.length){ osMsg('Nenhuma OS nesse filtro.','warn'); return; }
+    var S=rqNovoDeitado(), c=r.cliente, per=[r.de,r.ate].filter(Boolean).map(osBr).join(' a ');
+    rqTopo(S,'DIEGO DESPACHANTE  ·  CAETANO DESPACHANTE LTDA  ·  CNPJ 08.965.960/0001-06','RELATÓRIO DE SERVIÇOS',(c.nome||'')+(c.cpf_cnpj?' — '+c.cpf_cnpj:'')+(per?' · período '+per:'')+' · '+r.itens.length+' OS');
+    rqTabela(S,[{t:'OS',w:13},{t:'Data',w:17},{t:'Placa',w:17},{t:'Marca / Modelo',w:40},{t:'Chassi',w:36},{t:'Proprietário',w:38},{t:'Serviços',w:48},{t:'Total',w:20,r:1},{t:'Pago',w:20,r:1},{t:'Saldo',w:20,r:1}],
+      r.itens.map(function(x){ return [String(x.os),osBr(x.data),x.placa,x.modelo,x.chassi,x.proprietario,x.servicos,osN(x.total),osN(x.pago),(x.saldo>0.004?'!!':'')+osN(x.saldo)]; })
+      .concat([['','','','','','','**TOTAL**','**'+osN(r.total)+'**','**'+osN(r.pago)+'**','**'+osN(r.saldo)+'**']]),{sz:7.8});
+    if(r.saldo>0.004){ rqPar(S,'Saldo em aberto: **'+osR(r.saldo)+'**.',{sz:9.6}); }
+    rqRodape(S);
+    S.doc.save('relatorio_'+(c.nome||'cliente').split(' ')[0]+'.pdf'); osMsg('✓ Relatório gerado.');
   }).catch(osErr);
 }
 function osCliModal(id, sugestao){
