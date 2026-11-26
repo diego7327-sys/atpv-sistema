@@ -347,7 +347,30 @@ input[type=date].os-dt,.fg input[type=date]{color-scheme:dark}
   <div id="osv-fin" style="display:none">
     <div class="os-sub" style="margin-bottom:12px">
       <button id="osf-b-extrato" class="on" onclick="osFinAba('extrato')">Extrato de lançamentos</button>
+      <button id="osf-b-nf" class="os-nfp" style="display:none" onclick="osFinAba('nf')">🧾 Notas fiscais</button>
+      <button id="osf-b-cont" class="os-vlp" style="display:none" onclick="osFinAba('cont')">📊 Relatório do contador</button>
       <button id="osf-b-cad" onclick="osFinAba('cad')">Cadastros (tipos de processo, contas, formas, centros)</button>
+    </div>
+    <div id="osf-nf" style="display:none">
+      <div class="os-g4">
+        <div class="fg"><label>Situação da nota</label><select id="osf-nf-sit"><option value="pendente">Sem nota (pendente)</option><option value="emitida">Emitidas</option><option value="dispensada">Dispensadas</option><option value="todas">Todas</option></select></div>
+        <div class="fg"><label>OS aberta de</label><input type="date" id="osf-nf-de"></div>
+        <div class="fg"><label>Até</label><input type="date" id="osf-nf-ate"></div>
+        <div class="fg" style="justify-content:flex-end"><button class="os-b pri" onclick="osNfLista()">Filtrar</button></div>
+      </div>
+      <div id="osf-nf-res"></div>
+    </div>
+    <div id="osf-cont" style="display:none">
+      <div class="os-box"><h4>Relatório mensal para o contador</h4>
+        <div class="os-linha">
+          <div class="fg" style="max-width:200px"><label>Mês</label><input type="month" id="osf-ct-mes"></div>
+          <div class="fg" style="flex:0"><button class="os-b pri" onclick="osContResumo()">Ver resumo</button></div>
+          <div class="fg" style="flex:0"><button class="os-b" onclick="osContExcel()">⬇ Excel</button></div>
+          <div class="fg" style="flex:0"><button class="os-b" onclick="osContPdf()">⬇ PDF</button></div>
+        </div>
+        <p class="cfg-note" style="margin:6px 0 0">Recebido e repasses pela <b>data do pagamento</b>; honorários, notas e OS sem nota pelas <b>OS abertas no mês</b>. O Excel traz uma aba para cada parte (OS, recebimentos, repasses, NFS-e, sem nota, honorário zero).</p>
+      </div>
+      <div id="osf-ct-res"></div>
     </div>
     <div id="osf-extrato">
       <div class="os-g4">
@@ -1099,6 +1122,7 @@ function osRender(){
     (osAdm()?' <button class="os-b" onclick="osRestaurar()">Restaurar</button>':'')+'</div>';
   h+='<div class="os-head"><div><h2>'+(o.status==='orcamento'?'ORÇAMENTO':'OS')+' Nº '+o.numero+' '+osSt(o.status)+
      (o.hon_zero_motivo?' <span class="os-tp" style="font-size:11px;vertical-align:middle;color:var(--warn);border-color:rgba(255,165,2,.4);background:rgba(255,165,2,.1)">HONORÁRIO ZERO · '+osEsc(o.hon_zero_motivo)+'</span>':'')+
+     osNfSelo(o)+
      (o.processo_tipo?' <span class="os-tp" style="font-size:11px;vertical-align:middle">'+osEsc(o.processo_tipo)+'</span>':' <span class="os-tp" style="color:var(--warn);border-color:rgba(255,165,2,.4);background:rgba(255,165,2,.1)">SEM TIPO DE PROCESSO</span>')+'</h2>'+
      '<div class="os-small">Aberta em '+osEsc(o.data_abertura)+' por '+osEsc(o.user_nome||'—')+(o.protocolo?' · Protocolo <b style="color:var(--txt)">'+osEsc(o.protocolo)+'</b>':'')+
      (o.status==='orcamento'&&o.validade?' · Válido até '+osBr(o.validade):'')+'</div>'+
@@ -1644,7 +1668,7 @@ function osAbaReceb(){
   h+='</tbody></table></div><div style="display:flex;gap:8px">';
   if(o.devedor-(o.aguardando_baixa||0)>0.004 && !o.excluida_em && o.status!=='orcamento') h+='<button class="os-b pri" onclick="osReceberModal()">💰 '+(osBX()?'Receber':'Informar recebimento')+'</button>';
   if(o.pago>0) h+='<button class="os-b" onclick="osRecibo()">🧾 Emitir recibo</button>';
-  h+='</div><p class="cfg-note" style="margin-top:10px">'+(osBX()?'Recebimento lançado por você já entra com baixa. O que os funcionários informam fica <b>aguardando baixa</b> e só conta como pago (e entra no extrato) quando você confirma.':
+  h+='</div>'+osNfQuadro(o)+'<p class="cfg-note" style="margin-top:10px">'+(osBX()?'Recebimento lançado por você já entra com baixa. O que os funcionários informam fica <b>aguardando baixa</b> e só conta como pago (e entra no extrato) quando você confirma.':
      'O recebimento que você informa fica <b>aguardando baixa</b>. Só conta como pago depois que o responsável conferir e dar a baixa.')+'</p>';
   osE('os-aba-corpo').innerHTML=h;
 }
@@ -1878,6 +1902,162 @@ function osReqGerar(id, modo){
   osFechar(); osMsg('✓ '+m.nome+' gerado.');
 }
 
+// ── NOTA FISCAL (NFS-e) DO HONORÁRIO ──
+var OS_NF_ST={pendente:'PENDENTE',emitida:'EMITIDA',dispensada:'DISPENSADA'};
+function osNfSelo(o){
+  if(!(osVL()||osBX()) || o.status==='orcamento' || o.status==='cancelada') return '';
+  var st=o.nf_status||'pendente', est='font-size:11px;vertical-align:middle;';
+  if(st==='emitida') return ' <span class="os-tp" style="'+est+'color:var(--acc);border-color:rgba(0,212,170,.4);background:rgba(0,212,170,.1)">NFS-e Nº '+osEsc(o.nf_numero)+'</span>';
+  if(st==='dispensada') return ' <span class="os-tp" style="'+est+'">NOTA DISPENSADA</span>';
+  if(osVL() && !(o.nota_valor>0.004)) return '';
+  return ' <span class="os-tp" style="'+est+'color:var(--warn);border-color:rgba(255,165,2,.4);background:rgba(255,165,2,.1)">SEM NOTA FISCAL</span>';
+}
+function osNfQuadro(o){
+  if(!(osVL()||osBX()) || o.status==='orcamento' || o.status==='cancelada' || o.excluida_em) return '';
+  var st=o.nf_status||'pendente', sug=osVL()?o.nota_valor:null;
+  var h='<div class="os-box" style="margin-top:14px;border-left:4px solid '+(st==='emitida'?'var(--acc)':st==='dispensada'?'var(--mut)':'var(--warn)')+'"><h4>🧾 Nota fiscal do honorário (NFS-e) — '+OS_NF_ST[st]+'</h4>';
+  if(sug!=null) h+='<div class="os-small" style="margin-bottom:8px">Valor sugerido para a nota: <b style="color:var(--txt)">'+osR(sug)+'</b>'+
+     (OS.atual.parcelamento?' (parcelamento — critério '+(OS.atual.parcelamento.calc&&OS.atual.parcelamento.calc.criterio==='retorno'?'só retorno':'conservador')+')':' (honorário + o que foi cobrado a mais nas taxas)')+'. Taxas e débitos de terceiros não entram.</div>';
+  if(st==='dispensada') h+='<div class="os-small" style="margin-bottom:8px">Motivo: <b style="color:var(--txt)">'+osEsc(o.nf_obs||'')+'</b></div>';
+  h+='<div class="os-g4"><div class="fg"><label>Nº da NFS-e</label><input id="osnf-num" value="'+osEsc(o.nf_numero||'')+'" placeholder="ex.: 1234"></div>'+
+     '<div class="fg"><label>Data de emissão</label><input type="date" id="osnf-data" value="'+osEsc(o.nf_data||osHoje())+'"></div>'+
+     '<div class="fg"><label>Valor da nota (R$)</label><input id="osnf-valor" value="'+(o.nf_valor!=null?osN(o.nf_valor):(sug!=null?osN(sug):''))+'"></div>'+
+     '<div class="fg" style="justify-content:flex-end"><button class="os-b pri" onclick="osNfSalvar(\'emitida\')">✓ Salvar nota emitida</button></div></div>'+
+     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">'+
+     (st!=='pendente'?'<button class="os-b" onclick="osNfSalvar(\'pendente\')">↺ Voltar para pendente</button>':'')+
+     (st!=='dispensada'?'<button class="os-b" onclick="osNfDispensar()">Não vai ter nota…</button>':'')+'</div></div>';
+  return h;
+}
+function osNfSalvar(st, numero, obs){
+  var n=numero||OS.atual.os.numero, c={nf_status:st};
+  if(st==='emitida'){
+    c.nf_numero=(osE('osnf-num').value||'').trim(); c.nf_data=osE('osnf-data').value; c.nf_valor=osE('osnf-valor').value;
+    if(!c.nf_numero){ osMsg('Digite o número da NFS-e.','err'); osE('osnf-num').focus(); return; }
+  }
+  if(obs) c.nf_obs=obs;
+  osApi('/api/os/'+n+'/nota','POST',c).then(function(){
+    osFechar(); osMsg(st==='emitida'?'✓ NFS-e registrada.':st==='dispensada'?'✓ Nota dispensada.':'✓ Nota marcada como pendente.');
+    if(numero && OS.finAba==='nf' && osE('osv-fin').style.display!=='none') osNfLista(); else osRecarregar('recebimentos');
+  }).catch(osErr);
+}
+function osNfDispensar(numero){
+  osModal('Não emitir nota fiscal',
+    '<div class="fg"><label>Motivo *</label><input id="osnf-mot" placeholder="ex.: emitida junto com a OS 35610 / cliente é órgão público / sem honorário"></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn-sec" onclick="osFechar()">Cancelar</button><button class="btn-main" onclick="var m=osE(\'osnf-mot\').value.trim(); if(!m){ osMsg(\'Diga o motivo.\',\'err\'); return; } osNfSalvar(\'dispensada\','+(numero||'null')+',m)">Confirmar</button></div>');
+  setTimeout(function(){ osE('osnf-mot').focus(); },40);
+}
+// lançar a nota direto da lista do Financeiro
+function osNfModal(numero, sug){
+  osModal('NFS-e — OS Nº '+numero,
+    '<div class="g3"><div class="fg"><label>Nº da NFS-e *</label><input id="osnf-num"></div>'+
+    '<div class="fg"><label>Data de emissão</label><input type="date" id="osnf-data" value="'+osHoje()+'"></div>'+
+    '<div class="fg"><label>Valor (R$)</label><input id="osnf-valor" value="'+(sug!=null?osN(sug):'')+'"></div></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn-sec" onclick="osFechar()">Cancelar</button><button class="btn-main" onclick="osNfSalvar(\'emitida\','+numero+')">Salvar</button></div>');
+  setTimeout(function(){ osE('osnf-num').focus(); },40);
+}
+function osNfLista(){
+  var q='situacao='+osE('osf-nf-sit').value+(osE('osf-nf-de').value?'&de='+osE('osf-nf-de').value:'')+(osE('osf-nf-ate').value?'&ate='+osE('osf-nf-ate').value:'');
+  osApi('/api/notas-fiscais?'+q).then(function(r){
+    var vl=osVL(), h='<div class="table-wrap"><table><thead><tr><th>OS</th><th>Aberta</th><th>Cliente</th><th>Situação</th>'+(vl?'<th style="text-align:right">Valor da nota</th>':'')+'<th>NFS-e</th><th></th></tr></thead><tbody>';
+    r.itens.forEach(function(x){
+      var nf=x.nf_status==='emitida'?'<span class="os-st st-entregue">Nº '+osEsc(x.nf_numero)+'</span><div class="os-small">'+osBr(x.nf_data)+(x.nf_valor!=null?' · '+osR(x.nf_valor):'')+'</div>':
+             x.nf_status==='dispensada'?'<span class="os-st st-cancelada">DISPENSADA</span><div class="os-small">'+osEsc(x.nf_obs||'')+'</div>':'<span class="os-st st-andamento">SEM NOTA</span>';
+      h+='<tr><td class="os-num" style="cursor:pointer" onclick="osAbrir('+x.numero+',\'recebimentos\')">'+x.numero+'</td><td>'+osBr(x.data)+'</td><td>'+osEsc(x.cliente_nome||'')+'<div class="os-small">'+osEsc(x.cliente_doc||'')+(x.placa?' · '+osEsc(x.placa):'')+'</div></td>'+
+         '<td>'+osSt(x.status)+'</td>'+(vl?'<td class="os-money">'+osN(x.nota_valor)+'</td>':'')+'<td>'+nf+'</td><td style="white-space:nowrap">'+
+         (x.nf_status!=='emitida'?'<button class="os-b pri" onclick="osNfModal('+x.numero+','+(vl?x.nota_valor:'null')+')">Lançar NFS-e</button> ':'')+
+         (x.nf_status==='pendente'?'<button class="os-b" onclick="osNfDispensar('+x.numero+')">Dispensar</button>':'')+'</td></tr>';
+    });
+    if(!r.itens.length) h+='<tr><td colspan="7" class="os-vazio">Nenhuma OS nesta situação.</td></tr>';
+    else if(vl) h+='<tr class="os-soma"><td colspan="4">'+r.itens.length+' OS</td><td class="os-money">'+osN(r.total_nota)+'</td><td colspan="2"></td></tr>';
+    osE('osf-nf-res').innerHTML=h+'</tbody></table></div>';
+  }).catch(osErr);
+}
+
+// ── RELATÓRIO DO CONTADOR ──
+function osContMes(){ var m=osE('osf-ct-mes').value; if(!m){ osMsg('Escolha o mês.','err'); return null; } return m; }
+function osContResumo(){
+  var m=osContMes(); if(!m) return;
+  osApi('/api/relatorio-contador?mes='+m).then(function(r){
+    OS.ultCont=r; var s=r.resumo;
+    function card(t,v,cor,sub){ return '<div class="os-box" style="margin:0;border-left:4px solid '+cor+'"><div class="os-small">'+t+'</div><div style="font-size:19px;font-weight:700;margin-top:2px">'+v+'</div>'+(sub?'<div class="os-small">'+sub+'</div>':'')+'</div>'; }
+    var h='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin:12px 0">'+
+      card('Honorários (receita)',osR(s.honorarios),'var(--acc)',s.os_qtd+' OS · total cobrado '+osR(s.os_total))+
+      card('Repasses (taxas de terceiros)',osR(s.repasses_os),'var(--acc2)','pagos no mês: '+osR(s.repasses_pagos))+
+      card('Recebido no mês',osR(s.recebido),'var(--acc)',s.aguardando_baixa>0?'+ '+osR(s.aguardando_baixa)+' aguardando baixa':'')+
+      card('NFS-e emitidas',osR(s.nfs_emitidas_valor),'var(--acc)',s.nfs_emitidas_qtd+' nota(s)')+
+      card('OS com honorário sem nota',osR(s.sem_nota_valor),'var(--warn)',s.sem_nota_qtd+' OS')+
+      card('Parcelamentos no cartão','acréscimo '+osR(s.acrescimos),'var(--acc2)','retorno '+osR(s.retornos)+' · custo maq. '+osR(s.custo_maquininha))+'</div>';
+    var tb=function(tit,obj){ var k=Object.keys(obj); return '<div class="os-box" style="margin:0"><h4>'+tit+'</h4><table><tbody>'+(k.length?k.map(function(x){ return '<tr><td>'+osEsc(x)+'</td><td class="os-money">'+osN(obj[x])+'</td></tr>'; }).join(''):'<tr><td class="os-vazio">—</td></tr>')+'</tbody></table></div>'; };
+    h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px">'+tb('Recebido por forma',s.recebido_por_forma)+tb('Repasses pagos por categoria',s.repasses_por_categoria)+'</div>';
+    if(r.sem_nota.length) h+='<div class="os-box" style="margin-top:10px"><h4>OS com honorário sem nota ('+r.sem_nota.length+')</h4><div class="os-small">'+r.sem_nota.map(function(x){ return '<a href="#" onclick="osAbrir('+x.os+',\'recebimentos\');return false" style="color:var(--acc2)">'+x.os+'</a> '+osEsc(x.cliente)+' '+osR(x.nota_sugerida); }).join(' · ')+'</div></div>';
+    if(r.hon_zero.length) h+='<div class="os-box" style="margin-top:10px"><h4>OS com honorário zero ('+r.hon_zero.length+')</h4><div class="os-small">'+r.hon_zero.map(function(x){ return x.os+' '+osEsc(x.cliente)+(x.hon_zero_motivo?' ('+osEsc(x.hon_zero_motivo)+')':''); }).join(' · ')+'</div></div>';
+    osE('osf-ct-res').innerHTML=h;
+  }).catch(osErr);
+}
+function osBaixar(url, nome){
+  return fetch(url,{credentials:'same-origin'}).then(function(r){
+    if(!r.ok) return r.json().then(function(j){ throw new Error(j.erro||'Falha no download'); });
+    return r.blob();
+  }).then(function(b){ var a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=nome; document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); },500); });
+}
+function osContExcel(){ var m=osContMes(); if(!m) return; osBaixar('/api/relatorio-contador.xlsx?mes='+m,'contador_'+m.replace('-','_')+'.xlsx').then(function(){ osMsg('✓ Excel baixado.'); }).catch(osErr); }
+function osContPdf(){
+  var m=osContMes(); if(!m) return;
+  if(!window.jspdf){ osMsg('Gerador de PDF ainda carregando, tente de novo em instantes.','err'); return; }
+  osApi('/api/relatorio-contador?mes='+m).then(function(r){
+    var S=rqNovo(), s=r.resumo, mt=m.slice(5)+'/'+m.slice(0,4);
+    rqTopo(S,'CAETANO DESPACHANTE LTDA  ·  CNPJ 08.965.960/0001-06','RELATÓRIO DO CONTADOR','Competência '+mt+' · '+osBr(r.de)+' a '+osBr(r.ate));
+    rqTitulo(S,'RESUMO DO MÊS');
+    rqTabela(S,[{t:'',w:120},{t:'R$',w:50,r:1}],[
+      ['Quantidade de OS abertas no mês',String(s.os_qtd)],['Total cobrado dos clientes',osN(s.os_total)],
+      ['(-) Repasses — taxas e débitos de terceiros',osN(s.repasses_os)],['**(=) Honorários (receita do escritório)**','**'+osN(s.honorarios)+'**'],
+      ['     dos quais acréscimos de parcelamento no cartão',osN(s.acrescimos)],['Retorno das maquininhas (parcelamentos)',osN(s.retornos)],
+      ['Custo das maquininhas (parcelamentos)',osN(s.custo_maquininha)],['Valor sugerido para notas fiscais',osN(s.nota_sugerida)],
+      ['NFS-e emitidas no mês ('+s.nfs_emitidas_qtd+')',osN(s.nfs_emitidas_valor)],['OS com honorário sem nota ('+s.sem_nota_qtd+')',osN(s.sem_nota_valor)],
+      ['OS com honorário zero',String(s.hon_zero_qtd)]],{semCab:true});
+    var obj=function(o){ return Object.keys(o).map(function(k){ return [k,osN(o[k])]; }); };
+    rqTitulo(S,'RECEBIDO NO MÊS POR FORMA');
+    rqTabela(S,[{t:'Forma',w:120},{t:'Valor',w:50,r:1}],obj(s.recebido_por_forma).concat([['**Total recebido (com baixa)**','**'+osN(s.recebido)+'**']]).concat(s.aguardando_baixa>0?[['Informado e aguardando baixa',osN(s.aguardando_baixa)]]:[]));
+    rqTitulo(S,'REPASSES PAGOS NO MÊS POR CATEGORIA');
+    rqTabela(S,[{t:'Categoria',w:120},{t:'Valor',w:50,r:1}],obj(s.repasses_por_categoria).concat([['**Total de repasses pagos**','**'+osN(s.repasses_pagos)+'**']]));
+    if(r.sem_nota.length){ rqTitulo(S,'OS COM HONORÁRIO SEM NOTA FISCAL');
+      rqTabela(S,[{t:'OS',w:16},{t:'Data',w:20},{t:'Cliente',w:68},{t:'CPF/CNPJ',w:34},{t:'Nota sugerida',w:32,r:1}],
+        r.sem_nota.map(function(x){ return [String(x.os),osBr(x.data),x.cliente,x.cpf_cnpj,osN(x.nota_sugerida)]; })); }
+    if(r.hon_zero.length){ rqTitulo(S,'OS COM HONORÁRIO ZERO');
+      rqTabela(S,[{t:'OS',w:16},{t:'Data',w:20},{t:'Cliente',w:70},{t:'Motivo',w:64}],
+        r.hon_zero.map(function(x){ return [String(x.os),osBr(x.data),x.cliente,x.hon_zero_motivo||'—']; })); }
+    rqTitulo(S,'DETALHE — OS POR OS');
+    rqTabela(S,[{t:'OS',w:13},{t:'Data',w:17},{t:'Cliente',w:44},{t:'Total',w:19,r:1},{t:'Repasse',w:19,r:1},{t:'Honorário',w:19,r:1},{t:'Nota',w:19,r:1},{t:'NFS-e',w:20}],
+      r.os.map(function(x){ return [String(x.os),osBr(x.data),x.cliente,osN(x.total),osN(x.repasse),osN(x.receita),osN(x.nota_sugerida),x.nf_status==='EMITIDA'?'Nº '+x.nf_numero:x.nf_status]; })
+      .concat([['','','**TOTAL**','**'+osN(s.os_total)+'**','**'+osN(s.repasses_os)+'**','**'+osN(s.honorarios)+'**','**'+osN(s.nota_sugerida)+'**','']]),{sz:7.6});
+    if(r.recebimentos.length){ rqTitulo(S,'RECEBIMENTOS DO MÊS');
+      rqTabela(S,[{t:'Data',w:17},{t:'OS',w:13},{t:'Cliente',w:46},{t:'Forma',w:46},{t:'NSU',w:24},{t:'Valor',w:24,r:1}],
+        r.recebimentos.map(function(x){ return [osBr(x.data),String(x.os),x.cliente,x.grupo+(x.parcelas>1?' '+x.parcelas+'x':'')+(x.situacao!=='CONFIRMADO'?' (aguardando)':''),x.nsu||'',osN(x.valor)]; }),{sz:7.6}); }
+    if(r.repasses.length){ rqTitulo(S,'REPASSES PAGOS (DUA / GUIAS)');
+      rqTabela(S,[{t:'Data',w:17},{t:'OS',w:13},{t:'Item',w:52},{t:'Órgão',w:24},{t:'DUA/Guia',w:24},{t:'Conta',w:18},{t:'Valor',w:22,r:1}],
+        r.repasses.map(function(x){ return [osBr(x.data),String(x.os),x.item,x.orgao,x.documento,x.conta,osN(x.valor)]; }),{sz:7.6}); }
+    rqRodape(S);
+    S.doc.save('contador_'+m.replace('-','_')+'.pdf'); osMsg('✓ PDF do contador gerado.');
+  }).catch(osErr);
+}
+// tabela no PDF: cabeçalho azul, linhas zebradas; células aceitam **negrito**
+function rqTabela(S,cols,linhas,o){ o=o||{}; var d=S.doc, sz=o.sz||8.6, lh=sz*0.3528*1.25, pad=1.6;
+  var cab=function(){ if(o.semCab) return; var hh=6; rqPg(S,hh+lh+3); d.setFillColor(RQ_NAVY[0],RQ_NAVY[1],RQ_NAVY[2]); d.rect(S.ML,S.y,S.TW,hh,'F');
+    d.setFont('times','bold'); d.setFontSize(sz); d.setTextColor(255,255,255); var x=S.ML;
+    cols.forEach(function(c){ d.text(c.t,c.r?x+c.w-pad:x+pad,S.y+4.1,c.r?{align:'right'}:{}); x+=c.w; }); S.y+=hh; };
+  cab();
+  linhas.forEach(function(l,li){
+    d.setFontSize(sz);
+    var cel=l.map(function(v,j){ v=String(v==null?'':v); var b=/^\*\*.*\*\*$/.test(v); if(b) v=v.slice(2,-2); d.setFont('times',b?'bold':'normal');
+      return {b:b, ls:d.splitTextToSize(v,cols[j].w-2*pad)}; });
+    var nl=Math.max.apply(null,cel.map(function(c){ return c.ls.length; })), h=nl*lh+2*pad-0.4;
+    if(S.y+h>282){ d.addPage(); S.y=18; cab(); }
+    if(li%2===0){ d.setFillColor(RQ_FUNDO[0],RQ_FUNDO[1],RQ_FUNDO[2]); d.rect(S.ML,S.y,S.TW,h,'F'); }
+    var x=S.ML; rqCor(d,[25,25,25]);
+    cel.forEach(function(c,j){ d.setFont('times',c.b?'bold':'normal'); c.ls.forEach(function(t,k){ var ty=S.y+pad+lh*(k+0.78);
+      if(cols[j].r) d.text(t,x+cols[j].w-pad,ty,{align:'right'}); else d.text(t,x+pad,ty); }); x+=cols[j].w; });
+    d.setDrawColor(215,220,228); d.setLineWidth(0.15); d.line(S.ML,S.y+h,S.ML+S.TW,S.y+h); S.y+=h; });
+  S.y+=4; }
 // ── motor do PDF (visual da procuração modelo: título espaçado, faixas azul-marinho, texto corrido) ──
 var RQ_NAVY=[31,56,100], RQ_FUNDO=[243,245,249], RQ_OURO=[176,138,78];
 function rqNovo(){ var J=window.jspdf.jsPDF; var doc=new J({unit:'mm',format:'a4'}); return {doc:doc,y:16,ML:20,TW:170,W:210}; }
@@ -2201,16 +2381,69 @@ function osImprimir(){
   setTimeout(function(){ try{ w.focus(); w.print(); }catch(e){} },400);
 }
 function osRecibo(){
-  var d=OS.atual, o=d.os, fav=d.responsavel||d.cliente||{};
-  var hoje=new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'});
-  osJanela('Recibo OS '+o.numero, osCabecalho()+'<div style="text-align:right"><h1>RECIBO</h1><h1>'+osR(o.pago)+'</h1></div></div>'+
-    '<p style="font-size:14px;line-height:1.9;margin-top:24px">Recebemos de <b>'+osEsc(fav.nome||'')+'</b>'+(fav.cpf_cnpj?', CPF/CNPJ '+osEsc(fav.cpf_cnpj):'')+
-    ', a importância de <b>'+osR(o.pago)+'</b>, proveniente de serviços prestados conforme a Ordem de Serviço nº <b>'+o.numero+'</b>'+
-    (d.veiculo?', veículo placa '+osEsc(d.veiculo.placa):'')+'.</p>'+
-    '<table style="margin-top:10px"><tr><th>Data</th><th>Forma</th><th class="r">Valor</th></tr>'+
-    d.recebimentos.filter(function(r){ return (r.status||'confirmado')==='confirmado'; }).map(function(r){ return '<tr><td>'+osEsc(r.quando)+'</td><td>'+osEsc(r.forma||'')+'</td><td class="r">'+osN(r.valor)+'</td></tr>'; }).join('')+'</table>'+
-    (o.devedor>0.004?'<p>Saldo devedor restante: <b>'+osR(o.devedor)+'</b>.</p>':'<p>Quitado.</p>')+
-    '<p style="margin-top:20px">Anápolis-GO, '+hoje+'.</p><div class="ass">_______________________________________<br>Diego Caetano Silva</div>');
+  if(!window.jspdf){ osMsg('Gerador de PDF ainda carregando, tente de novo em instantes.','err'); return; }
+  osApi('/api/os/'+OS.atual.os.numero+'/recibo').then(function(R){
+    var D=osReqDados(); D.carimbo=true;
+    var S=rqNovo(), d=S.doc, p=R.pagador;
+    rqTopo(S,'CAETANO DESPACHANTE LTDA  ·  CNPJ 08.965.960/0001-06','RECIBO','Ordem de Serviço nº '+R.numero+(R.veiculo.placa?' · Veículo '+R.veiculo.placa+(R.veiculo.modelo?' — '+R.veiculo.modelo:''):''));
+    // valor em destaque
+    d.setFillColor(RQ_FUNDO[0],RQ_FUNDO[1],RQ_FUNDO[2]); d.setDrawColor(RQ_NAVY[0],RQ_NAVY[1],RQ_NAVY[2]); d.setLineWidth(0.4);
+    d.rect(S.ML+S.TW-62,S.y-2,62,13,'FD'); d.setFont('times','normal'); d.setFontSize(7.6); rqCor(d,[95,95,95]); d.text('VALOR RECEBIDO',S.ML+S.TW-31,S.y+2,{align:'center'});
+    d.setFont('times','bold'); d.setFontSize(15); rqCor(d,RQ_NAVY); d.text(osR(R.pago),S.ML+S.TW-31,S.y+8.6,{align:'center'});
+    var y0=S.y; S.y+=1;
+    rqPar(S,'Recebemos de **'+(p.nome||'').toUpperCase()+'**'+(p.cpf_cnpj?', CPF/CNPJ **'+p.cpf_cnpj+'**':'')+', a importância de **'+osR(R.pago)+'** ('+osExtenso(R.pago)+'), referente ao reembolso das taxas e débitos e aos honorários discriminados abaixo, conforme a Ordem de Serviço nº **'+R.numero+'**'+
+      (R.cliente&&R.cliente.toUpperCase()!==(p.nome||'').toUpperCase()?', em nome de **'+R.cliente.toUpperCase()+'**':'')+'.',{w:S.TW-68});
+    S.y=Math.max(S.y,y0+16)+2;
+    if(R.taxas.length){
+      rqTitulo(S,'TAXAS E DÉBITOS (REEMBOLSO)');
+      rqTabela(S,[{t:'Descrição',w:76},{t:'Órgão',w:30},{t:'DUA / Guia',w:36},{t:'Valor',w:28,r:1}],
+        R.taxas.map(function(t){ return [t.descricao,t.orgao||'',t.documento||'',osN(t.valor)]; }).concat([['**Subtotal das taxas e débitos**','','','**'+osN(R.taxas_total)+'**']]));
+      S.y-=1.5; rqPar(S,'Valores pagos por conta e ordem do cliente, iguais aos das guias e comprovantes, repassados integralmente aos órgãos.',{sz:7.8,i:true,cor:[110,110,110]});
+    }
+    rqTitulo(S,'HONORÁRIOS E SERVIÇOS');
+    rqTabela(S,[{t:'Descrição',w:142},{t:'Valor',w:28,r:1}],[['Honorários e serviços de despachante',osN(R.honorarios)]],{semCab:true});
+    rqTabela(S,[{t:'',w:142},{t:'',w:28,r:1}],[['**TOTAL DA ORDEM DE SERVIÇO**','**'+osN(R.total)+'**']],{semCab:true});
+    rqTitulo(S,'PAGAMENTOS');
+    rqTabela(S,[{t:'Data',w:26},{t:'Forma de pagamento',w:116},{t:'Valor',w:28,r:1}],
+      R.recebimentos.map(function(x){ return [x.data,(x.forma||'')+(x.maquininha?' — '+x.maquininha:'')+(x.parcelas>1?' em '+x.parcelas+'x':''),osN(x.valor)]; })
+      .concat([['','**Total pago**','**'+osN(R.pago)+'**']]).concat(R.devedor>0.004?[['','Saldo a pagar',osN(R.devedor)]]:[]));
+    rqPar(S,R.devedor>0.004?'Fica em aberto o saldo de **'+osR(R.devedor)+'**, a ser quitado pelo cliente.':'Pelo que foi recebido, damos **plena quitação** desta Ordem de Serviço.',{sz:9.6});
+    S.y+=2; rqData(S,D); S.y+=2;
+    // carimbo do despachante com a assinatura (igual ao da procuração ATPV), centralizado
+    rqPg(S,30); var cx=S.W/2-35, cy=S.y, cfg=D.cfg||{};
+    d.setDrawColor(70,70,70); d.setLineWidth(0.4); d.rect(cx,cy,70,21,'D');
+    d.setFont('helvetica','normal'); d.setFontSize(4.6); d.setTextColor(30,30,30);
+    ['RECEBEMOS O VALOR DESCRITO NESTE RECIBO,','REFERENTE À ORDEM DE SERVIÇO Nº '+R.numero+',','E DAMOS QUITAÇÃO DO QUE FOI PAGO.'].forEach(function(l,i){ d.text(l,cx+35,cy+3.4+i*2.5,{align:'center'}); });
+    if(cfg.assinatura){ try{ d.addImage(cfg.assinatura,'PNG',cx+21,cy+8.9,28,7,'assinDesp','FAST'); }catch(e){ try{ d.addImage(cfg.assinatura,'PNG',cx+21,cy+8.9,28,7); }catch(e2){} } }
+    d.setLineWidth(0.25); d.line(cx+6,cy+16.2,cx+64,cy+16.2);
+    d.setFont('helvetica','bold'); d.setFontSize(5.2); d.text((cfg.nome||'DIEGO DESPACHANTE').toUpperCase(),cx+35,cy+18.5,{align:'center'});
+    d.setFont('helvetica','normal'); d.setFontSize(4.8); d.text('CÓD.: '+(cfg.cod||'2670'),cx+35,cy+20.4,{align:'center'});
+    d.setFont('times','normal'); d.setFontSize(8.2); rqCor(d,[95,95,95]); d.text('Caetano Despachante Ltda · CNPJ 08.965.960/0001-06',S.W/2,cy+25,{align:'center'});
+    rqRodape(S);
+    var arq='RECIBO_OS'+R.numero+(R.veiculo.placa?'_'+R.veiculo.placa:'')+'.pdf';
+    var w=window.open(d.output('bloburl'),'_blank'); if(!w) d.save(arq);
+    osMsg('✓ Recibo gerado.');
+  }).catch(osErr);
+}
+// valor por extenso em reais
+function osExtenso(v){
+  v=Math.round((Number(v)||0)*100); var re=Math.floor(v/100), ce=v%100;
+  var U=['','um','dois','três','quatro','cinco','seis','sete','oito','nove','dez','onze','doze','treze','quatorze','quinze','dezesseis','dezessete','dezoito','dezenove'],
+      Dz=['','','vinte','trinta','quarenta','cinquenta','sessenta','setenta','oitenta','noventa'],
+      C=['','cento','duzentos','trezentos','quatrocentos','quinhentos','seiscentos','setecentos','oitocentos','novecentos'];
+  function ate999(n){ if(n===100) return 'cem'; var c=Math.floor(n/100), r=n%100, p=[];
+    if(c) p.push(C[c]); if(r<20){ if(r) p.push(U[r]); } else { p.push(Dz[Math.floor(r/10)]+(r%10?' e '+U[r%10]:'')); } return p.join(' e '); }
+  function inteiro(n){ if(n===0) return 'zero'; var gr=[], esc=[['',''],['mil','mil'],['milhão','milhões'],['bilhão','bilhões']], i=0;
+    while(n>0){ gr.push(n%1000); n=Math.floor(n/1000); }
+    var partes=[];
+    for(i=gr.length-1;i>=0;i--){ var g=gr[i]; if(!g) continue; var t=(i===1&&g===1)?'mil':ate999(g)+(i?' '+(g===1?esc[i][0]:esc[i][1]):''); partes.push({t:t,g:g,i:i}); }
+    var out='';
+    partes.forEach(function(p,k){ if(k===0){ out=p.t; return; } var ult=k===partes.length-1; out+=(ult&&(p.g<100||p.g%100===0)?' e ':' ')+p.t; });
+    return out; }
+  var s='';
+  if(re) s=inteiro(re)+(re===1?' real':(re%1000000===0?' de reais':' reais'));
+  if(ce) s+=(re?' e ':'')+inteiro(ce)+(ce===1?' centavo':' centavos');
+  return s||'zero real';
 }
 
 // ── CLIENTES ──
@@ -2419,9 +2652,11 @@ function osSvEditSalvar(id){
 // ── FINANCEIRO ──
 function osFinAba(a){
   OS.finAba=a;
-  osE('osf-b-extrato').classList.toggle('on',a==='extrato'); osE('osf-b-cad').classList.toggle('on',a==='cad');
-  osE('osf-extrato').style.display=a==='extrato'?'':'none'; osE('osf-cad').style.display=a==='cad'?'':'none';
+  osE('osf-b-nf').style.display=(osVL()||osBX())?'':'none'; osE('osf-b-cont').style.display=osVL()?'':'none';
+  ['extrato','nf','cont','cad'].forEach(function(k){ osE('osf-b-'+k).classList.toggle('on',a===k); osE('osf-'+k).style.display=a===k?'':'none'; });
   var c=OS.cad;
+  if(a==='nf'){ osNfLista(); return; }
+  if(a==='cont'){ if(!osE('osf-ct-mes').value) osE('osf-ct-mes').value=osHoje().slice(0,7); osContResumo(); return; }
   if(a==='extrato'){
     if(!osE('osf-de').value){ var h=osHoje(); osE('osf-de').value=h.slice(0,8)+'01'; osE('osf-ate').value=h; }
     osE('osf-conta').innerHTML=osOpts(c.contas,osE('osf-conta').value,'Todas');

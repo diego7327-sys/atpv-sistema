@@ -228,6 +228,12 @@ CREATE TABLE IF NOT EXISTS os_parcelamentos (
     custo_maquininha NUMERIC(12,2) DEFAULT 0, hon_no_cartao BOOLEAN DEFAULT TRUE,
     recebimento_id BIGINT REFERENCES os_recebimentos(id) ON DELETE SET NULL,
     user_nome TEXT DEFAULT '', criado TIMESTAMPTZ DEFAULT NOW(), atualizado TIMESTAMPTZ DEFAULT NOW());
+-- nota fiscal de serviço (NFS-e) do honorário: pendente | emitida | dispensada
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS nf_status TEXT DEFAULT 'pendente';
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS nf_numero TEXT DEFAULT '';
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS nf_data DATE;
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS nf_valor NUMERIC(12,2);
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS nf_obs TEXT DEFAULT '';
 """
 
 # Cadastros iniciais — tirados das telas do BitDesp (levantamento de 13/11/2026)
@@ -277,6 +283,7 @@ TIPO_AVULSO = "ATENDIMENTO AVULSO"
 MOTIVOS_HON_ZERO = ["CORTESIA", "RETORNO (SERVIÇO REFEITO)", "CLIENTE PARCEIRO", "ERRO DO ESCRITÓRIO", "OUTRO"]
 NF_CRITERIOS = {"conservador": "Conservador — honorário + tudo cobrado no cartão acima dos débitos",
                 "retorno": "Só retorno — honorário + retorno da maquininha"}
+NF_STATUS = {"pendente": "PENDENTE", "emitida": "EMITIDA", "dispensada": "DISPENSADA"}
 AVULSO_SERVICOS = ["CONSULTA", "AGENDAMENTO", "CONSULTA DE DÉBITOS", "IMPRESSÃO DE DOCUMENTO", "SERVIÇO DESPACHANTE"]
 ARQ_MIMES = ("application/pdf", "image/jpeg", "image/png", "image/webp")
 ARQ_MAX = 6 * 1024 * 1024
@@ -295,6 +302,113 @@ def _cat_palpite(desc):
 
 class _Rollback(Exception):
     """Erro de validação no meio de uma gravação: desfaz tudo e devolve a mensagem."""
+
+def xlsx_contador(r, m, ini, fim):
+    """Planilha do contador (bytes .xlsx) a partir do relatório já calculado."""
+    from io import BytesIO
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    rs = r['resumo']
+    NAVY, FUNDO = "1F3864", "F3F5F9"
+    hfont, hfill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor=NAVY)
+    borda = Border(bottom=Side(style="thin", color="D0D5DD"))
+    moeda = '#,##0.00;[Red]-#,##0.00'
+    wb = Workbook()
+    ws = wb.active; ws.title = "Resumo"
+    mes_txt = "%s/%s" % (m[5:], m[:4])
+    ws["A1"] = "CAETANO DESPACHANTE LTDA — CNPJ 08.965.960/0001-06"; ws["A1"].font = Font(bold=True, size=13, color=NAVY)
+    ws["A2"] = "Relatório mensal para o contador — %s (%s a %s)" % (mes_txt, ini.strftime('%d/%m/%Y'), fim.strftime('%d/%m/%Y'))
+    ws["A2"].font = Font(italic=True, color="555555")
+    linhas = [("RECEITA DO ESCRITÓRIO (OS abertas no mês)", None, True),
+              ("Quantidade de OS", rs['os_qtd'], False), ("Total cobrado dos clientes", rs['os_total'], False),
+              ("(−) Repasses / taxas e débitos de terceiros", rs['repasses_os'], False),
+              ("(=) Honorários (receita)", rs['honorarios'], False),
+              ("   dos quais: acréscimos de parcelamento no cartão", rs['acrescimos'], False),
+              ("Retorno das maquininhas (parcelamentos)", rs['retornos'], False),
+              ("Custo das maquininhas (parcelamentos)", rs['custo_maquininha'], False),
+              ("Valor sugerido para notas fiscais", rs['nota_sugerida'], False),
+              ("", None, False),
+              ("NOTAS FISCAIS (NFS-e)", None, True),
+              ("NFS-e emitidas no mês — quantidade", rs['nfs_emitidas_qtd'], False),
+              ("NFS-e emitidas no mês — valor", rs['nfs_emitidas_valor'], False),
+              ("OS com honorário sem nota — quantidade", rs['sem_nota_qtd'], False),
+              ("OS com honorário sem nota — valor", rs['sem_nota_valor'], False),
+              ("OS com honorário zero", rs['hon_zero_qtd'], False),
+              ("", None, False),
+              ("RECEBIDO NO MÊS (por data do recebimento)", None, True)]
+    linhas += [("   " + k, v, False) for k, v in rs['recebido_por_forma'].items()]
+    linhas += [("Total recebido (confirmado)", rs['recebido'], False),
+               ("Informado e aguardando baixa", rs['aguardando_baixa'], False), ("", None, False),
+               ("REPASSES PAGOS NO MÊS (DUA/guias)", None, True)]
+    linhas += [("   " + k, v, False) for k, v in rs['repasses_por_categoria'].items()]
+    linhas += [("Total de repasses pagos", rs['repasses_pagos'], False),
+               ("Pagamentos sem comprovante anexado", rs['repasses_sem_comprovante'], False)]
+    qtds = ("Quantidade de OS", "NFS-e emitidas no mês — quantidade", "OS com honorário sem nota — quantidade",
+            "OS com honorário zero", "Pagamentos sem comprovante anexado")
+    lin = 4
+    for rot, v, tit in linhas:
+        ws.cell(lin, 1, rot)
+        if tit:
+            for col in (1, 2):
+                ws.cell(lin, col).fill = hfill; ws.cell(lin, col).font = hfont
+        elif v is not None:
+            c = ws.cell(lin, 2, v)
+            c.number_format = '0' if rot in qtds else moeda
+            if rot.startswith("(=)") or rot.startswith("Total"):
+                ws.cell(lin, 1).font = Font(bold=True); c.font = Font(bold=True)
+        lin += 1
+    ws.column_dimensions['A'].width = 58; ws.column_dimensions['B'].width = 18
+    
+    def aba(nome, cols, dados):
+        w = wb.create_sheet(nome)
+        for j, (tit, _k, _w, _f2) in enumerate(cols, 1):
+            c = w.cell(1, j, tit); c.font = hfont; c.fill = hfill; c.alignment = Alignment(vertical="center", wrap_text=True)
+            w.column_dimensions[get_column_letter(j)].width = _w
+        for i, x in enumerate(dados, 2):
+            for j, (_t, k, _w, fmt) in enumerate(cols, 1):
+                v = x.get(k)
+                if isinstance(v, bool):
+                    v = "SIM" if v else "NÃO"
+                if k in ('data', 'nf_data') and v:
+                    v = datetime.strptime(v[:10], "%Y-%m-%d").date()
+                c = w.cell(i, j, v)
+                if fmt == 'm': c.number_format = moeda
+                elif fmt == 'd': c.number_format = 'DD/MM/YYYY'
+                c.border = borda
+                if i % 2 == 1: c.fill = PatternFill("solid", fgColor=FUNDO)
+        if dados and any(f2 == 'm' for *_x, f2 in cols):
+            t = len(dados) + 2
+            w.cell(t, 1, "TOTAL").font = Font(bold=True)
+            for j, (_t, k, _w, fmt) in enumerate(cols, 1):
+                if fmt == 'm':
+                    c = w.cell(t, j, "=SUM(%s2:%s%d)" % (get_column_letter(j), get_column_letter(j), t - 1))
+                    c.number_format = moeda; c.font = Font(bold=True)
+        w.freeze_panes = "A2"
+        if dados:
+            w.auto_filter.ref = "A1:%s%d" % (get_column_letter(len(cols)), len(dados) + 1)
+    aba("OS do mês", [("OS", "os", 8, ''), ("Data", "data", 11, 'd'), ("Cliente", "cliente", 30, ''), ("CPF/CNPJ", "cpf_cnpj", 17, ''),
+                      ("Placa", "placa", 9, ''), ("Tipo", "tipo", 24, ''), ("Situação", "status", 14, ''),
+                      ("Total", "total", 12, 'm'), ("Repasse", "repasse", 12, 'm'), ("Honorário (receita)", "receita", 13, 'm'),
+                      ("Acréscimo parc.", "acrescimo", 12, 'm'), ("Retorno maq.", "retorno", 11, 'm'),
+                      ("Nota sugerida", "nota_sugerida", 12, 'm'), ("NFS-e", "nf_status", 11, ''), ("Nº NFS-e", "nf_numero", 10, ''),
+                      ("Valor NFS-e", "nf_valor", 12, 'm'), ("Recebido", "recebido", 12, 'm'), ("Em aberto", "devedor", 12, 'm'),
+                      ("Motivo hon. zero", "hon_zero_motivo", 22, '')], r['os'])
+    aba("Recebimentos", [("Data", "data", 11, 'd'), ("OS", "os", 8, ''), ("Cliente", "cliente", 30, ''), ("Forma", "forma", 14, ''),
+                         ("Grupo", "grupo", 26, ''), ("Maquininha", "maquininha", 11, ''), ("Parcelas", "parcelas", 8, ''),
+                         ("NSU", "nsu", 12, ''), ("Conta", "conta", 12, ''), ("Valor", "valor", 12, 'm'),
+                         ("Situação", "situacao", 17, '')], r['recebimentos'])
+    aba("Repasses pagos", [("Data", "data", 11, 'd'), ("OS", "os", 8, ''), ("Cliente", "cliente", 28, ''), ("Item", "item", 28, ''),
+                           ("Categoria", "categoria", 14, ''), ("Órgão", "orgao", 14, ''), ("DUA/Guia", "documento", 16, ''),
+                           ("Conta de saída", "conta", 13, ''), ("Valor", "valor", 12, 'm'), ("Comprovante", "comprovante", 12, '')], r['repasses'])
+    aba("NFS-e emitidas", [("Data", "data", 11, 'd'), ("OS", "os", 8, ''), ("Cliente", "cliente", 32, ''),
+                           ("Nº NFS-e", "nf_numero", 12, ''), ("Valor", "valor", 12, 'm')], r['notas'])
+    aba("Sem nota", [("OS", "os", 8, ''), ("Data", "data", 11, 'd'), ("Cliente", "cliente", 32, ''), ("CPF/CNPJ", "cpf_cnpj", 17, ''),
+                     ("Honorário", "receita", 12, 'm'), ("Nota sugerida", "nota_sugerida", 13, 'm'), ("Recebido", "recebido", 12, 'm')], r['sem_nota'])
+    aba("Honorário zero", [("OS", "os", 8, ''), ("Data", "data", 11, 'd'), ("Cliente", "cliente", 32, ''), ("Tipo", "tipo", 24, ''),
+                           ("Total", "total", 12, 'm'), ("Motivo", "hon_zero_motivo", 26, '')], r['hon_zero'])
+    bio = BytesIO(); wb.save(bio)
+    return bio.getvalue()
 
 def _forma_tipo(nome):
     n = (nome or '').upper()
@@ -349,6 +463,9 @@ def _num(v, padrao=Decimal('0')):
 
 def _f(v):
     return float(v) if v is not None else 0.0
+
+def _brl(v):
+    return ("%.2f" % _f(v)).replace('.', ',')
 
 def _data(v):
     if not v:
@@ -1185,6 +1302,8 @@ def registrar(app, db, login_required):
             parc['calc'] = _parc_calc(cur, oid, pr)
         # valor da nota fiscal do honorário: receita; no parcelamento segue o critério das Configurações
         o['nota_valor'] = parc['calc']['nota'] if parc else o['receita']
+        o['nf_data'] = _d(r.get('nf_data')); o['nf_valor'] = _f(r['nf_valor']) if r.get('nf_valor') is not None else None
+        o['nf_status'] = o.get('nf_status') or 'pendente'
         cur.execute("SELECT * FROM os_ocorrencias WHERE os_id = %s ORDER BY id DESC", (oid,))
         ocor = [dict(x, quando=_dt(x['quando'])) for x in cur.fetchall()]
         pf_sql, pf_args = _pend_filtro(cur)
@@ -2189,6 +2308,242 @@ def registrar(app, db, login_required):
         return jsonify({"ok": True})
 
     # ── extrato de lançamentos ─────────────────────────────────
+    # ── RECIBO: taxas pelo valor real do DUA (reembolso) + honorários num total só ──
+    @app.route("/api/os/<int:numero>/recibo", methods=["GET"])
+    @equipe
+    def os_recibo(numero):
+        with db(commit=True) as cur:
+            d = _os_completa(cur, numero)
+            if not d:
+                return jsonify({"erro": "OS não encontrada"}), 404
+            o = d['os']
+            oid = _os_por_numero(cur, numero)['id']
+            cur.execute("""SELECT descricao, categoria, orgao, documento, custo, qtd FROM os_itens
+                           WHERE os_id = %s AND natureza = 'repasse' ORDER BY id""", (oid,))
+            taxas = []
+            for i in cur.fetchall():
+                v = round(_f(i['custo']) * _f(i['qtd'] or 1), 2)
+                taxas.append({"descricao": i['descricao'] or '', "categoria": CAT_REPASSE.get(i['categoria'] or '', ''),
+                              "orgao": i['orgao'] or '', "documento": i['documento'] or '', "valor": v})
+            cur.execute("""SELECT COALESCE(SUM(valor*qtd),0) AS v FROM os_itens WHERE os_id=%s""", (oid,))
+            itens_v = _f(cur.fetchone()['v'])
+            cur.execute("SELECT honorario, desconto FROM ordens_servico WHERE id=%s", (oid,))
+            hd = cur.fetchone()
+            total = round(itens_v + _f(hd['honorario']) - _f(hd['desconto']), 2)
+            tx = round(sum(t['valor'] for t in taxas), 2)
+            receb = [{"data": (x['quando'] or '')[:10], "forma": x.get('forma') or '', "maquininha": x.get('maquininha') or '',
+                      "parcelas": x.get('parcelas') or None, "valor": x['valor']}
+                     for x in d['recebimentos'] if (x.get('status') or 'confirmado') == 'confirmado']
+            pago = round(sum(x['valor'] for x in receb), 2)
+            pag = d.get('responsavel') or d.get('cliente') or {}
+            vei = d.get('veiculo') or {}
+            _ocorrencia(cur, oid, 'outras', 'Recibo emitido (R$ %s)' % _brl(pago))
+        return jsonify({"numero": numero, "data_abertura": (o.get('data_abertura') or '')[:10],
+                        "pagador": {"nome": pag.get('nome') or '', "cpf_cnpj": pag.get('cpf_cnpj') or ''},
+                        "cliente": (d.get('cliente') or {}).get('nome') or '',
+                        "veiculo": {"placa": vei.get('placa') or '', "modelo": vei.get('modelo') or ''},
+                        "taxas": taxas, "taxas_total": tx, "honorarios": round(total - tx, 2), "total": total,
+                        "recebimentos": receb, "pago": pago, "devedor": round(max(total - pago, 0), 2) if o.get('status') != 'cancelada' else 0.0})
+
+    # ── NOTA FISCAL (NFS-e) DO HONORÁRIO ──────────────────────
+    def _nota_de(cur, r):
+        """Valor sugerido da nota de uma OS (linha com SQL_TOTAIS): receita; no parcelamento, o critério."""
+        o = _os_saida(r)
+        cur.execute("SELECT * FROM os_parcelamentos WHERE os_id = %s", (r['id'],))
+        pr = cur.fetchone()
+        calc = _parc_calc(cur, r['id'], pr) if pr else None
+        o['nota_valor'] = calc['nota'] if calc else o['receita']
+        o['acrescimo'] = calc['acrescimo'] if calc else 0.0
+        o['retorno'] = _f(pr['retorno_valor']) if pr else 0.0
+        o['maquininha_custo'] = _f(pr['custo_maquininha']) if pr else 0.0
+        o['parcelamento'] = bool(pr)
+        return o
+
+    def _pode_nf(cur):
+        p = _perms(cur)
+        return p['ver_lucro'] or p['dar_baixa']
+
+    @app.route("/api/os/<int:numero>/nota", methods=["POST"])
+    @equipe
+    def os_nota(numero):
+        d = request.get_json() or {}
+        with db(commit=True) as cur:
+            if not _pode_nf(cur):
+                return jsonify({"erro": "Sem permissão para lançar nota fiscal."}), 403
+            o = _os_por_numero(cur, numero)
+            if not o:
+                return jsonify({"erro": "OS não encontrada"}), 404
+            num = (d.get("nf_numero") or "").strip()
+            st = (d.get("nf_status") or ("emitida" if num else "pendente")).strip().lower()
+            if st not in NF_STATUS:
+                return jsonify({"erro": "Situação da nota inválida."}), 400
+            if st == 'emitida' and not num:
+                return jsonify({"erro": "Informe o número da NFS-e."}), 400
+            obs = (d.get("nf_obs") or "").strip()
+            if st == 'dispensada' and not obs:
+                return jsonify({"erro": "Diga o motivo de não emitir a nota."}), 400
+            dt = _data(d.get("nf_data")) if d.get("nf_data") else (_hoje() if st == 'emitida' else None)
+            val = _num(d.get("nf_valor")) if d.get("nf_valor") not in (None, '') else None
+            cur.execute("""UPDATE ordens_servico SET nf_status=%s, nf_numero=%s, nf_data=%s, nf_valor=%s, nf_obs=%s
+                           WHERE id=%s""", (st, num if st == 'emitida' else '', dt if st == 'emitida' else None,
+                                            val if st == 'emitida' else None, obs, o['id']))
+            txt = {"emitida": "NFS-e nº %s emitida%s" % (num, (" — R$ " + _brl(val)) if val is not None else ""),
+                   "pendente": "Nota fiscal marcada como pendente",
+                   "dispensada": "Nota fiscal dispensada: " + obs}[st]
+            _ocorrencia(cur, o['id'], 'nota_fiscal', txt)
+        return jsonify({"ok": True})
+
+    @app.route("/api/notas-fiscais", methods=["GET"])
+    @equipe
+    def notas_fiscais():
+        """OS com honorário (valor da nota > 0). situacao=pendente (padrão) | emitida | dispensada | todas."""
+        sit = (request.args.get("situacao") or "pendente").lower()
+        de, ate = request.args.get("de"), request.args.get("ate")
+        with db() as cur:
+            if not _pode_nf(cur):
+                return jsonify({"erro": "Sem permissão."}), 403
+            vl = _perms(cur)['ver_lucro']
+            cond, args = ["o.excluida_em IS NULL", "o.status NOT IN ('orcamento','cancelada')"], []
+            if sit in NF_STATUS:
+                cond.append("COALESCE(o.nf_status,'pendente') = %s"); args.append(sit)
+            if de:
+                cond.append("o.data_abertura::date >= %s"); args.append(_data(de))
+            if ate:
+                cond.append("o.data_abertura::date <= %s"); args.append(_data(ate))
+            cur.execute("""SELECT o.*, c.nome AS cliente_nome, c.cpf_cnpj AS cliente_doc, v.placa, """ + SQL_TOTAIS + """
+                           FROM ordens_servico o LEFT JOIN clientes c ON c.id = o.cliente_id
+                           LEFT JOIN veiculos v ON v.id = o.veiculo_id
+                           WHERE """ + " AND ".join(cond) + " ORDER BY o.data_abertura, o.numero", args)
+            out, soma = [], 0.0
+            for r in cur.fetchall():
+                o = _nota_de(cur, r)
+                if o['nota_valor'] <= 0.004 and o['nf_status'] != 'emitida':
+                    continue
+                x = {k: o.get(k) for k in ('numero', 'cliente_nome', 'cliente_doc', 'placa', 'status', 'total', 'pago',
+                                           'devedor', 'nf_status', 'nf_numero', 'nf_obs')}
+                x['data'] = (_d(r['data_abertura']) or '')[:10]
+                x['nf_data'] = _d(r['nf_data'])
+                x['nf_valor'] = _f(r['nf_valor']) if r['nf_valor'] is not None else None
+                if vl:
+                    x['nota_valor'] = o['nota_valor']; x['receita'] = o['receita']
+                    soma += o['nota_valor']
+                out.append(x)
+        return jsonify({"itens": out, "total_nota": round(soma, 2) if vl else None})
+
+    # ── RELATÓRIO MENSAL DO CONTADOR ───────────────────────────
+    def _mes_args():
+        m = (request.args.get("mes") or _hoje().strftime("%Y-%m")).strip()
+        if not re.match(r"^\d{4}-\d{2}$", m):
+            raise ValueError("Mês inválido (use AAAA-MM).")
+        a, mm = int(m[:4]), int(m[5:])
+        ini = date(a, mm, 1)
+        fim = date(a + (mm == 12), (mm % 12) + 1, 1) - timedelta(days=1)
+        return m, ini, fim
+
+    def _rel_contador(cur, ini, fim):
+        dq = "(r.quando AT TIME ZONE 'America/Sao_Paulo')::date"
+        # recebimentos do mês (regime de caixa — é o que a prefeitura cruza com a maquininha)
+        cur.execute("""SELECT r.*, f.nome AS forma, c.nome AS conta, o.numero, cl.nome AS cliente_nome, """ + dq + """ AS dia
+                       FROM os_recebimentos r JOIN ordens_servico o ON o.id = r.os_id
+                       LEFT JOIN formas_pgto f ON f.id = r.forma_pgto_id LEFT JOIN contas c ON c.id = r.conta_id
+                       LEFT JOIN clientes cl ON cl.id = o.cliente_id
+                       WHERE o.excluida_em IS NULL AND r.status IN ('confirmado','pendente') AND """ + dq + """ BETWEEN %s AND %s
+                       ORDER BY r.quando, r.id""", (ini, fim))
+        receb, por_forma, pend = [], {}, 0.0
+        for x in cur.fetchall():
+            v = _f(x['valor']); tp = _forma_tipo(x['forma'])
+            rot = {"pix": "PIX", "dinheiro": "DINHEIRO", "outro": (x['forma'] or 'OUTROS').upper()}.get(tp) or \
+                  ("CARTÃO %s — %s" % ("DÉBITO" if tp == 'debito' else "CRÉDITO", (x['maquininha'] or 'SEM MAQUININHA').upper()))
+            if x['status'] == 'confirmado':
+                por_forma[rot] = round(por_forma.get(rot, 0) + v, 2)
+            else:
+                pend += v
+            receb.append({"data": _d(x['dia']), "os": x['numero'], "cliente": x['cliente_nome'] or '', "forma": x['forma'] or '',
+                          "grupo": rot, "maquininha": x['maquininha'] or '', "parcelas": x['parcelas'] or None,
+                          "nsu": x['nsu'] or '', "conta": x['conta'] or '', "valor": v,
+                          "situacao": "CONFIRMADO" if x['status'] == 'confirmado' else "AGUARDANDO BAIXA"})
+        # repasses pagos no mês
+        cur.execute("""SELECT p.*, c.nome AS conta, o.numero, i.descricao, i.categoria, cl.nome AS cliente_nome
+                       FROM os_repasse_pagtos p JOIN ordens_servico o ON o.id = p.os_id
+                       LEFT JOIN contas c ON c.id = p.conta_id LEFT JOIN os_itens i ON i.id = p.item_id
+                       LEFT JOIN clientes cl ON cl.id = o.cliente_id
+                       WHERE o.excluida_em IS NULL AND p.data BETWEEN %s AND %s ORDER BY p.data, p.id""", (ini, fim))
+        reps, rep_cat = [], {}
+        for x in cur.fetchall():
+            v = _f(x['valor']); cat = CAT_REPASSE.get(x['categoria'] or '', (x['categoria'] or 'OUTROS').upper())
+            rep_cat[cat] = round(rep_cat.get(cat, 0) + v, 2)
+            reps.append({"data": _d(x['data']), "os": x['numero'], "cliente": x['cliente_nome'] or '', "item": x['descricao'] or '',
+                         "categoria": cat, "orgao": x['orgao'] or '', "documento": x['documento'] or '',
+                         "conta": x['conta'] or '', "valor": v, "comprovante": bool(x['arquivo_id'])})
+        # OS abertas no mês
+        cur.execute("""SELECT o.*, c.nome AS cliente_nome, c.cpf_cnpj AS cliente_doc, v.placa, pt.nome AS tipo_nome, """ + SQL_TOTAIS + """
+                       FROM ordens_servico o LEFT JOIN clientes c ON c.id = o.cliente_id
+                       LEFT JOIN veiculos v ON v.id = o.veiculo_id LEFT JOIN processo_tipos pt ON pt.id = o.processo_tipo_id
+                       WHERE o.excluida_em IS NULL AND o.status NOT IN ('orcamento','cancelada')
+                         AND o.data_abertura::date BETWEEN %s AND %s ORDER BY o.data_abertura, o.numero""", (ini, fim))
+        oss = []
+        for r in cur.fetchall():
+            o = _nota_de(cur, r)
+            oss.append({"os": o['numero'], "data": (_d(r['data_abertura']) or '')[:10], "cliente": r['cliente_nome'] or '',
+                        "cpf_cnpj": r['cliente_doc'] or '', "placa": r['placa'] or '', "tipo": r['tipo_nome'] or '',
+                        "status": STATUS_OS.get(o['status'], o['status']), "total": o['total'],
+                        "repasse": o['repasse_total'], "receita": o['receita'], "acrescimo": o['acrescimo'],
+                        "retorno": o['retorno'], "custo_maquininha": o['maquininha_custo'], "nota_sugerida": o['nota_valor'],
+                        "nf_status": NF_STATUS.get(o['nf_status'], 'PENDENTE'), "nf_numero": o.get('nf_numero') or '',
+                        "nf_valor": _f(r['nf_valor']) if r['nf_valor'] is not None else None,
+                        "recebido": o['pago'], "devedor": o['devedor'], "hon_zero_motivo": r.get('hon_zero_motivo') or ''})
+        # NFS-e emitidas no mês (pela data da nota, qualquer OS)
+        cur.execute("""SELECT o.numero, o.nf_numero, o.nf_data, o.nf_valor, c.nome AS cliente_nome FROM ordens_servico o
+                       LEFT JOIN clientes c ON c.id = o.cliente_id
+                       WHERE o.excluida_em IS NULL AND o.nf_status = 'emitida' AND o.nf_data BETWEEN %s AND %s
+                       ORDER BY o.nf_data, o.numero""", (ini, fim))
+        nfs = [{"data": _d(x['nf_data']), "os": x['numero'], "cliente": x['cliente_nome'] or '', "nf_numero": x['nf_numero'],
+                "valor": _f(x['nf_valor']) if x['nf_valor'] is not None else 0.0} for x in cur.fetchall()]
+        sem_nota = [x for x in oss if x['nota_sugerida'] > 0.004 and x['nf_status'] == 'PENDENTE']
+        hon_zero = [x for x in oss if x['nota_sugerida'] <= 0.004 and x['receita'] <= 0.004]
+        sm = lambda l, k: round(sum((x[k] or 0) for x in l), 2)
+        resumo = {
+            "os_qtd": len(oss), "os_total": sm(oss, 'total'), "repasses_os": sm(oss, 'repasse'),
+            "honorarios": sm(oss, 'receita'), "acrescimos": sm(oss, 'acrescimo'), "retornos": sm(oss, 'retorno'),
+            "custo_maquininha": sm(oss, 'custo_maquininha'), "nota_sugerida": sm(oss, 'nota_sugerida'),
+            "recebido": round(sum(por_forma.values()), 2), "recebido_por_forma": dict(sorted(por_forma.items())),
+            "aguardando_baixa": round(pend, 2), "repasses_pagos": sm(reps, 'valor'), "repasses_por_categoria": dict(sorted(rep_cat.items())),
+            "repasses_sem_comprovante": len([x for x in reps if not x['comprovante']]),
+            "nfs_emitidas_qtd": len(nfs), "nfs_emitidas_valor": sm(nfs, 'valor'),
+            "sem_nota_qtd": len(sem_nota), "sem_nota_valor": sm(sem_nota, 'nota_sugerida'), "hon_zero_qtd": len(hon_zero)}
+        return {"resumo": resumo, "os": oss, "recebimentos": receb, "repasses": reps, "notas": nfs,
+                "sem_nota": sem_nota, "hon_zero": hon_zero}
+
+    @app.route("/api/relatorio-contador", methods=["GET"])
+    @equipe
+    def relatorio_contador():
+        try:
+            m, ini, fim = _mes_args()
+        except ValueError as e:
+            return jsonify({"erro": str(e)}), 400
+        with db() as cur:
+            if not _perms(cur)['ver_lucro']:
+                return jsonify({"erro": "Só quem vê o financeiro completo gera o relatório do contador."}), 403
+            r = _rel_contador(cur, ini, fim)
+        r.update({"mes": m, "de": _d(ini), "ate": _d(fim)})
+        return jsonify(r)
+
+    @app.route("/api/relatorio-contador.xlsx", methods=["GET"])
+    @equipe
+    def relatorio_contador_xlsx():
+        from io import BytesIO
+        from flask import send_file
+        try:
+            m, ini, fim = _mes_args()
+        except ValueError as e:
+            return jsonify({"erro": str(e)}), 400
+        with db() as cur:
+            if not _perms(cur)['ver_lucro']:
+                return jsonify({"erro": "Sem permissão."}), 403
+            r = _rel_contador(cur, ini, fim)
+        return send_file(BytesIO(xlsx_contador(r, m, ini, fim)), as_attachment=True, download_name="contador_%s.xlsx" % m.replace('-', '_'),
+                         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
     @app.route("/api/fin/extrato", methods=["GET"])
     @equipe
     def os_fin_extrato():
