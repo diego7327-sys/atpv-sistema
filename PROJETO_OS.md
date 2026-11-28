@@ -1,6 +1,6 @@
 # SISTEMA ATPV E AJUSTES — Documento do projeto
 
-Atualizado em 28/11/2026. Este arquivo guarda tudo que foi decidido e feito para não se perder entre conversas.
+Atualizado em 28/11/2026 (tarde). Este arquivo guarda tudo que foi decidido e feito para não se perder entre conversas.
 
 ## 1. O que é
 
@@ -62,6 +62,10 @@ Sistema web do escritório **Diego Despachante / Caetano Despachante Ltda** (An�
 - Ao salvar cria a OS (40000+); se tiver entrada, abre na hora o recebimento com o valor preenchido.
 - Tipo da OS automático: Recurso de Multa, Suspensão de CNH, Cassação de CNH, Transferência ou Outros. Despachante parceiro vira responsável pela OS.
 - Lista mostra "OS 40xxx" e "💰 Receber" em cada processo.
+- Campos (28/11): nº e **data do protocolo**, **data que vence** (aviso ⏰ na lista: vermelho vencido, laranja até 5 dias), **órgão autuador**, **autos de infração (AIT)** — vários, colar separados por vírgula, observação grande.
+- **Dados para a procuração** (sexo, RG/órgão, CNH/UF, CEP com busca, endereço, nº, complemento, bairro, cidade, e-mail) e botão **📄 Gerar procuração em PDF** no modelo "Instrumento particular de mandato – processos administrativos de trânsito" (texto muda para suspensão/cassação ou multa, feminino/masculino, lista os AITs). Os dados completam o cadastro do cliente da OS.
+- Qualificação do OUTORGADO da procuração fica em **Configurações → Procuração de recursos** (`rec_outorgado`, `rec_outorgado_end`; `**negrito**`).
+- **Pesquisa automática**: marcar no processo + frequência (dia útil/semana/15 dias/mês) + próxima data. Para o robô: `GET /api/agenda/pesquisa/fila` (o que pesquisar hoje) e `POST /api/agenda/<id>/pesquisa {resultado}` (grava o resultado e agenda a próxima). O robô ainda não foi instalado.
 
 ## 5. Pendências (em ordem)
 
@@ -69,7 +73,8 @@ Sistema web do escritório **Diego Despachante / Caetano Despachante Ltda** (An�
 2. Validar tudo com o Diego na prévia / ambiente de teste.
 3. **Subir para a produção** (só quando o Diego mandar): conferir `openpyxl` no `requirements.txt`, backup do banco antes, migrações rodam sozinhas (tabela `migracoes`).
 4. Testar o importador de extrato com arquivos reais do banco e das maquininhas.
-5. Por último: link de assinatura dos requerimentos pelo WhatsApp.
+5. Instalar o robô da pesquisa automática (consome a fila de pesquisa).
+6. Por último: link de assinatura dos requerimentos pelo WhatsApp.
 
 ## 6. Observações técnicas
 

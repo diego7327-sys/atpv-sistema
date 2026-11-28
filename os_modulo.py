@@ -3252,6 +3252,15 @@ def registrar(app, db, login_required):
         prop = _cli_achar_criar(cur, a.get('cliente_nome'), a.get('cliente_cpf'), a.get('cliente_tel'))
         if not prop:
             raise ValueError("Informe o cliente.")
+        # dados da procuração completam o cadastro do cliente (só o que estiver vazio)
+        comp = {'rg': a.get('cli_rg'), 'rg_org': a.get('cli_rg_org'), 'cnh': a.get('cli_cnh'), 'cep': a.get('cli_cep'),
+                'endereco': (a.get('cli_end') or '').upper(), 'numero': a.get('cli_num'), 'complemento': (a.get('cli_compl') or '').upper(),
+                'bairro': (a.get('cli_bairro') or '').upper(), 'cidade': (a.get('cli_cidade') or '').upper(),
+                'email': (a.get('cli_email') or '').lower(), 'cel': a.get('cliente_tel')}
+        comp = {k: (v or '').strip() for k, v in comp.items() if (v or '').strip()}
+        if comp:
+            cur.execute("UPDATE clientes SET " + ", ".join("%s = CASE WHEN COALESCE(%s,'') = '' THEN %%s ELSE %s END" % (k, k, k) for k in comp)
+                        + ", atualizado = NOW() WHERE id = %s", list(comp.values()) + [prop])
         resp = None
         if (a.get('resp_nome') or '').strip():
             resp = _cli_achar_criar(cur, a['resp_nome'], '', a.get('resp_tel'), 'revenda')

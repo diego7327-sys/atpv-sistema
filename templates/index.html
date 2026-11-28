@@ -768,12 +768,63 @@ tr:hover td{background:var(--surf2)}
           <div class="fg"><label>WhatsApp do cliente</label><input id="ag_tel" placeholder="(62) 9xxxx-xxxx"></div>
           <div class="fg"><label>Nº do processo (instauração)</label><input id="ag_proc" placeholder="262500000206395"></div>
         </div>
-        <div class="fg"><label>Nº do protocolo (preencha quando protocolar)</label><input id="ag_protoc" placeholder="Ex.: 242500000345896"></div>
+        <div class="g2">
+          <div class="fg"><label>Nº do protocolo</label><input id="ag_protoc" placeholder="Ex.: 242500000345896"></div>
+          <div class="fg"><label>Data que protocolei</label><input id="ag_dprot" type="date"></div>
+        </div>
+        <div class="g2">
+          <div class="fg"><label>Data que vence (prazo final)</label><input id="ag_dvenc" type="date"></div>
+          <div class="fg"><label>Órgão autuador</label><input id="ag_orgao" list="ag-orgaos" placeholder="Ex.: GOINFRA – GO">
+            <datalist id="ag-orgaos"><option>GOINFRA – GO</option><option>DETRAN/GO</option><option>Polícia Rodoviária Federal – PRF</option><option>DNIT</option><option>CMTT – Anápolis</option><option>SMM – Goiânia</option></datalist></div>
+        </div>
+        <fieldset class="ag-fs"><legend>🚨 Autos de infração (AIT)</legend>
+          <div id="ag-aits"></div>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <div class="fg" style="margin:0;flex:1"><input id="ag_ait_novo" placeholder="Nº do auto — pode colar vários separados por vírgula" onkeydown="if(event.key==='Enter'){event.preventDefault();agAitAdd();}"></div>
+            <button type="button" class="btn-sec" style="padding:6px 12px" onclick="agAitAdd()">+ Adicionar</button>
+          </div>
+        </fieldset>
         <fieldset class="ag-fs"><legend>Responsável / despachante parceiro (se houver)</legend>
           <div class="g2">
             <div class="fg"><label>Nome</label><input id="ag_resp" placeholder="Ex.: Cida Despachante" oninput="agAutoQuem()"></div>
             <div class="fg"><label>WhatsApp</label><input id="ag_fresp" placeholder="(62) 9xxxx-xxxx"></div>
           </div>
+        </fieldset>
+        <fieldset class="ag-fs" style="border-color:rgba(108,155,255,.45)"><legend>📄 Dados para a procuração do cliente</legend>
+          <div class="g2">
+            <div class="fg"><label>Sexo</label><select id="agp_sexo"><option value="">—</option><option value="F">Feminino (brasileira, portadora...)</option><option value="M">Masculino (brasileiro, portador...)</option></select></div>
+            <div class="fg"><label>E-mail</label><input id="agp_email" placeholder="cliente@email.com"></div>
+          </div>
+          <div class="g2">
+            <div class="fg"><label>RG</label><input id="agp_rg" placeholder="Nº do RG"></div>
+            <div class="fg"><label>Órgão exp. / UF</label><input id="agp_rg_org" placeholder="SSP/GO"></div>
+          </div>
+          <div class="g2">
+            <div class="fg"><label>Nº registro CNH</label><input id="agp_cnh" placeholder="Nº de registro"></div>
+            <div class="fg"><label>UF da CNH</label><input id="agp_cnh_uf" placeholder="GO" maxlength="2" oninput="this.value=this.value.toUpperCase()"></div>
+          </div>
+          <div class="g2">
+            <div class="fg"><label>CEP <span id="agp_cep_spin" style="display:none">⏳</span></label><input id="agp_cep" placeholder="00000-000" oninput="maskCep(this,'agp')"></div>
+            <div class="fg"><label>Nº</label><input id="agp_num" placeholder="Nº"></div>
+          </div>
+          <div class="fg"><label>Endereço (rua / avenida)</label><input id="agp_end" placeholder="Rua / Avenida"></div>
+          <div class="g2">
+            <div class="fg"><label>Complemento</label><input id="agp_compl" placeholder="Qd, Lt, Apto..."></div>
+            <div class="fg"><label>Bairro</label><input id="agp_bairro" placeholder="Bairro"></div>
+          </div>
+          <div class="fg"><label>Cidade / UF</label><input id="agp_cidade" placeholder="Cidade/UF"></div>
+          <button type="button" class="btn-sec" style="width:100%;padding:9px;margin-top:4px;border-color:rgba(108,155,255,.6)" onclick="agProcuracao()">📄 Gerar procuração em PDF</button>
+        </fieldset>
+        <fieldset class="ag-fs" style="border-color:rgba(255,165,2,.45)"><legend>🔎 Pesquisa automática</legend>
+          <label style="display:flex;gap:8px;align-items:center;text-transform:none;font-size:13px;color:var(--txt);margin:6px 0"><input type="checkbox" id="ag_pesq" style="width:18px;height:18px;accent-color:var(--acc)" onchange="agPesqUI()"> Agendar pesquisa automática do andamento deste processo</label>
+          <div id="ag-pesq-cp" style="display:none">
+            <div class="g2">
+              <div class="fg"><label>Pesquisar a cada</label><select id="ag_pesq_freq"><option value="diaria">Todo dia útil</option><option value="semanal" selected>Toda semana</option><option value="quinzenal">A cada 15 dias</option><option value="mensal">Todo mês</option></select></div>
+              <div class="fg"><label>Próxima pesquisa</label><input id="ag_pesq_prox" type="date"></div>
+            </div>
+            <div id="ag-pesq-res" class="ag-note" style="margin-top:2px"></div>
+          </div>
+          <p class="ag-note" style="margin:2px 0 0">O robô da pesquisa usa CPF, CNH, placa, nº do processo, protocolo e autos deste cadastro.</p>
         </fieldset>
         <fieldset class="ag-fs" id="ag-osbox" style="border-color:rgba(0,212,170,.45)"><legend>💰 Ordem de Serviço (nº a partir de 40000)</legend>
           <div id="ag-os-ja" style="display:none"></div>
@@ -800,7 +851,7 @@ tr:hover td{background:var(--surf2)}
           </div></div>
         <div class="fg"><label>Data do lembrete</label><input id="ag_data" type="date" onchange="agValidar(this.value,true)"></div>
         <div id="ag-aviso"></div>
-        <div class="fg"><label>Observação</label><textarea id="ag_obs" class="ag-ta" placeholder="Ex.: defesa protocolada 25/11 — tentar ganhar na JARI"></textarea></div>
+        <div class="fg"><label>Observação</label><textarea id="ag_obs" class="ag-ta" rows="7" style="min-height:160px;resize:vertical" placeholder="Anote aqui tudo o que precisar sobre o processo: teses, documentos pendentes, combinados com o cliente, andamento..."></textarea></div>
         <div class="fg"><label>Quem avisar nesse dia</label>
           <select id="ag_quem"><option value="cli">Cliente</option><option value="resp">Responsável (despachante parceiro)</option><option value="ambos">Os dois</option><option value="nin">Ninguém — só conferir</option></select></div>
         <input type="hidden" id="ag_id">
@@ -857,6 +908,13 @@ tr:hover td{background:var(--surf2)}
         <div class="fg"><label>CEP</label><input id="cfg_cep" value="75123-115"></div>
         <div class="fg"><label>Cidade (para data)</label><input id="cfg_cidade" value="ANÁPOLIS/GO"></div>
         <div class="fg"><label>CNPJ (opcional)</label><input id="cfg_cnpj" placeholder="00.000.000/0000-00"></div>
+      </div>
+
+      <div style="border-top:1px solid var(--bord);margin-top:16px;padding-top:16px">
+        <div class="sec-l">Procuração de recursos (multa / suspensão / cassação) — OUTORGADO</div>
+        <p class="cfg-note">Sai no quadro OUTORGADO da procuração gerada em Recursos de Multa e Suspensão de CNH. Use **texto** para negrito.</p>
+        <div class="fg"><label>Qualificação do outorgado</label><textarea id="cfg_rec_outorgado" rows="4" style="width:100%;resize:vertical" placeholder="**NOME DO PROCURADOR**, brasileiro, despachante, inscrito no CPF sob o nº ..., estabelecido no escritório **...**, inscrito no CNPJ sob o nº ..., **código do escritório nº ...**."></textarea></div>
+        <div class="fg"><label>Escritório / contato</label><textarea id="cfg_rec_outorgado_end" rows="2" style="width:100%;resize:vertical" placeholder="Escritório: endereço, CEP · Telefone · E-mail"></textarea></div>
       </div>
 
       <div style="border-top:1px solid var(--bord);margin-top:16px;padding-top:16px">
@@ -2362,11 +2420,12 @@ var CFG_ASSINATURA='';
 function carregarConfig(){
   fetch('/api/config').then(function(r){return r.json();}).then(function(c){
     [['cfg_nome','nome'],['cfg_cod','cod'],['cfg_end','end'],['cfg_cep','cep'],
-     ['cfg_cidade','cidade'],['cfg_cnpj','cnpj']].forEach(function(par){
+     ['cfg_cidade','cidade'],['cfg_cnpj','cnpj'],['cfg_rec_outorgado','rec_outorgado'],['cfg_rec_outorgado_end','rec_outorgado_end']].forEach(function(par){
       var el=document.getElementById(par[0]);
       if(el) el.value=(c[par[1]]!==undefined&&c[par[1]]!==null)?c[par[1]]:'';
     });
     CFG_ASSINATURA=c.assinatura||'';
+    CFG_REC={rec_outorgado:c.rec_outorgado||'', rec_outorgado_end:c.rec_outorgado_end||''};
     mostrarPreviaAssinatura();
   }).catch(function(){});
 }
@@ -2428,7 +2487,8 @@ function salvarConfig(){
   fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({
       nome:g('cfg_nome'), cod:g('cfg_cod'), end:g('cfg_end'), cep:g('cfg_cep'),
-      cidade:g('cfg_cidade'), cnpj:g('cfg_cnpj'), assinatura:CFG_ASSINATURA })})
+      cidade:g('cfg_cidade'), cnpj:g('cfg_cnpj'), assinatura:CFG_ASSINATURA,
+      rec_outorgado:g('cfg_rec_outorgado'), rec_outorgado_end:g('cfg_rec_outorgado_end') })})
   .then(function(r){return r.json();}).then(function(d){
     if(st) st.textContent='';
     if(d.erro){ showAlert(d.erro,'err'); return; }
@@ -3236,7 +3296,9 @@ function agApi(url, metodo, corpo){
 }
 
 // ── carga ──
+var CFG_REC={};
 function agCarregar(){
+  if(!AG.aits){ AG.aits=[]; agAitDesenha(); }
   return Promise.all([agApi('/api/agenda/contagem'), agApi('/api/agenda/painel')]).then(function(res){
     AG.hoje = res[0].hoje; AG.cont = res[0].contagem||{}; AG.pend = res[0].pendentes||{}; AG.painel = res[1];
     if(!AG.abriu){ AG.abriu=true; if((res[1].n_atrasados||0)>0){ AG.aba=0; [0,1,2,3,4,5].forEach(function(i){ agG('ag-t'+i).classList.toggle('on',i===0); }); } }
@@ -3316,7 +3378,8 @@ function agSugerir(){
 function agG(id){ return document.getElementById(id); }
 function agAutoQuem(){ agG('ag_quem').value = agG('ag_resp').value.trim() ? 'resp' : 'cli'; }
 function agLimparForm(){
-  ['ag_id','ag_os','ag_cli','ag_tel','ag_proc','ag_protoc','ag_resp','ag_fresp','ag_obs','ag_data','ag_cpf','ag_placa','ag_valor','ag_entrada','ag_vinc'].forEach(function(i){ agG(i).value=''; });
+  ['ag_id','ag_os','ag_cli','ag_tel','ag_proc','ag_protoc','ag_resp','ag_fresp','ag_obs','ag_data','ag_cpf','ag_placa','ag_valor','ag_entrada','ag_vinc','ag_dprot','ag_dvenc','ag_orgao','ag_ait_novo','ag_pesq_prox'].concat(AGP_CAMPOS.map(function(k){ return 'agp_'+k; })).forEach(function(i){ agG(i).value=''; });
+  AG.aits=[]; agAitDesenha(); agG('ag_pesq').checked=false; agG('ag_pesq_freq').value='semanal'; agG('ag-pesq-res').innerHTML=''; agPesqUI();
   agOsBox(null);
   agG('ag_quem').value='cli'; agG('ag-imp').innerHTML=''; agG('ag-aviso').innerHTML='';
   agG('ag-salvar').textContent='Salvar processo'; agG('ag-salvar').disabled=false; agG('ag-cancelar').style.display='none';
@@ -3334,6 +3397,8 @@ function agSalvar(){
   var dados={os:agG('ag_os').value, tipo:agG('ag_tipo').value, cliente_nome:agG('ag_cli').value, cliente_tel:agG('ag_tel').value,
     processo:agG('ag_proc').value, protocolo:agG('ag_protoc').value, resp_nome:agG('ag_resp').value, resp_tel:agG('ag_fresp').value, quem:agG('ag_quem').value,
     acao:agG('ag_acao').value, data:data, obs:agG('ag_obs').value, cliente_cpf:agG('ag_cpf').value, placa:agG('ag_placa').value};
+  agAitAdd(true);
+  agExtraDados(dados);
   if(semOS){ dados.valor_servico=agG('ag_valor').value; dados.os_vincular=agG('ag_vinc').value; }
   agApi('/api/agenda'+(id?'/'+id:''), id?'PUT':'POST', dados).then(function(r){
     var n=r&&r.os_numero;
@@ -3344,6 +3409,121 @@ function agSalvar(){
   }).catch(function(e){ showAlert(e.message,'err'); });
 }
 function osNumBr(v){ v=String(v||'').replace(/[^0-9,.-]/g,''); if(v.indexOf(',')>=0) v=v.replace(/\./g,'').replace(',','.'); return parseFloat(v)||0; }
+var AGP_CAMPOS=['sexo','rg','rg_org','cnh','cnh_uf','cep','end','num','compl','bairro','cidade','email'];
+function agExtraDados(d){
+  d.data_protocolo=agG('ag_dprot').value; d.data_vencimento=agG('ag_dvenc').value; d.orgao=agG('ag_orgao').value;
+  AGP_CAMPOS.forEach(function(k){ d['cli_'+k]=agG('agp_'+k).value; });
+  d.aits=(AG.aits||[]).slice();
+  d.pesq_auto=agG('ag_pesq').checked; d.pesq_freq=agG('ag_pesq_freq').value; d.pesq_proxima=agG('ag_pesq_prox').value;
+  return d;
+}
+function agPesqUI(){ var on=agG('ag_pesq').checked; agG('ag-pesq-cp').style.display=on?'block':'none'; if(on&&!agG('ag_pesq_prox').value) agG('ag_pesq_prox').value=AG.hoje||''; }
+function agAitAdd(silencioso){
+  var el=agG('ag_ait_novo'), v=el.value.trim(); if(!v) return;
+  AG.aits=AG.aits||[];
+  v.split(/[\n,;]+/).forEach(function(x){ x=x.replace(/\s+/g,'').toUpperCase(); if(x&&AG.aits.indexOf(x)<0) AG.aits.push(x); });
+  el.value=''; agAitDesenha();
+}
+function agAitTira(i){ AG.aits.splice(i,1); agAitDesenha(); }
+function agAitDesenha(){
+  var l=AG.aits||[];
+  agG('ag-aits').innerHTML=l.length?l.map(function(a,i){ return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;margin-top:4px;border:1px solid var(--bord);border-radius:6px;font-family:var(--mono);font-size:13px"><span>'+(i+1)+'. '+agEsc(a)+'</span><button type="button" class="ag-bt" style="color:var(--err)" onclick="agAitTira('+i+')">✕</button></div>'; }).join('')
+    :'<div class="ag-note" style="margin:4px 0 0">Nenhum auto cadastrado.</div>';
+}
+function agVencTag(d){
+  if(!d) return '';
+  var h=new Date((AG.hoje||new Date().toISOString().slice(0,10))+'T12:00:00'), v=new Date(d+'T12:00:00'), n=Math.round((v-h)/864e5);
+  var cor=n<0?'var(--err)':n<=5?'#ffa502':'var(--mut)', txt=n<0?'VENCEU há '+(-n)+'d':n===0?'VENCE HOJE':'vence em '+n+'d';
+  return '<br><span style="font-size:11px;font-weight:700;color:'+cor+'">⏰ '+agBr(d)+' — '+txt+'</span>';
+}
+// ── procuração do cliente (modelo: instrumento particular — processos administrativos de trânsito) ──
+function agProcuracao(){
+  var nome=agG('ag_cli').value.trim().toUpperCase(), cpf=agG('ag_cpf').value.trim();
+  var falta=[]; if(!nome) falta.push('cliente'); if(!cpf) falta.push('CPF'); if(!agG('agp_end').value.trim()) falta.push('endereço'); if(!agG('agp_cidade').value.trim()) falta.push('cidade'); if(!agG('agp_sexo').value) falta.push('sexo (brasileira/brasileiro)');
+  if(falta.length){ showAlert('Para a procuração falta: '+falta.join(', ')+'.','warn'); return; }
+  var cfg=CFG_REC||{};
+  if(!(cfg.rec_outorgado||'').trim()){ showAlert('Preencha os dados do OUTORGADO em Configurações → "Procuração de recursos" (uma vez só).','warn'); return; }
+  var F=agG('agp_sexo').value!=='M', a=function(fem,masc){ return F?fem:masc; };
+  var rg=agG('agp_rg').value.trim(), org=agG('agp_rg_org').value.trim(), cnh=agG('agp_cnh').value.trim(), cuf=agG('agp_cnh_uf').value.trim();
+  var q='**'+nome+'**, '+a('brasileira','brasileiro');
+  if(rg) q+=', '+a('portadora','portador')+' do RG nº '+rg+(org?' '+org:'');
+  q+=', '+a('inscrita','inscrito')+' no CPF sob o nº '+cpf;
+  if(cnh) q+=', '+a('habilitada','habilitado')+' sob o registro CNH nº '+cnh+(cuf?'/'+cuf:'');
+  q+='.';
+  var end='Endereço: '+[agG('agp_end').value.trim(), agG('agp_num').value.trim()?'nº '+agG('agp_num').value.trim():'', agG('agp_compl').value.trim(), agG('agp_bairro').value.trim(), agG('agp_cidade').value.trim()].filter(Boolean).join(', ')+(agG('agp_cep').value.trim()?', CEP '+agG('agp_cep').value.trim():'')+'.';
+  var tipo=agG('ag_tipo').value, susp=/suspens|cassa|di[aá]rio/i.test(tipo), cass=/cassa/i.test(tipo);
+  var org2=agG('ag_orgao').value.trim()||'órgão autuador', art=/^(DETRAN|DER|DNIT|DEPARTAMENTO)/i.test(org2)?'do':'da';
+  var proc=agG('ag_proc').value.trim(), aits=(AG.aits||[]).slice(); agAitAdd(true); aits=(AG.aits||[]).slice();
+  var aitTxt=aits.length?(aits.length>1?'nos autos de infração nº ':'no auto de infração nº ')+aits.join(', '):'';
+  var obj='Pelo presente instrumento, '+a('a','o')+' OUTORGANTE nomeia e constitui seu bastante procurador o OUTORGADO, para '+a('representá-la','representá-lo')+' perante a **Autoridade de Trânsito '+art+' '+org2+'**, ';
+  if(susp) obj+='sua **Comissão de Processo Administrativo de '+(cass?'Cassação do Documento de Habilitação':'Suspensão do Direito de Dirigir por Infração – CPASCNH')+'** e ';
+  obj+='sua **Junta Administrativa de Recursos de Infrações – JARI**, o **CETRAN/GO**'+(/DETRAN/i.test(org2)?'':', o **DETRAN/GO**')+' e demais órgãos e entidades do Sistema Nacional de Trânsito';
+  if(susp && proc) obj+=', especialmente no **Processo Administrativo de '+(cass?'Cassação do Documento de Habilitação':'Suspensão do Direito de Dirigir')+' nº '+proc+'**, bem como '+(aitTxt?aitTxt:'no(s) auto(s) de infração que lhe deram origem')+' e nos processos e recursos deles decorrentes.';
+  else if(aitTxt) obj+=', especialmente '+aitTxt+(proc?' e no processo nº '+proc:'')+', bem como nos processos e recursos '+((aits.length>1||proc)?'deles':'dele')+' decorrentes.';
+  else if(proc) obj+=', especialmente no processo nº **'+proc+'**, bem como nos processos e recursos dele decorrentes.';
+  else obj+=', nos processos administrativos e recursos de trânsito em que figure como interessad'+a('a','o')+'.';
+
+  var {jsPDF}=window.jspdf, doc=new jsPDF({unit:'mm',format:'a4'});
+  var W=210, ML=20, TW=170, y=20, NAVY=[31,56,100];
+  // texto com **negrito**, justificado
+  function rico(txt,x,y0,w,sz,lh,just,medir){
+    doc.setFontSize(sz); var toks=[], b=false;
+    // g = colado ao anterior (ex.: vírgula logo depois de um trecho em negrito)
+    var fimEsp=true;
+    txt.split('**').forEach(function(p,i){ b=i%2===1; var pri=true;
+      p.split(/(\s+)/).forEach(function(t){ if(!t) return; if(/^\s+$/.test(t)){ pri=false; return; } toks.push({t:t,b:b,g:pri&&!fimEsp&&toks.length>0}); pri=false; });
+      if(p.length) fimEsp=/\s$/.test(p); });
+    // largura sem kerning (o PDF é desenhado sem kerning; com kerning as palavras em negrito se sobrepõem)
+    var wd=function(t){ return doc.getStringUnitWidth(t,{kerning:{}})*doc.getFontSize()/doc.internal.scaleFactor; };
+    var linhas=[], cur=[], lw=0, sp=function(){ doc.setFont('times','normal'); return wd(' '); };
+    toks.forEach(function(k){ doc.setFont('times',k.b?'bold':'normal'); var tw=wd(k.t), s=(cur.length&&!k.g)?sp():0;
+      if(cur.length && lw+s+tw>w){ linhas.push(cur); cur=[]; lw=0; s=0; } cur.push({t:k.t,b:k.b,w:tw,g:cur.length?k.g:false}); lw+=s+tw; });
+    if(cur.length) linhas.push(cur);
+    var yy=y0;
+    linhas.forEach(function(L,li){ var tot=L.reduce(function(s2,k){ return s2+k.w; },0), nj=L.filter(function(k,j){ return j>0&&!k.g; }).length, gap=sp();
+      if(just && li<linhas.length-1 && nj>0) gap=(w-tot)/nj;
+      var xx=x; if(!medir) L.forEach(function(k,j){ if(j>0) xx+=k.g?0:gap; doc.setFont('times',k.b?'bold':'normal'); doc.text(k.t,xx,yy); xx+=k.w; }); yy+=lh; });
+    return yy;
+  }
+  function espac(t){ return t.split('').join(' '); }
+  function caixa(tit,linhas){
+    var h0=y; doc.setFillColor.apply(doc,NAVY); doc.rect(ML,y,TW,7,'F');
+    doc.setFont('times','bold'); doc.setFontSize(8.5); doc.setTextColor(255,255,255); doc.text(espac(tit),ML+3,y+4.8);
+    doc.setTextColor(25,25,25); var yy=y+12;
+    // mede
+    var meas=yy; linhas.forEach(function(L){ meas=rico(L,ML+3,meas,TW-6,9.5,4.6,true,true)+1.2; });
+    doc.setFillColor(244,246,250); doc.setDrawColor.apply(doc,NAVY); doc.setLineWidth(0.3); doc.rect(ML,y+7,TW,meas-y-7+1,'FD');
+    linhas.forEach(function(L){ yy=rico(L,ML+3,yy,TW-6,9.5,4.6,true)+1.2; });
+    y=meas+7;
+  }
+  function secao(t){ doc.setFont('times','bold'); doc.setFontSize(9); doc.setTextColor.apply(doc,NAVY); doc.text(espac(t),ML,y); doc.setDrawColor.apply(doc,NAVY); doc.setLineWidth(0.4); doc.line(ML,y+1.6,ML+TW,y+1.6); doc.setTextColor(25,25,25); y+=6.5; }
+  doc.setFont('times','bold'); doc.setFontSize(20); doc.setTextColor.apply(doc,NAVY); doc.text(espac('PROCURAÇÃO'),W/2,y,{align:'center'}); y+=6;
+  doc.setFont('times','italic'); doc.setFontSize(9.5); doc.setTextColor(110,110,110); doc.text('Instrumento particular de mandato – processos administrativos de trânsito',W/2,y,{align:'center'}); y+=3.5;
+  doc.setDrawColor(40,40,40); doc.setLineWidth(0.5); doc.line(ML,y,ML+TW,y); y+=8;
+  caixa('OUTORGANTE',[q,end]);
+  caixa('OUTORGADO',[cfg.rec_outorgado].concat((cfg.rec_outorgado_end||'').trim()?[cfg.rec_outorgado_end]:[]));
+  secao('OBJETO'); doc.setTextColor(25,25,25); y=rico(obj,ML,y,TW,10,4.9,true)+3;
+  secao('PODERES');
+  ['Apresentar, assinar e protocolar defesas, recursos à JARI e ao CETRAN, requerimentos, petições e manifestações;',
+   'Ter vista dos processos e requerer e retirar cópias integrais, certidões, decisões e documentos;',
+   'Receber notificações, intimações e comunicações, inclusive pelo e-mail do OUTORGADO;',
+   'Acompanhar o andamento dos processos, prestar informações, juntar documentos e desistir de requerimentos;',
+   'Praticar todos os demais atos necessários ao fiel cumprimento deste mandato, podendo substabelecer, com ou sem reserva de poderes.'
+  ].forEach(function(p,i){ doc.setFont('times','bold'); doc.setFontSize(10); doc.setTextColor(200,140,40); doc.text((i+1)+'.',ML+2,y); doc.setTextColor(25,25,25); y=rico(p,ML+7,y,TW-7,10,4.7,false)+0.8; });
+  y+=2; secao('VALIDADE');
+  y=rico('Até a conclusão definitiva dos processos acima referidos, na esfera administrativa.',ML,y,TW,10,4.9,false)+5;
+  var ms=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'], d=new Date();
+  var cid=(getCfg().cidade||'Anápolis/GO').toLowerCase().replace(/(^|[\s\/])(\S)/g,function(m,p1,p2){ return p1+p2.toUpperCase(); }).replace(/\/(\w+)$/,function(m,u){ return '/'+u.toUpperCase(); });
+  doc.setFont('times','normal'); doc.setFontSize(10); doc.text(cid+', '+d.getDate()+' de '+ms[d.getMonth()]+' de '+d.getFullYear()+'.',W/2,y,{align:'center'}); y+=8;
+  var ys=Math.max(y+22,236);
+  doc.setDrawColor(150,150,150); doc.setLineWidth(0.3); doc.rect(W-ML-62,ys-24,62,34); doc.setFont('times','italic'); doc.setFontSize(8.5); doc.setTextColor(120,120,120); doc.text('Reconhecimento de firma',W-ML-31,ys-20,{align:'center'});
+  doc.setDrawColor(60,60,60); doc.line(ML+8,ys,ML+90,ys);
+  doc.setFont('times','bold'); doc.setFontSize(10); doc.setTextColor.apply(doc,NAVY); doc.text(nome,ML+49,ys+5,{align:'center',maxWidth:96});
+  doc.setFont('times','normal'); doc.setFontSize(8.5); doc.setTextColor(110,110,110); doc.text(a('Outorgante','Outorgante')+' · CPF '+cpf,ML+49,ys+9.5,{align:'center'});
+  var arq='Procuracao_'+nome.split(' ').slice(0,2).join('_')+'_para_Diego_Caetano_Silva.pdf';
+  doc.save(arq.normalize('NFD').replace(/[̀-ͯ]/g,''));
+  showAlert('✓ Procuração gerada.','ok');
+}
 function agCortesia(){ var v=agG('ag_valor'); v.value='CORTESIA'; v.style.boxShadow=''; agG('ag_entrada').value=''; showAlert('✓ Marcado como cortesia (sem cobrança). Agora é só salvar.','ok'); }
 function agOsBox(n){
   var ja=agG('ag-os-ja'), cp=agG('ag-os-campos'); if(!ja) return;
@@ -3374,6 +3554,8 @@ function agAcBuscar(el){
         it.addEventListener('mousedown',function(e){ e.preventDefault(); e.stopPropagation();
           var p=AG_AC.l[Number(it.getAttribute('data-agi'))]||{};
           agG('ag_cli').value=p.nome||''; agG('ag_cpf').value=p.cpf||''; if(p.cel) agG('ag_tel').value=p.cel;
+          var mp={rg:p.rg,rg_org:p.rg_org,cnh:p.cnh,cep:p.cep,end:p.rua||p.end,num:p.num,compl:p.compl,bairro:p.bairro,cidade:p.cidade,email:p.email};
+          Object.keys(mp).forEach(function(k){ if(mp[k]&&!agG('agp_'+k).value) agG('agp_'+k).value=mp[k]; });
           drop.classList.remove('open'); showAlert('✓ Cliente carregado: '+(p.nome||''),'ok'); });
       });
       drop.classList.add('open');
@@ -3388,6 +3570,12 @@ function agEditar(id){
   agG('ag_quem').value=r.quem; agG('ag_acao').value=r.acao; agG('ag_obs').value=r.obs; agG('ag_data').value=r.data;
   agG('ag_cpf').value=r.cliente_cpf||''; agG('ag_placa').value=r.placa||''; agG('ag_valor').value=''; agG('ag_entrada').value=''; agG('ag_vinc').value='';
   agOsBox(r.os_numero||null);
+  agG('ag_dprot').value=r.data_protocolo||''; agG('ag_dvenc').value=r.data_vencimento||''; agG('ag_orgao').value=r.orgao||'';
+  AGP_CAMPOS.forEach(function(k){ agG('agp_'+k).value=r['cli_'+k]||''; });
+  AG.aits=(r.aits||[]).slice(); agAitDesenha();
+  agG('ag_pesq').checked=!!r.pesq_auto; agG('ag_pesq_freq').value=r.pesq_freq||'semanal'; agG('ag_pesq_prox').value=r.pesq_proxima||'';
+  agG('ag-pesq-res').innerHTML=r.pesq_ultima?('Última pesquisa: <b>'+agEsc(r.pesq_ultima)+'</b>'+(r.pesq_resultado?' — '+agEsc(r.pesq_resultado):'')):(r.pesq_auto?'Ainda não pesquisado.':'');
+  agPesqUI();
   agG('ag-salvar').textContent='Salvar alterações'; agG('ag-cancelar').style.display='inline-block';
   agValidar(r.data,true); window.scrollTo({top:0,behavior:'smooth'});
 }
@@ -3488,7 +3676,10 @@ function agLinhas(l, comData){
           (r.os?'<br><span class="ag-small">BitDesp '+agEsc(r.os)+'</span>':(r.os_numero?'':'—'))+'</td>'+
         '<td>'+agEsc(r.cliente_nome)+(r.resp_nome?'<br><span class="ag-small">via '+agEsc(r.resp_nome)+'</span>':'')+'</td>'+
         '<td><span class="ag-tag">'+agEsc(r.tipo)+'</span><br><span class="ag-small">Proc.</span> <span style="font-family:var(--mono);font-size:12px">'+agEsc(r.processo||'—')+'</span>'+
-          '<br><span class="ag-small">Prot.</span> '+(r.protocolo?'<span style="font-family:var(--mono);font-size:12px;color:var(--acc)">'+agEsc(r.protocolo)+'</span>':'<a href="#" style="color:var(--warn);font-size:11px" onclick="agProtocolo('+r.id+');return false">+ informar</a>')+'</td>'+
+          '<br><span class="ag-small">Prot.</span> '+(r.protocolo?'<span style="font-family:var(--mono);font-size:12px;color:var(--acc)">'+agEsc(r.protocolo)+'</span>':'<a href="#" style="color:var(--warn);font-size:11px" onclick="agProtocolo('+r.id+');return false">+ informar</a>')+
+          (r.data_protocolo?' <span class="ag-small">em '+agBr(r.data_protocolo)+'</span>':'')+
+          ((r.aits||[]).length?'<br><span class="ag-small">AIT</span> <span style="font-family:var(--mono);font-size:11px">'+agEsc(r.aits.join(', '))+'</span>':'')+
+          agVencTag(r.data_vencimento)+(r.pesq_auto?' <span class="ag-small" title="Pesquisa automática agendada">🔎</span>':'')+'</td>'+
         '<td>'+agEsc(r.acao)+(r.obs?'<br><span class="ag-small">'+agEsc(r.obs.split('\n')[0].slice(0,70))+'</span>':'')+
           (r.feito?'<br><span class="ag-small" style="color:var(--acc)">✓ '+agEsc(r.feito_por||'')+' '+agEsc(r.feito_em||'')+'</span>':'')+'</td>'+
         '<td style="min-width:200px">'+(r.feito?'':agBotoesWA(r))+

@@ -258,6 +258,27 @@ ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS protocolo TEXT DEFAULT '';
 ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS os_id BIGINT;
 ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS placa TEXT DEFAULT '';
 ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS cliente_cpf TEXT DEFAULT '';
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS data_protocolo TEXT DEFAULT '';
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS data_vencimento TEXT DEFAULT '';
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS orgao TEXT DEFAULT '';
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS aits TEXT DEFAULT '';
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS cli_sexo TEXT DEFAULT '';
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS cli_rg TEXT DEFAULT '';
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS cli_rg_org TEXT DEFAULT '';
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS cli_cnh TEXT DEFAULT '';
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS cli_cnh_uf TEXT DEFAULT '';
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS cli_cep TEXT DEFAULT '';
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS cli_end TEXT DEFAULT '';
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS cli_num TEXT DEFAULT '';
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS cli_compl TEXT DEFAULT '';
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS cli_bairro TEXT DEFAULT '';
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS cli_cidade TEXT DEFAULT '';
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS cli_email TEXT DEFAULT '';
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS pesq_auto BOOLEAN DEFAULT FALSE;
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS pesq_freq TEXT DEFAULT '';
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS pesq_proxima TEXT DEFAULT '';
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS pesq_ultima TEXT DEFAULT '';
+ALTER TABLE IF EXISTS agenda ADD COLUMN IF NOT EXISTS pesq_resultado TEXT DEFAULT '';
 """
 
 def _ler_blob(cur, chave):
@@ -822,7 +843,8 @@ def api_pessoas_get():
                 add({'nome': r.get('nome'), 'cpf': r.get('cpf_cnpj'), 'rg': r.get('rg'), 'rg_org': r.get('rg_org'),
                      'nasc': r.get('nasc'), 'ecivil': r.get('ecivil'), 'end': end, 'bairro': r.get('bairro'),
                      'cidade': r.get('cidade'), 'cep': r.get('cep'), 'cel': r.get('cel') or r.get('fone'),
-                     'email': r.get('email')}, 'cliente')
+                     'email': r.get('email'), 'rua': r.get('endereco'), 'num': r.get('numero'),
+                     'compl': r.get('complemento'), 'cnh': r.get('cnh')}, 'cliente')
         for r in busca('cliente_nome', 'cliente_cpf',
                        "SELECT cliente_nome, cliente_cpf, cliente_tel FROM processos WHERE cliente_nome <> '' AND {W} ORDER BY id DESC LIMIT 15"):
             add({'nome': r['cliente_nome'], 'cpf': r['cliente_cpf'], 'cel': r['cliente_tel']}, 'recurso')
@@ -1297,6 +1319,10 @@ CONFIG_PADRAO = {
     "cep":    "75123-115",
     "cidade": "ANÁPOLIS/GO",
     "assinatura": "",
+    # Procuração de recursos (multa / suspensão / cassação): qualificação do OUTORGADO.
+    # Use **texto** para negrito. Preenchido em Configurações.
+    "rec_outorgado": "",
+    "rec_outorgado_end": "",
 }
 
 @app.route("/api/config", methods=["GET"])
@@ -2063,6 +2089,9 @@ def _bloqueio(d):
 
 CAMPOS_AG = """id, os, tipo, cliente_nome, cliente_tel, processo, protocolo, resp_nome, resp_tel,
                quem, acao, data, obs, feito, feito_em, feito_por, user_nome, criado, os_id, placa, cliente_cpf,
+               data_protocolo, data_vencimento, orgao, aits, cli_sexo, cli_rg, cli_rg_org, cli_cnh, cli_cnh_uf,
+               cli_cep, cli_end, cli_num, cli_compl, cli_bairro, cli_cidade, cli_email,
+               pesq_auto, pesq_freq, pesq_proxima, pesq_ultima, pesq_resultado,
                (SELECT o.numero FROM ordens_servico o WHERE o.id = agenda.os_id AND o.excluida_em IS NULL) AS os_numero"""
 
 def _ag_saida(r):
@@ -2070,6 +2099,10 @@ def _ag_saida(r):
     d['data'] = d['data'].isoformat() if d.get('data') else None
     d['feito_em'] = d['feito_em'].strftime('%d/%m/%Y %H:%M') if d.get('feito_em') else ''
     d['criado'] = d['criado'].strftime('%d/%m/%Y %H:%M') if d.get('criado') else ''
+    try:
+        d['aits'] = json.loads(d.get('aits') or '[]')
+    except Exception:
+        d['aits'] = []
     return d
 
 def _ag_dados(d):
@@ -2086,7 +2119,42 @@ def _ag_dados(d):
             "cliente_tel": t("cliente_tel"), "processo": t("processo"), "protocolo": t("protocolo"),
             "resp_nome": t("resp_nome"), "resp_tel": t("resp_tel"), "quem": quem,
             "acao": t("acao"), "data": data_ag, "obs": t("obs"),
-            "placa": re.sub(r'[^A-Z0-9]', '', t("placa").upper()), "cliente_cpf": t("cliente_cpf")}, None
+            "placa": re.sub(r'[^A-Z0-9]', '', t("placa").upper()), "cliente_cpf": t("cliente_cpf"),
+            **_ag_extra(d)}, None
+
+AG_EXTRA_TXT = ("orgao", "cli_sexo", "cli_rg", "cli_rg_org", "cli_cnh", "cli_cnh_uf", "cli_cep", "cli_end",
+                "cli_num", "cli_compl", "cli_bairro", "cli_cidade", "cli_email")
+AG_EXTRA = AG_EXTRA_TXT + ("data_protocolo", "data_vencimento", "aits", "pesq_auto", "pesq_freq", "pesq_proxima")
+PESQ_FREQ = {"diaria": 1, "semanal": 7, "quinzenal": 15, "mensal": 30}
+
+def _ag_extra(d):
+    """Campos novos de Recursos: datas de protocolo/vencimento, autos de infração, dados da procuração
+    e agendamento da pesquisa automática."""
+    t = lambda k: (d.get(k) or "").strip() if isinstance(d.get(k), str) else ("" if d.get(k) is None else str(d.get(k)))
+    out = {k: t(k) for k in AG_EXTRA_TXT}
+    out["cli_email"] = out["cli_email"].lower()
+    for k in ("data_protocolo", "data_vencimento"):
+        dt = _data_iso(d.get(k)) if d.get(k) else None
+        out[k] = dt.isoformat() if dt else ""
+    a = d.get("aits")
+    if isinstance(a, str):
+        try:
+            a = json.loads(a) if a.strip().startswith("[") else [x for x in re.split(r"[\n,;]+", a)]
+        except Exception:
+            a = []
+    lista = []
+    for x in (a or []):
+        n = re.sub(r"\s+", "", str(x or "")).upper()
+        if n and n not in lista:
+            lista.append(n)
+    out["aits"] = json.dumps(lista)
+    out["pesq_auto"] = bool(d.get("pesq_auto")) and d.get("pesq_auto") not in ("0", "false", "False")
+    out["pesq_freq"] = t("pesq_freq") if t("pesq_freq") in PESQ_FREQ else ("semanal" if out["pesq_auto"] else "")
+    prox = _data_iso(d.get("pesq_proxima")) if d.get("pesq_proxima") else None
+    if out["pesq_auto"] and not prox:
+        prox = _hoje_br()
+    out["pesq_proxima"] = prox.isoformat() if (prox and out["pesq_auto"]) else ""
+    return out
 
 @app.route("/api/agenda/painel", methods=["GET"])
 @login_required
@@ -2188,9 +2256,9 @@ def api_ag_criar():
     try:
         with db(commit=True) as cur:
             cur.execute("""INSERT INTO agenda (os,tipo,cliente_nome,cliente_tel,processo,protocolo,resp_nome,resp_tel,
-                               quem,acao,data,obs,user_nome,empresa_id,placa,cliente_cpf)
+                               quem,acao,data,obs,user_nome,empresa_id,placa,cliente_cpf,""" + ','.join(AG_EXTRA) + """)
                            VALUES (%(os)s,%(tipo)s,%(cliente_nome)s,%(cliente_tel)s,%(processo)s,%(protocolo)s,%(resp_nome)s,
-                               %(resp_tel)s,%(quem)s,%(acao)s,%(data)s,%(obs)s,%(user_nome)s,%(empresa_id)s,%(placa)s,%(cliente_cpf)s)
+                               %(resp_tel)s,%(quem)s,%(acao)s,%(data)s,%(obs)s,%(user_nome)s,%(empresa_id)s,%(placa)s,%(cliente_cpf)s,""" + ','.join('%(' + k + ')s' for k in AG_EXTRA) + """)
                            RETURNING id""",
                         dict(v, user_nome=session.get('user_nome') or '', empresa_id=session.get('empresa_id')))
             nid = cur.fetchone()['id']
@@ -2227,7 +2295,7 @@ def _ag_editar(aid):
         cur.execute("""UPDATE agenda SET os=%(os)s, tipo=%(tipo)s, cliente_nome=%(cliente_nome)s,
                          cliente_tel=%(cliente_tel)s, processo=%(processo)s, protocolo=%(protocolo)s, resp_nome=%(resp_nome)s,
                          resp_tel=%(resp_tel)s, quem=%(quem)s, acao=%(acao)s, data=%(data)s, obs=%(obs)s,
-                         placa=%(placa)s, cliente_cpf=%(cliente_cpf)s,
+                         placa=%(placa)s, cliente_cpf=%(cliente_cpf)s,""" + ''.join(k + '=%(' + k + ')s, ' for k in AG_EXTRA) + """
                          feito = CASE WHEN %(mudou)s THEN FALSE ELSE feito END,
                          feito_em = CASE WHEN %(mudou)s THEN NULL ELSE feito_em END,
                          atualizado=NOW()
@@ -2235,6 +2303,39 @@ def _ag_editar(aid):
         gancho = app.config.get('OS_DE_AGENDA')
         os_num = gancho(cur, aid, d) if gancho else None
     return jsonify({"ok": True, "os_numero": os_num})
+
+@app.route("/api/agenda/pesquisa/fila", methods=["GET"])
+@login_required
+def api_ag_pesq_fila():
+    """Fila da pesquisa automática: processos com pesquisa agendada para hoje ou atrasada.
+    Usado pelo robô que vai consultar o andamento (DETRAN / órgão autuador)."""
+    cond, params = _escopo_proc()
+    hoje = _hoje_br().isoformat()
+    with db() as cur:
+        cur.execute("SELECT " + CAMPOS_AG + " FROM agenda WHERE pesq_auto AND (pesq_proxima = '' OR pesq_proxima <= %s)" + cond +
+                    " ORDER BY pesq_proxima, id LIMIT 500", [hoje] + params)
+        itens = [_ag_saida(r) for r in cur.fetchall()]
+    campos = ("id", "tipo", "cliente_nome", "cliente_cpf", "cli_cnh", "cli_cnh_uf", "placa", "processo", "protocolo",
+              "data_protocolo", "data_vencimento", "orgao", "aits", "pesq_freq", "pesq_proxima", "pesq_ultima", "os_numero")
+    return jsonify({"hoje": hoje, "itens": [{k: x.get(k) for k in campos} for x in itens]})
+
+@app.route("/api/agenda/<int:aid>/pesquisa", methods=["POST"])
+@login_required
+def api_ag_pesq_resultado(aid):
+    """O robô (ou alguém) grava o resultado da pesquisa e o sistema agenda a próxima."""
+    from datetime import timedelta
+    d = request.get_json() or {}
+    res = (d.get("resultado") or "").strip()[:4000]
+    cond, params = _escopo_proc()
+    with db(commit=True) as cur:
+        cur.execute("SELECT pesq_freq FROM agenda WHERE id = %s" + cond, [aid] + params)
+        r = cur.fetchone()
+        if not r:
+            return jsonify({"erro": "Não encontrado"}), 404
+        prox = (_hoje_br() + timedelta(days=PESQ_FREQ.get(r['pesq_freq'] or 'semanal', 7))).isoformat()
+        cur.execute("""UPDATE agenda SET pesq_ultima = %s, pesq_resultado = %s, pesq_proxima = %s, atualizado = NOW()
+                       WHERE id = %s""", ((datetime.utcnow() - timedelta(hours=3)).strftime('%d/%m/%Y %H:%M'), res, prox, aid))
+    return jsonify({"ok": True, "pesq_proxima": prox})
 
 @app.route("/api/agenda/<int:aid>/feito", methods=["POST"])
 @login_required
